@@ -10,7 +10,9 @@
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:create": "sequelize-cli db:create",
     "db:drop": "sequelize-cli db:drop",
-    "migration:generate": "sequelize-cli migration:generate"
+    "migration:generate": "sequelize-cli migration:generate",
+    "db:seed": "sequelize-cli db:seed:all",
+    "db:seed:undo": "sequelize-cli db:seed:undo:all"
   },
   "keywords": ["api", "padel", "nodejs", "jwt", "authentication"],
   "author": "",
