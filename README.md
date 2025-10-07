@@ -32,7 +32,12 @@ npm install
    - Crear base de datos: `CREATE DATABASE match_padel;`
    - Configurar archivo `.env` con tus credenciales
 
-3. **Ejecutar:**
+3. **Ejecutar migraciones:**
+```bash
+npm run db:migrate
+```
+
+4. **Ejecutar aplicación:**
 ```bash
 npm run dev
 ```
@@ -75,4 +80,36 @@ curl -X POST http://localhost:3000/api/auth/login \
 ```bash
 curl -X GET http://localhost:3000/api/auth/profile \
   -H "Authorization: Bearer TU_TOKEN_AQUI"
+```
+
+## 🗄️ Comandos de Base de Datos
+
+```bash
+# Crear base de datos
+npm run db:create
+
+# Ejecutar migraciones
+npm run db:migrate
+
+# Revertir última migración
+npm run db:migrate:undo
+
+# Generar nueva migración
+npm run migration:generate -- --name nombre-de-la-migracion
+
+# Eliminar base de datos
+npm run db:drop
+```
+
+## 📝 Generar Nueva Migración
+
+Para agregar una nueva tabla o modificar una existente:
+
+```bash
+# Generar migración
+npm run migration:generate -- --name create-nueva-tabla
+
+# Editar el archivo generado en src/migrations/
+# Ejecutar migración
+npm run db:migrate
 ```
