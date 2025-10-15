@@ -23,6 +23,54 @@ module.exports = {
         role: 'admin',
         createdAt: new Date(),
         updatedAt: new Date()
+      },
+      {
+        name: 'María Rodriguez',
+        email: 'maria@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Carlos López',
+        email: 'carlos@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Ana Martínez',
+        email: 'ana@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Diego Fernández',
+        email: 'diego@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Laura García',
+        email: 'laura@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Roberto Silva',
+        email: 'roberto@example.com',
+        password: hashedPassword,
+        role: 'user',
+        createdAt: new Date(),
+        updatedAt: new Date()
       }
     ], {});
   },

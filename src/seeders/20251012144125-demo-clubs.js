@@ -39,6 +39,30 @@ module.exports = {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
+      },
+      {
+        name: 'Pádel Oeste',
+        address: 'Av. Rivadavia 4567',
+        city: 'Buenos Aires',
+        phone: '+54 11 4444-8888',
+        description: 'Club de pádel en zona oeste con canchas premium y servicios de primera.',
+        latitude: -34.6100,
+        longitude: -58.4000,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        name: 'Mega Pádel Center',
+        address: 'Av. Libertador 7890',
+        city: 'Buenos Aires',
+        phone: '+54 11 7777-9999',
+        description: 'El centro de pádel más grande de la ciudad con 4 canchas profesionales y todas las comodidades.',
+        latitude: -34.5800,
+        longitude: -58.3900,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       }
     ], {});
   },
