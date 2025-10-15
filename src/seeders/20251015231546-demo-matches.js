@@ -27,8 +27,6 @@ module.exports = {
         player2Id: userIds['María Rodriguez'],
         player3Id: userIds['Carlos López'],
         player4Id: userIds['Ana Martínez'],
-        matchType: 'doubles',
-        skillLevel: 'intermediate',
         status: 'scheduled',
         notes: 'Partido amistoso entre equipos mixtos',
         createdAt: new Date(),
@@ -38,8 +36,8 @@ module.exports = {
         reservationId: reservations[1].id, // Segunda reserva de Agustin
         player1Id: userIds['Agustin Gonzalez'],
         player2Id: userIds['Diego Fernández'],
-        matchType: 'singles',
-        skillLevel: 'advanced',
+        player3Id: userIds['María Rodriguez'],
+        player4Id: userIds['Carlos López'],
         status: 'scheduled',
         notes: 'Partido de práctica individual',
         createdAt: new Date(),
@@ -51,8 +49,6 @@ module.exports = {
         player2Id: userIds['Laura García'],
         player3Id: userIds['Roberto Silva'],
         player4Id: userIds['María Rodriguez'],
-        matchType: 'doubles',
-        skillLevel: 'intermediate',
         status: 'scheduled',
         notes: 'Torneo interno del club',
         createdAt: new Date(),
@@ -63,8 +59,8 @@ module.exports = {
         reservationId: reservations[3].id, // Reserva de María Rodriguez
         player1Id: userIds['María Rodriguez'],
         player2Id: userIds['Carlos López'],
-        matchType: 'singles',
-        skillLevel: 'beginner',
+        player3Id: userIds['Ana Martínez'],
+        player4Id: userIds['Diego Fernández'],
         status: 'completed',
         score: JSON.stringify({
           sets: [
@@ -84,8 +80,6 @@ module.exports = {
         player2Id: userIds['Ana Martínez'],
         player3Id: userIds['Diego Fernández'],
         player4Id: userIds['Laura García'],
-        matchType: 'doubles',
-        skillLevel: 'advanced',
         status: 'in_progress',
         notes: 'Partido en curso - muy competitivo',
         createdAt: new Date(),
@@ -95,8 +89,8 @@ module.exports = {
         reservationId: reservations[5].id, // Reserva de Diego Fernández (completada)
         player1Id: userIds['Diego Fernández'],
         player2Id: userIds['Roberto Silva'],
-        matchType: 'singles',
-        skillLevel: 'professional',
+        player3Id: userIds['María Rodriguez'],
+        player4Id: userIds['Ana Martínez'],
         status: 'completed',
         score: JSON.stringify({
           sets: [
@@ -117,8 +111,6 @@ module.exports = {
         player2Id: userIds['María Rodriguez'],
         player3Id: userIds['Ana Martínez'],
         player4Id: userIds['Agustin Gonzalez'],
-        matchType: 'doubles',
-        skillLevel: 'intermediate',
         status: 'scheduled',
         notes: 'Partido de fin de semana',
         createdAt: new Date(),

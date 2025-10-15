@@ -1,6 +1,16 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/connection');
 
+// Constantes para estados de partidos
+const MATCH_STATUS = {
+  SCHEDULED: 'scheduled',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled'
+};
+
+const MATCH_STATUS_VALUES = Object.values(MATCH_STATUS);
+
 const Match = sequelize.define('Match', {
   id: {
     type: DataTypes.INTEGER,
@@ -57,28 +67,12 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  matchType: {
-    type: DataTypes.ENUM('singles', 'doubles'),
-    allowNull: false,
-    defaultValue: 'doubles',
-    validate: {
-      isIn: [['singles', 'doubles']]
-    }
-  },
-  skillLevel: {
-    type: DataTypes.ENUM('beginner', 'intermediate', 'advanced', 'professional'),
-    allowNull: false,
-    defaultValue: 'intermediate',
-    validate: {
-      isIn: [['beginner', 'intermediate', 'advanced', 'professional']]
-    }
-  },
   status: {
-    type: DataTypes.ENUM('scheduled', 'in_progress', 'completed', 'cancelled'),
-    defaultValue: 'scheduled',
+    type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
+    defaultValue: MATCH_STATUS.SCHEDULED,
     allowNull: false,
     validate: {
-      isIn: [['scheduled', 'in_progress', 'completed', 'cancelled']]
+      isIn: [MATCH_STATUS_VALUES]
     }
   },
   score: {
@@ -115,14 +109,9 @@ const Match = sequelize.define('Match', {
   paranoid: false,
   validate: {
     validatePlayers() {
-      if (this.matchType === 'singles') {
-        if (this.player3Id || this.player4Id) {
-          throw new Error('Partidos singles no pueden tener más de 2 jugadores');
-        }
-      } else if (this.matchType === 'doubles') {
-        if (!this.player3Id || !this.player4Id) {
-          throw new Error('Partidos doubles requieren 4 jugadores');
-        }
+      // Todos los partidos son doubles, requieren 4 jugadores
+      if (!this.player3Id || !this.player4Id) {
+        throw new Error('Los partidos requieren 4 jugadores (doubles)');
       }
     },
     validateUniquePlayers() {
@@ -134,5 +123,9 @@ const Match = sequelize.define('Match', {
     }
   }
 });
+
+// Exportar constantes para uso en otros archivos
+Match.MATCH_STATUS = MATCH_STATUS;
+Match.MATCH_STATUS_VALUES = MATCH_STATUS_VALUES;
 
 module.exports = Match;
