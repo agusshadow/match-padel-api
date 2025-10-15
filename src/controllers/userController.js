@@ -1,4 +1,4 @@
-const userService = require('../services/userService');
+import * as userService from '../services/userService.js';
 
 // Obtener todos los usuarios
 const getAllUsers = async (req, res) => {
@@ -252,7 +252,7 @@ const changeMyPassword = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllUsers,
   getUserById,
   getUserProfile,

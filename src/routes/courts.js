@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const courtController = require('../controllers/courtController');
-const { authenticateToken } = require('../middleware/auth');
+import * as courtController from '../controllers/courtController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', courtController.getAllCourts);
@@ -14,4 +14,4 @@ router.post('/', authenticateToken, courtController.createCourt);
 router.put('/:id', authenticateToken, courtController.updateCourt);
 router.delete('/:id', authenticateToken, courtController.deleteCourt);
 
-module.exports = router;
+export default router;

@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const matchController = require('../controllers/matchController');
-const { authenticateToken } = require('../middleware/auth');
+import * as matchController from '../controllers/matchController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', matchController.getAllMatches);
@@ -19,4 +19,4 @@ router.put('/:id/start', authenticateToken, matchController.startMatch);
 router.put('/:id/cancel', authenticateToken, matchController.cancelMatch);
 router.put('/:id/score', authenticateToken, matchController.updateMatchScore);
 
-module.exports = router;
+export default router;

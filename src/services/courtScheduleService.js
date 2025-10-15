@@ -1,6 +1,6 @@
-const CourtSchedule = require('../models/CourtSchedule');
-const Court = require('../models/Court');
-const { Op } = require('sequelize');
+import CourtSchedule from '../models/CourtSchedule.js';
+import Court from '../models/Court.js';
+import { Op } from 'sequelize';
 
 // Obtener todos los horarios
 const getAllSchedules = async (filters = {}) => {
@@ -325,7 +325,7 @@ const getPriceForDateTime = async (courtId, dayOfWeek, time) => {
   }
 };
 
-module.exports = {
+export {
   getAllSchedules,
   getScheduleById,
   getSchedulesByCourt,

@@ -1,5 +1,5 @@
-const Club = require('../models/Club');
-const Court = require('../models/Court');
+import Club from '../models/Club.js';
+import Court from '../models/Court.js';
 
 // Obtener todos los clubs
 const getAllClubs = async (filters = {}) => {
@@ -148,7 +148,7 @@ const getClubsByCity = async (city) => {
   }
 };
 
-module.exports = {
+export {
   getAllClubs,
   getClubById,
   createClub,

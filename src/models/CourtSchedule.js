@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/connection');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
 
 const CourtSchedule = sequelize.define('CourtSchedule', {
   id: {
@@ -56,4 +56,4 @@ const CourtSchedule = sequelize.define('CourtSchedule', {
   ]
 });
 
-module.exports = CourtSchedule;
+export default CourtSchedule;

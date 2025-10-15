@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/connection');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
 
 // Constantes para tipos de cancha
 const COURT_TYPE = {
@@ -73,4 +73,4 @@ Court.COURT_TYPE_VALUES = COURT_TYPE_VALUES;
 Court.COURT_SURFACE = COURT_SURFACE;
 Court.COURT_SURFACE_VALUES = COURT_SURFACE_VALUES;
 
-module.exports = Court;
+export default Court;

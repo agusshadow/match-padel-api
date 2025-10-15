@@ -1,7 +1,7 @@
-const CourtReservation = require('../models/CourtReservation');
-const Court = require('../models/Court');
-const User = require('../models/User');
-const { Op } = require('sequelize');
+import CourtReservation from '../models/CourtReservation.js';
+import Court from '../models/Court.js';
+import User from '../models/User.js';
+import { Op } from 'sequelize';
 
 // Obtener todas las reservas
 const getAllReservations = async (filters = {}) => {
@@ -340,7 +340,7 @@ const calculateReservationPrice = (court, scheduledDate, startTime) => {
   return Math.round(price);
 };
 
-module.exports = {
+export {
   getAllReservations,
   getReservationById,
   getUserReservations,

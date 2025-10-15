@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/connection');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
 
 // Constantes para estados de reservas
 const RESERVATION_STATUS = {
@@ -78,4 +78,4 @@ CourtReservation.RESERVATION_STATUS = RESERVATION_STATUS;
 CourtReservation.RESERVATION_STATUS_VALUES = RESERVATION_STATUS_VALUES;
 CourtReservation.RESERVATION_DURATION_MINUTES = RESERVATION_DURATION_MINUTES;
 
-module.exports = CourtReservation;
+export default CourtReservation;

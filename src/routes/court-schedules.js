@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const courtScheduleController = require('../controllers/courtScheduleController');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+import * as courtScheduleController from '../controllers/courtScheduleController.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // Rutas públicas (consultas)
 router.get('/', courtScheduleController.getAllSchedules);
@@ -16,4 +16,4 @@ router.put('/:id', authenticateToken, requireAdmin, courtScheduleController.upda
 router.delete('/:id', authenticateToken, requireAdmin, courtScheduleController.deleteSchedule);
 router.post('/court/:courtId/default', authenticateToken, requireAdmin, courtScheduleController.createDefaultSchedules);
 
-module.exports = router;
+export default router;

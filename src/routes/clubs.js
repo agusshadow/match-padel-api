@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const clubController = require('../controllers/clubController');
-const { authenticateToken } = require('../middleware/auth');
+import * as clubController from '../controllers/clubController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', clubController.getAllClubs);
@@ -13,4 +13,4 @@ router.post('/', authenticateToken, clubController.createClub);
 router.put('/:id', authenticateToken, clubController.updateClub);
 router.delete('/:id', authenticateToken, clubController.deleteClub);
 
-module.exports = router;
+export default router;

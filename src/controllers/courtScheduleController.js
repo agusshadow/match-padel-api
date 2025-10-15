@@ -1,4 +1,4 @@
-const courtScheduleService = require('../services/courtScheduleService');
+import * as courtScheduleService from '../services/courtScheduleService.js';
 
 // Obtener todos los horarios
 const getAllSchedules = async (req, res) => {
@@ -346,7 +346,7 @@ const getPriceForDateTime = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllSchedules,
   getScheduleById,
   getSchedulesByCourt,

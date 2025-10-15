@@ -1,9 +1,9 @@
-const User = require('./User');
-const Club = require('./Club');
-const Court = require('./Court');
-const CourtSchedule = require('./CourtSchedule');
-const CourtReservation = require('./CourtReservation');
-const Match = require('./Match');
+import User from './User.js';
+import Club from './Club.js';
+import Court from './Court.js';
+import CourtSchedule from './CourtSchedule.js';
+import CourtReservation from './CourtReservation.js';
+import Match from './Match.js';
 
 // Asociaciones entre modelos
 
@@ -103,7 +103,7 @@ CourtSchedule.belongsTo(Court, {
   as: 'court'
 });
 
-module.exports = {
+export {
   User,
   Club,
   Court,

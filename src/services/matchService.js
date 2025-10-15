@@ -1,9 +1,9 @@
-const { Op } = require('sequelize');
-const Match = require('../models/Match');
-const CourtReservation = require('../models/CourtReservation');
-const User = require('../models/User');
-const Court = require('../models/Court');
-const Club = require('../models/Club');
+import { Op } from 'sequelize';
+import Match from '../models/Match.js';
+import CourtReservation from '../models/CourtReservation.js';
+import User from '../models/User.js';
+import Court from '../models/Court.js';
+import Club from '../models/Club.js';
 
 // Obtener todos los matches
 const getAllMatches = async (filters = {}) => {
@@ -486,7 +486,7 @@ const getMatchesByClub = async (clubId) => {
   }
 };
 
-module.exports = {
+export {
   getAllMatches,
   getMatchById,
   createMatch,

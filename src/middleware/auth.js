@@ -1,4 +1,4 @@
-const authService = require('../services/authService');
+import authService from '../services/authService.js';
 
 // Middleware simple para verificar JWT
 const authenticateToken = (req, res, next) => {
@@ -35,4 +35,4 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { authenticateToken, requireAdmin };
+export { authenticateToken, requireAdmin };

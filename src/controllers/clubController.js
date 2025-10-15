@@ -1,4 +1,4 @@
-const clubService = require('../services/clubService');
+import * as clubService from '../services/clubService.js';
 
 // Obtener todos los clubs
 const getAllClubs = async (req, res) => {
@@ -159,7 +159,7 @@ const getClubsByCity = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllClubs,
   getClubById,
   createClub,

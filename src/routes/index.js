@@ -1,14 +1,14 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
 // Importar rutas
-const authRoutes = require('./auth');
-const userRoutes = require('./users');
-const clubRoutes = require('./clubs');
-const courtRoutes = require('./courts');
-const courtScheduleRoutes = require('./court-schedules');
-const courtReservationRoutes = require('./court-reservations');
-const matchRoutes = require('./matches');
+import authRoutes from './auth.js';
+import userRoutes from './users.js';
+import clubRoutes from './clubs.js';
+import courtRoutes from './courts.js';
+import courtScheduleRoutes from './court-schedules.js';
+import courtReservationRoutes from './court-reservations.js';
+import matchRoutes from './matches.js';
 
 // Rutas principales
 router.use('/auth', authRoutes);
@@ -46,4 +46,4 @@ router.get('/', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

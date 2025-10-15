@@ -1,5 +1,5 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+import User from '../models/User.js';
+import jwt from 'jsonwebtoken';
 
 class AuthService {
   // Registro de usuario
@@ -76,4 +76,4 @@ class AuthService {
   }
 }
 
-module.exports = new AuthService();
+export default new AuthService();

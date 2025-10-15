@@ -1,4 +1,4 @@
-const courtReservationService = require('../services/courtReservationService');
+import * as courtReservationService from '../services/courtReservationService.js';
 
 // Obtener todas las reservas
 const getAllReservations = async (req, res) => {
@@ -326,7 +326,7 @@ const checkAvailability = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllReservations,
   getReservationById,
   getMyReservations,

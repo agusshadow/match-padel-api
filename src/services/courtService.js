@@ -1,5 +1,5 @@
-const Court = require('../models/Court');
-const Club = require('../models/Club');
+import Court from '../models/Court.js';
+import Club from '../models/Club.js';
 
 // Obtener todas las canchas
 const getAllCourts = async (filters = {}) => {
@@ -234,7 +234,7 @@ const getCourtsByType = async (type) => {
   }
 };
 
-module.exports = {
+export {
   getAllCourts,
   getCourtById,
   createCourt,

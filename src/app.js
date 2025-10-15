@@ -1,12 +1,14 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
 
-const { sequelize } = require('./config/connection');
-const routes = require('./routes');
+import { sequelize } from './config/connection.js';
+import routes from './routes/index.js';
 
 // Importar y configurar asociaciones entre modelos
-require('./models/associations');
+import './models/associations.js';
+
+dotenv.config();
 
 const app = express();
 
@@ -66,4 +68,4 @@ const startServer = async () => {
 
 startServer();
 
-module.exports = app;
+export default app;

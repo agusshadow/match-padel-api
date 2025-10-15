@@ -1,4 +1,4 @@
-const courtService = require('../services/courtService');
+import * as courtService from '../services/courtService.js';
 
 // Obtener todas las canchas
 const getAllCourts = async (req, res) => {
@@ -196,7 +196,7 @@ const getCourtsByType = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllCourts,
   getCourtById,
   createCourt,

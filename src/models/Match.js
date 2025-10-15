@@ -1,5 +1,5 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/connection');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
 
 // Constantes para estados de partidos
 const MATCH_STATUS = {
@@ -128,4 +128,4 @@ const Match = sequelize.define('Match', {
 Match.MATCH_STATUS = MATCH_STATUS;
 Match.MATCH_STATUS_VALUES = MATCH_STATUS_VALUES;
 
-module.exports = Match;
+export default Match;

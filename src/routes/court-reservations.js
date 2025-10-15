@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const courtReservationController = require('../controllers/courtReservationController');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+import * as courtReservationController from '../controllers/courtReservationController.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/availability', courtReservationController.checkAvailability);
@@ -18,4 +18,4 @@ router.delete('/:id', authenticateToken, courtReservationController.deleteReserv
 router.get('/', authenticateToken, requireAdmin, courtReservationController.getAllReservations);
 router.put('/:id/confirm', authenticateToken, requireAdmin, courtReservationController.confirmReservation);
 
-module.exports = router;
+export default router;

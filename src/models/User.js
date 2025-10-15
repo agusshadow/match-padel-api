@@ -1,6 +1,6 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/connection');
-const bcrypt = require('bcryptjs');
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
+import bcrypt from 'bcryptjs';
 
 // Modelo simple de Usuario
 const User = sequelize.define('User', {
@@ -50,4 +50,4 @@ User.prototype.toJSON = function() {
   return values;
 };
 
-module.exports = User;
+export default User;

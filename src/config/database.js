@@ -1,4 +1,6 @@
-require('dotenv').config();
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Configuración para Sequelize CLI
 const config = {
@@ -31,4 +33,4 @@ const config = {
   }
 };
 
-module.exports = config;
+export default config;

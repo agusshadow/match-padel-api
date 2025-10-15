@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const userController = require('../controllers/userController');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+import * as userController from '../controllers/userController.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // Rutas públicas
 router.post('/', userController.createUser); // Registro de usuarios
@@ -17,4 +17,4 @@ router.put('/:id', authenticateToken, requireAdmin, userController.updateUser);
 router.delete('/:id', authenticateToken, requireAdmin, userController.deleteUser);
 router.put('/:id/change-password', authenticateToken, requireAdmin, userController.changePassword);
 
-module.exports = router;
+export default router;

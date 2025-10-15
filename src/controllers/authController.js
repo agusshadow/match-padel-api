@@ -1,4 +1,4 @@
-const authService = require('../services/authService');
+import authService from '../services/authService.js';
 
 // Registro
 const register = async (req, res) => {
@@ -53,7 +53,7 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   register,
   login,
   getProfile

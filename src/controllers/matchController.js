@@ -1,4 +1,4 @@
-const matchService = require('../services/matchService');
+import * as matchService from '../services/matchService.js';
 
 // Obtener todos los matches
 const getAllMatches = async (req, res) => {
@@ -299,7 +299,7 @@ const cancelMatch = async (req, res) => {
   }
 };
 
-module.exports = {
+export {
   getAllMatches,
   getMatchById,
   createMatch,
