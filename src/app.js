@@ -3,88 +3,14 @@ const cors = require('cors');
 require('dotenv').config();
 
 const { sequelize } = require('./config/connection');
-const User = require('./models/User');
-const Club = require('./models/Club');
-const Court = require('./models/Court');
-const CourtReservation = require('./models/CourtReservation');
-const Match = require('./models/Match');
 const routes = require('./routes');
+
+// Importar y configurar asociaciones entre modelos
+require('./models/associations');
 
 const app = express();
 
-// Establecer relaciones entre modelos
-Club.hasMany(Court, { 
-  foreignKey: 'clubId', 
-  as: 'courts' 
-});
-Court.belongsTo(Club, { 
-  foreignKey: 'clubId', 
-  as: 'club' 
-});
-
-// Relaciones para CourtReservation
-Court.hasMany(CourtReservation, { 
-  foreignKey: 'courtId', 
-  as: 'reservations' 
-});
-CourtReservation.belongsTo(Court, { 
-  foreignKey: 'courtId', 
-  as: 'court' 
-});
-
-User.hasMany(CourtReservation, { 
-  foreignKey: 'userId', 
-  as: 'reservations' 
-});
-CourtReservation.belongsTo(User, { 
-  foreignKey: 'userId', 
-  as: 'user' 
-});
-
-// Relaciones para Match
-CourtReservation.hasOne(Match, { 
-  foreignKey: 'reservationId', 
-  as: 'match' 
-});
-Match.belongsTo(CourtReservation, { 
-  foreignKey: 'reservationId', 
-  as: 'reservation' 
-});
-
-// Relaciones de jugadores en Match
-User.hasMany(Match, { 
-  foreignKey: 'player1Id', 
-  as: 'matchesAsPlayer1' 
-});
-User.hasMany(Match, { 
-  foreignKey: 'player2Id', 
-  as: 'matchesAsPlayer2' 
-});
-User.hasMany(Match, { 
-  foreignKey: 'player3Id', 
-  as: 'matchesAsPlayer3' 
-});
-User.hasMany(Match, { 
-  foreignKey: 'player4Id', 
-  as: 'matchesAsPlayer4' 
-});
-
-Match.belongsTo(User, { 
-  foreignKey: 'player1Id', 
-  as: 'player1' 
-});
-Match.belongsTo(User, { 
-  foreignKey: 'player2Id', 
-  as: 'player2' 
-});
-Match.belongsTo(User, { 
-  foreignKey: 'player3Id', 
-  as: 'player3' 
-});
-Match.belongsTo(User, { 
-  foreignKey: 'player4Id', 
-  as: 'player4' 
-});
+// Las asociaciones entre modelos están definidas en ./models/associations.js
 
 // Middleware básico
 app.use(cors());

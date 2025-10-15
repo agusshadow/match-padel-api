@@ -6,6 +6,7 @@ const authRoutes = require('./auth');
 const userRoutes = require('./users');
 const clubRoutes = require('./clubs');
 const courtRoutes = require('./courts');
+const courtReservationRoutes = require('./court-reservations');
 const matchRoutes = require('./matches');
 
 // Rutas principales
@@ -13,6 +14,7 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/courts', courtRoutes);
+router.use('/court-reservations', courtReservationRoutes);
 router.use('/matches', matchRoutes);
 
 // Ruta de salud
@@ -34,6 +36,7 @@ router.get('/', (req, res) => {
       users: '/api/users',
       clubs: '/api/clubs',
       courts: '/api/courts',
+      'court-reservations': '/api/court-reservations',
       matches: '/api/matches',
       health: '/api/health'
     }
