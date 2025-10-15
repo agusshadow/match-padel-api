@@ -5,9 +5,20 @@ require('dotenv').config();
 const { sequelize } = require('./config/connection');
 const User = require('./models/User');
 const Club = require('./models/Club');
+const Court = require('./models/Court');
 const routes = require('./routes');
 
 const app = express();
+
+// Establecer relaciones entre modelos
+Club.hasMany(Court, { 
+  foreignKey: 'clubId', 
+  as: 'courts' 
+});
+Court.belongsTo(Club, { 
+  foreignKey: 'clubId', 
+  as: 'club' 
+});
 
 // Middleware básico
 app.use(cors());
@@ -35,6 +46,16 @@ const startServer = async () => {
       console.log(`   POST /api/auth/register - Registro`);
       console.log(`   POST /api/auth/login - Login`);
       console.log(`   GET  /api/auth/profile - Perfil (requiere token)`);
+      console.log(`   GET  /api/clubs - Obtener todos los clubs`);
+      console.log(`   GET  /api/clubs/:id - Obtener club por ID`);
+      console.log(`   POST /api/clubs - Crear club (requiere token)`);
+      console.log(`   PUT  /api/clubs/:id - Actualizar club (requiere token)`);
+      console.log(`   DELETE /api/clubs/:id - Eliminar club (requiere token)`);
+      console.log(`   GET  /api/courts - Obtener todas las canchas`);
+      console.log(`   GET  /api/courts/:id - Obtener cancha por ID`);
+      console.log(`   POST /api/courts - Crear cancha (requiere token)`);
+      console.log(`   PUT  /api/courts/:id - Actualizar cancha (requiere token)`);
+      console.log(`   DELETE /api/courts/:id - Eliminar cancha (requiere token)`);
       console.log(`   GET  /api/health - Estado del servidor`);
     });
   } catch (error) {
