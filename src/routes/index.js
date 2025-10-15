@@ -5,11 +5,13 @@ const router = express.Router();
 const authRoutes = require('./auth');
 const clubRoutes = require('./clubs');
 const courtRoutes = require('./courts');
+const matchRoutes = require('./matches');
 
 // Rutas principales
 router.use('/auth', authRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/courts', courtRoutes);
+router.use('/matches', matchRoutes);
 
 // Ruta de salud
 router.get('/health', (req, res) => {
@@ -29,6 +31,7 @@ router.get('/', (req, res) => {
       auth: '/api/auth',
       clubs: '/api/clubs',
       courts: '/api/courts',
+      matches: '/api/matches',
       health: '/api/health'
     }
   });

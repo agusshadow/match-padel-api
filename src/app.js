@@ -6,6 +6,8 @@ const { sequelize } = require('./config/connection');
 const User = require('./models/User');
 const Club = require('./models/Club');
 const Court = require('./models/Court');
+const CourtReservation = require('./models/CourtReservation');
+const Match = require('./models/Match');
 const routes = require('./routes');
 
 const app = express();
@@ -18,6 +20,70 @@ Club.hasMany(Court, {
 Court.belongsTo(Club, { 
   foreignKey: 'clubId', 
   as: 'club' 
+});
+
+// Relaciones para CourtReservation
+Court.hasMany(CourtReservation, { 
+  foreignKey: 'courtId', 
+  as: 'reservations' 
+});
+CourtReservation.belongsTo(Court, { 
+  foreignKey: 'courtId', 
+  as: 'court' 
+});
+
+User.hasMany(CourtReservation, { 
+  foreignKey: 'userId', 
+  as: 'reservations' 
+});
+CourtReservation.belongsTo(User, { 
+  foreignKey: 'userId', 
+  as: 'user' 
+});
+
+// Relaciones para Match
+CourtReservation.hasOne(Match, { 
+  foreignKey: 'reservationId', 
+  as: 'match' 
+});
+Match.belongsTo(CourtReservation, { 
+  foreignKey: 'reservationId', 
+  as: 'reservation' 
+});
+
+// Relaciones de jugadores en Match
+User.hasMany(Match, { 
+  foreignKey: 'player1Id', 
+  as: 'matchesAsPlayer1' 
+});
+User.hasMany(Match, { 
+  foreignKey: 'player2Id', 
+  as: 'matchesAsPlayer2' 
+});
+User.hasMany(Match, { 
+  foreignKey: 'player3Id', 
+  as: 'matchesAsPlayer3' 
+});
+User.hasMany(Match, { 
+  foreignKey: 'player4Id', 
+  as: 'matchesAsPlayer4' 
+});
+
+Match.belongsTo(User, { 
+  foreignKey: 'player1Id', 
+  as: 'player1' 
+});
+Match.belongsTo(User, { 
+  foreignKey: 'player2Id', 
+  as: 'player2' 
+});
+Match.belongsTo(User, { 
+  foreignKey: 'player3Id', 
+  as: 'player3' 
+});
+Match.belongsTo(User, { 
+  foreignKey: 'player4Id', 
+  as: 'player4' 
 });
 
 // Middleware básico
@@ -56,6 +122,14 @@ const startServer = async () => {
       console.log(`   POST /api/courts - Crear cancha (requiere token)`);
       console.log(`   PUT  /api/courts/:id - Actualizar cancha (requiere token)`);
       console.log(`   DELETE /api/courts/:id - Eliminar cancha (requiere token)`);
+      console.log(`   GET  /api/matches - Obtener todos los matches`);
+      console.log(`   GET  /api/matches/:id - Obtener match por ID`);
+      console.log(`   POST /api/matches - Crear match (requiere token)`);
+      console.log(`   PUT  /api/matches/:id - Actualizar match (requiere token)`);
+      console.log(`   DELETE /api/matches/:id - Eliminar match (requiere token)`);
+      console.log(`   PUT  /api/matches/:id/start - Iniciar match (requiere token)`);
+      console.log(`   PUT  /api/matches/:id/cancel - Cancelar match (requiere token)`);
+      console.log(`   PUT  /api/matches/:id/score - Actualizar score (requiere token)`);
       console.log(`   GET  /api/health - Estado del servidor`);
     });
   } catch (error) {
