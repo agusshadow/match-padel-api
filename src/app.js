@@ -2,8 +2,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const sequelize = require('./config/connection');
+const { sequelize } = require('./config/connection');
 const User = require('./models/User');
+const Club = require('./models/Club');
 const routes = require('./routes');
 
 const app = express();
