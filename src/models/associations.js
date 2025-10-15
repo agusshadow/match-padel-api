@@ -1,6 +1,7 @@
 const User = require('./User');
 const Club = require('./Club');
 const Court = require('./Court');
+const CourtSchedule = require('./CourtSchedule');
 const CourtReservation = require('./CourtReservation');
 const Match = require('./Match');
 
@@ -42,6 +43,11 @@ Club.hasMany(Court, {
 Court.belongsTo(Club, {
   foreignKey: 'clubId',
   as: 'club'
+});
+
+Court.hasMany(CourtSchedule, {
+  foreignKey: 'courtId',
+  as: 'schedules'
 });
 
 Court.hasMany(CourtReservation, {
@@ -91,10 +97,17 @@ Match.belongsTo(User, {
   as: 'player4'
 });
 
+// CourtSchedule associations
+CourtSchedule.belongsTo(Court, {
+  foreignKey: 'courtId',
+  as: 'court'
+});
+
 module.exports = {
   User,
   Club,
   Court,
+  CourtSchedule,
   CourtReservation,
   Match
 };

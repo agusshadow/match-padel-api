@@ -6,6 +6,7 @@ const authRoutes = require('./auth');
 const userRoutes = require('./users');
 const clubRoutes = require('./clubs');
 const courtRoutes = require('./courts');
+const courtScheduleRoutes = require('./court-schedules');
 const courtReservationRoutes = require('./court-reservations');
 const matchRoutes = require('./matches');
 
@@ -14,6 +15,7 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/courts', courtRoutes);
+router.use('/court-schedules', courtScheduleRoutes);
 router.use('/court-reservations', courtReservationRoutes);
 router.use('/matches', matchRoutes);
 
@@ -36,6 +38,7 @@ router.get('/', (req, res) => {
       users: '/api/users',
       clubs: '/api/clubs',
       courts: '/api/courts',
+      'court-schedules': '/api/court-schedules',
       'court-reservations': '/api/court-reservations',
       matches: '/api/matches',
       health: '/api/health'
