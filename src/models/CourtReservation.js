@@ -1,6 +1,19 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/connection');
 
+// Constantes para estados de reservas
+const RESERVATION_STATUS = {
+  PENDING: 'pending',
+  CONFIRMED: 'confirmed',
+  CANCELLED: 'cancelled',
+  COMPLETED: 'completed'
+};
+
+const RESERVATION_STATUS_VALUES = Object.values(RESERVATION_STATUS);
+
+// Duración fija de las reservas (90 minutos)
+const RESERVATION_DURATION_MINUTES = 90;
+
 const CourtReservation = sequelize.define('CourtReservation', {
   id: {
     type: DataTypes.INTEGER,
@@ -39,19 +52,12 @@ const CourtReservation = sequelize.define('CourtReservation', {
     type: DataTypes.TIME,
     allowNull: false
   },
-  duration: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    validate: {
-      isIn: [[60, 90]]
-    }
-  },
   status: {
-    type: DataTypes.ENUM('pending', 'confirmed', 'cancelled', 'completed'),
-    defaultValue: 'pending',
+    type: DataTypes.ENUM(...RESERVATION_STATUS_VALUES),
+    defaultValue: RESERVATION_STATUS.PENDING,
     allowNull: false,
     validate: {
-      isIn: [['pending', 'confirmed', 'cancelled', 'completed']]
+      isIn: [RESERVATION_STATUS_VALUES]
     }
   },
   totalPrice: {
@@ -66,5 +72,10 @@ const CourtReservation = sequelize.define('CourtReservation', {
   timestamps: true,
   paranoid: false
 });
+
+// Exportar constantes para uso en otros archivos
+CourtReservation.RESERVATION_STATUS = RESERVATION_STATUS;
+CourtReservation.RESERVATION_STATUS_VALUES = RESERVATION_STATUS_VALUES;
+CourtReservation.RESERVATION_DURATION_MINUTES = RESERVATION_DURATION_MINUTES;
 
 module.exports = CourtReservation;
