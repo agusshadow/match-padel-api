@@ -3,12 +3,14 @@ const router = express.Router();
 
 // Importar rutas
 const authRoutes = require('./auth');
+const userRoutes = require('./users');
 const clubRoutes = require('./clubs');
 const courtRoutes = require('./courts');
 const matchRoutes = require('./matches');
 
 // Rutas principales
 router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/courts', courtRoutes);
 router.use('/matches', matchRoutes);
@@ -29,6 +31,7 @@ router.get('/', (req, res) => {
     message: 'Match Padel API',
     endpoints: {
       auth: '/api/auth',
+      users: '/api/users',
       clubs: '/api/clubs',
       courts: '/api/courts',
       matches: '/api/matches',
