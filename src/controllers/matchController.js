@@ -299,6 +299,47 @@ const cancelMatch = async (req, res) => {
   }
 };
 
+// Unirse a un match
+const joinMatch = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { playerId } = req.body;
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de match inválido'
+      });
+    }
+
+    if (!playerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de jugador es requerido'
+      });
+    }
+
+    const match = await matchService.joinMatch(parseInt(id), parseInt(playerId));
+
+    res.json({
+      success: true,
+      message: 'Jugador agregado al match exitosamente',
+      data: match
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Match no encontrado' ? 404 : 
+                      error.message.includes('completado') || 
+                      error.message.includes('cancelado') ||
+                      error.message.includes('ya está') ||
+                      error.message.includes('completo') ||
+                      error.message.includes('no encontrado') ? 400 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -309,5 +350,6 @@ export {
   getMatchesByClub,
   updateMatchScore,
   startMatch,
-  cancelMatch
+  cancelMatch,
+  joinMatch
 };

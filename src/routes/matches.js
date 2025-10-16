@@ -18,5 +18,6 @@ router.delete('/:id', authenticateToken, matchController.deleteMatch);
 router.put('/:id/start', authenticateToken, matchController.startMatch);
 router.put('/:id/cancel', authenticateToken, matchController.cancelMatch);
 router.put('/:id/score', authenticateToken, matchController.updateMatchScore);
+router.put('/:id/join', authenticateToken, matchController.joinMatch);
 
 export default router;

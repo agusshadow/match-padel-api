@@ -39,7 +39,7 @@ const Match = sequelize.define('Match', {
   },
   player2Id: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     references: {
       model: 'users',
       key: 'id'
@@ -109,9 +109,9 @@ const Match = sequelize.define('Match', {
   paranoid: false,
   validate: {
     validatePlayers() {
-      // Todos los partidos son doubles, requieren 4 jugadores
-      if (!this.player3Id || !this.player4Id) {
-        throw new Error('Los partidos requieren 4 jugadores (doubles)');
+      // Mínimo 1 jugador requerido (el creador), máximo 4
+      if (!this.player1Id) {
+        throw new Error('Los partidos requieren al menos 1 jugador (el creador)');
       }
     },
     validateUniquePlayers() {

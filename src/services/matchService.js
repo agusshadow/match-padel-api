@@ -32,6 +32,7 @@ const getAllMatches = async (filters = {}) => {
       ];
     }
 
+
     const matches = await Match.findAll({
       where: whereClause,
       include: [
@@ -83,7 +84,27 @@ const getAllMatches = async (filters = {}) => {
       order: [['createdAt', 'DESC']]
     });
 
-    return matches;
+    // Agregar información sobre jugadores faltantes para partidos disponibles
+    const matchesWithAvailability = matches.map(match => {
+      const matchData = match.toJSON();
+      
+      // Calcular jugadores faltantes
+      const players = [match.player1Id, match.player2Id, match.player3Id, match.player4Id].filter(Boolean);
+      const playersNeeded = 4 - players.length;
+      
+      // Agregar información de disponibilidad
+      matchData.playersNeeded = playersNeeded;
+      matchData.isAvailable = playersNeeded > 0 && match.status === 'scheduled';
+      matchData.availableSlots = [];
+      
+      if (!match.player2Id) matchData.availableSlots.push('player2');
+      if (!match.player3Id) matchData.availableSlots.push('player3');
+      if (!match.player4Id) matchData.availableSlots.push('player4');
+      
+      return matchData;
+    });
+
+    return matchesWithAvailability;
   } catch (error) {
     throw new Error(`Error al obtener matches: ${error.message}`);
   }
@@ -155,7 +176,7 @@ const getMatchById = async (id) => {
 const createMatch = async (matchData) => {
   try {
     // Validar datos requeridos
-    const requiredFields = ['reservationId', 'player1Id', 'player2Id'];
+    const requiredFields = ['reservationId', 'player1Id'];
     for (const field of requiredFields) {
       if (!matchData[field]) {
         throw new Error(`El campo ${field} es requerido`);
@@ -486,6 +507,98 @@ const getMatchesByClub = async (clubId) => {
   }
 };
 
+// Unirse a un match
+const joinMatch = async (matchId, playerId) => {
+  try {
+    const match = await Match.findByPk(matchId);
+    
+    if (!match) {
+      throw new Error('Match no encontrado');
+    }
+
+    // Verificar que el match no esté completado o cancelado
+    if (['completed', 'cancelled'].includes(match.status)) {
+      throw new Error('No se puede unir a un match completado o cancelado');
+    }
+
+    // Verificar que el jugador no esté ya en el match
+    const players = [match.player1Id, match.player2Id, match.player3Id, match.player4Id].filter(Boolean);
+    if (players.includes(playerId)) {
+      throw new Error('El jugador ya está en este match');
+    }
+
+    // Verificar que el jugador existe
+    const player = await User.findByPk(playerId);
+    if (!player) {
+      throw new Error('Jugador no encontrado');
+    }
+
+    // Encontrar el primer slot disponible
+    let updateData = {};
+    if (!match.player2Id) {
+      updateData.player2Id = playerId;
+    } else if (!match.player3Id) {
+      updateData.player3Id = playerId;
+    } else if (!match.player4Id) {
+      updateData.player4Id = playerId;
+    } else {
+      throw new Error('El match ya está completo (4 jugadores)');
+    }
+
+    await match.update(updateData);
+    
+    // Incluir información completa en la respuesta
+    const updatedMatch = await Match.findByPk(matchId, {
+      include: [
+        {
+          model: CourtReservation,
+          as: 'reservation',
+          include: [
+            {
+              model: Court,
+              as: 'court',
+              include: [
+                {
+                  model: Club,
+                  as: 'club',
+                  attributes: ['id', 'name', 'address', 'city']
+                }
+              ]
+            }
+          ]
+        },
+        {
+          model: User,
+          as: 'player1',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'player2',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'player3',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        },
+        {
+          model: User,
+          as: 'player4',
+          attributes: ['id', 'name', 'email'],
+          required: false
+        }
+      ]
+    });
+
+    return updatedMatch;
+  } catch (error) {
+    throw new Error(`Error al unirse al match: ${error.message}`);
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -493,5 +606,6 @@ export {
   updateMatch,
   deleteMatch,
   getMatchesByPlayer,
-  getMatchesByClub
+  getMatchesByClub,
+  joinMatch
 };
