@@ -5,6 +5,23 @@ const getAllSchedules = async () => {
   return await CourtSchedule.findAll();
 };
 
+// Obtener horarios por cancha
+const getSchedulesByCourt = async (courtId) => {
+  return await CourtSchedule.findAll({
+    where: { courtId },
+    include: [
+      {
+        association: 'court',
+        include: [
+          {
+            association: 'club'
+          }
+        ]
+      }
+    ]
+  });
+};
+
 // Obtener un horario por ID
 const getScheduleById = async (id) => {
   return await CourtSchedule.findByPk(id);
@@ -31,6 +48,7 @@ const deleteSchedule = async (id) => {
 
 export {
   getAllSchedules,
+  getSchedulesByCourt,
   getScheduleById,
   createSchedule,
   updateSchedule,

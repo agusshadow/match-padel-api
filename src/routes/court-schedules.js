@@ -5,6 +5,7 @@ import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', courtScheduleController.getAllSchedules);
+router.get('/by-court', courtScheduleController.getSchedulesByCourt);
 router.get('/:id', courtScheduleController.getScheduleById);
 
 // Rutas protegidas para administradores

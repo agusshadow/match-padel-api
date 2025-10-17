@@ -10,6 +10,23 @@ const getAllCourts = async (req, res) => {
   }
 };
 
+// Obtener canchas por club
+const getCourtsByClub = async (req, res) => {
+  try {
+    const { clubId } = req.query;
+    if (!clubId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'clubId es requerido como query parameter' 
+      });
+    }
+    const courts = await courtService.getCourtsByClub(clubId);
+    res.json({ success: true, data: courts });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Obtener una cancha por ID
 const getCourtById = async (req, res) => {
   try {
@@ -55,6 +72,7 @@ const deleteCourt = async (req, res) => {
 
 export {
   getAllCourts,
+  getCourtsByClub,
   getCourtById,
   createCourt,
   updateCourt,

@@ -10,6 +10,23 @@ const getAllSchedules = async (req, res) => {
   }
 };
 
+// Obtener horarios por cancha
+const getSchedulesByCourt = async (req, res) => {
+  try {
+    const { courtId } = req.query;
+    if (!courtId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'courtId es requerido como query parameter' 
+      });
+    }
+    const schedules = await courtScheduleService.getSchedulesByCourt(courtId);
+    res.json({ success: true, data: schedules });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Obtener un horario por ID
 const getScheduleById = async (req, res) => {
   try {
@@ -55,6 +72,7 @@ const deleteSchedule = async (req, res) => {
 
 export {
   getAllSchedules,
+  getSchedulesByCourt,
   getScheduleById,
   createSchedule,
   updateSchedule,

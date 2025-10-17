@@ -5,6 +5,18 @@ const getAllCourts = async () => {
   return await Court.findAll();
 };
 
+// Obtener canchas por club
+const getCourtsByClub = async (clubId) => {
+  return await Court.findAll({
+    where: { clubId },
+    include: [
+      {
+        association: 'club'
+      }
+    ]
+  });
+};
+
 // Obtener una cancha por ID
 const getCourtById = async (id) => {
   return await Court.findByPk(id);
@@ -31,6 +43,7 @@ const deleteCourt = async (id) => {
 
 export {
   getAllCourts,
+  getCourtsByClub,
   getCourtById,
   createCourt,
   updateCourt,
