@@ -182,6 +182,51 @@ const getAllMatchesDetailed = async () => {
   });
 };
 
+// Obtener un match por ID con información detallada
+const getMatchByIdDetailed = async (id) => {
+  const match = await Match.findByPk(id, {
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+
+  if (!match) {
+    throw new Error('Match no encontrado');
+  }
+
+  return match;
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -189,5 +234,6 @@ export {
   createMatchWithReservation,
   updateMatch,
   deleteMatch,
-  getAllMatchesDetailed
+  getAllMatchesDetailed,
+  getMatchByIdDetailed
 };

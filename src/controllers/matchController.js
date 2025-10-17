@@ -21,6 +21,17 @@ const getMatchById = async (req, res) => {
   }
 };
 
+// Obtener un match por ID con información detallada
+const getMatchByIdDetailed = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const match = await matchService.getMatchByIdDetailed(id);
+    res.json({ success: true, data: match });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Crear un nuevo match
 const createMatch = async (req, res) => {
   try {
@@ -90,6 +101,7 @@ const getAllMatchesDetailed = async (req, res) => {
 export {
   getAllMatches,
   getMatchById,
+  getMatchByIdDetailed,
   createMatch,
   createMatchWithReservation,
   updateMatch,
