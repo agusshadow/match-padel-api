@@ -91,14 +91,6 @@ const Match = sequelize.define('Match', {
       }
     }
   },
-  duration: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    validate: {
-      min: 1,
-      max: 300 // Máximo 5 horas
-    }
-  },
   notes: {
     type: DataTypes.TEXT,
     allowNull: true
