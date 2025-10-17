@@ -227,6 +227,119 @@ const getMatchByIdDetailed = async (id) => {
   return match;
 };
 
+// Unirse a un partido
+const joinMatch = async (matchId, userId) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Obtener el partido con información de los jugadores
+    const match = await Match.findByPk(matchId, {
+      include: [
+        {
+          association: 'player1'
+        },
+        {
+          association: 'player2'
+        },
+        {
+          association: 'player3'
+        },
+        {
+          association: 'player4'
+        }
+      ],
+      transaction
+    });
+
+    if (!match) {
+      throw new Error('Partido no encontrado');
+    }
+
+    // Verificar que el usuario no esté ya en el partido
+    const existingPlayers = [
+      match.player1Id,
+      match.player2Id,
+      match.player3Id,
+      match.player4Id
+    ].filter(id => id !== null);
+
+    if (existingPlayers.includes(userId)) {
+      throw new Error('Ya estás participando en este partido');
+    }
+
+    // Determinar en qué posición agregar al usuario
+    let updateData = {};
+    let position = '';
+
+    if (match.player2Id === null) {
+      updateData.player2Id = userId;
+      position = 'player2';
+    } else if (match.player3Id === null) {
+      updateData.player3Id = userId;
+      position = 'player3';
+    } else if (match.player4Id === null) {
+      updateData.player4Id = userId;
+      position = 'player4';
+    } else {
+      throw new Error('El partido ya está completo (4 jugadores)');
+    }
+
+    // Actualizar el partido
+    await match.update(updateData, { transaction });
+
+    // Confirmar la transacción
+    await transaction.commit();
+
+    // Obtener el partido actualizado con todas las relaciones
+    const updatedMatch = await Match.findByPk(matchId, {
+      include: [
+        {
+          association: 'reservation',
+          include: [
+            {
+              association: 'court',
+              include: [
+                {
+                  association: 'club'
+                }
+              ]
+            },
+            {
+              association: 'user'
+            },
+            {
+              association: 'slot'
+            }
+          ]
+        },
+        {
+          association: 'player1'
+        },
+        {
+          association: 'player2'
+        },
+        {
+          association: 'player3'
+        },
+        {
+          association: 'player4'
+        }
+      ]
+    });
+
+    return {
+      match: updatedMatch,
+      position: position,
+      message: `Te has unido al partido como ${position}`
+    };
+
+  } catch (error) {
+    // Revertir la transacción en caso de error
+    await transaction.rollback();
+    throw error;
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -235,5 +348,6 @@ export {
   updateMatch,
   deleteMatch,
   getAllMatchesDetailed,
-  getMatchByIdDetailed
+  getMatchByIdDetailed,
+  joinMatch
 };

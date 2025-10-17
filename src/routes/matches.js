@@ -12,6 +12,7 @@ router.get('/:id/detailed', matchController.getMatchByIdDetailed);
 // Rutas protegidas (requieren autenticación)
 router.post('/', authenticateToken, matchController.createMatch);
 router.post('/with-reservation', authenticateToken, matchController.createMatchWithReservation);
+router.post('/:id/join', authenticateToken, matchController.joinMatch);
 router.put('/:id', authenticateToken, matchController.updateMatch);
 router.delete('/:id', authenticateToken, matchController.deleteMatch);
 

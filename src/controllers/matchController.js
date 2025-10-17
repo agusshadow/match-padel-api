@@ -98,6 +98,25 @@ const getAllMatchesDetailed = async (req, res) => {
   }
 };
 
+// Unirse a un partido
+const joinMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params; // Obtener el ID del match de la URL
+    const userId = req.user.id; // Obtener el ID del usuario autenticado
+
+    const result = await matchService.joinMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: result.match,
+      position: result.position,
+      message: result.message 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -106,5 +125,6 @@ export {
   createMatchWithReservation,
   updateMatch,
   deleteMatch,
-  getAllMatchesDetailed
+  getAllMatchesDetailed,
+  joinMatch
 };
