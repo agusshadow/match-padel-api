@@ -1,7 +1,7 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/connection.js';
 
-const CourtSchedule = sequelize.define('CourtSchedule', {
+const CourtSlot = sequelize.define('CourtSlot', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -45,7 +45,7 @@ const CourtSchedule = sequelize.define('CourtSchedule', {
     }
   }
 }, {
-  tableName: 'court_schedules',
+  tableName: 'court_slots',
   timestamps: true,
   paranoid: false,
   indexes: [
@@ -56,4 +56,4 @@ const CourtSchedule = sequelize.define('CourtSchedule', {
   ]
 });
 
-export default CourtSchedule;
+export default CourtSlot;

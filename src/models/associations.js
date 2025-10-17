@@ -1,7 +1,7 @@
 import User from './User.js';
 import Club from './Club.js';
 import Court from './Court.js';
-import CourtSchedule from './CourtSchedule.js';
+import CourtSlot from './CourtSlot.js';
 import CourtReservation from './CourtReservation.js';
 import Match from './Match.js';
 
@@ -45,9 +45,9 @@ Court.belongsTo(Club, {
   as: 'club'
 });
 
-Court.hasMany(CourtSchedule, {
+Court.hasMany(CourtSlot, {
   foreignKey: 'courtId',
-  as: 'schedules'
+  as: 'slots'
 });
 
 Court.hasMany(CourtReservation, {
@@ -97,8 +97,8 @@ Match.belongsTo(User, {
   as: 'player4'
 });
 
-// CourtSchedule associations
-CourtSchedule.belongsTo(Court, {
+// CourtSlot associations
+CourtSlot.belongsTo(Court, {
   foreignKey: 'courtId',
   as: 'court'
 });
@@ -107,7 +107,7 @@ export {
   User,
   Club,
   Court,
-  CourtSchedule,
+  CourtSlot,
   CourtReservation,
   Match
 };

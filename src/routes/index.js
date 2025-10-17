@@ -6,7 +6,7 @@ import authRoutes from './auth.js';
 import userRoutes from './users.js';
 import clubRoutes from './clubs.js';
 import courtRoutes from './courts.js';
-import courtScheduleRoutes from './court-schedules.js';
+import courtSlotRoutes from './court-slots.js';
 import courtReservationRoutes from './court-reservations.js';
 import matchRoutes from './matches.js';
 
@@ -15,7 +15,7 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/courts', courtRoutes);
-router.use('/court-schedules', courtScheduleRoutes);
+router.use('/court-slots', courtSlotRoutes);
 router.use('/court-reservations', courtReservationRoutes);
 router.use('/matches', matchRoutes);
 
@@ -38,7 +38,7 @@ router.get('/', (req, res) => {
       users: '/api/users',
       clubs: '/api/clubs',
       courts: '/api/courts',
-      'court-schedules': '/api/court-schedules',
+      'court-slots': '/api/court-slots',
       'court-reservations': '/api/court-reservations',
       matches: '/api/matches',
       health: '/api/health'
