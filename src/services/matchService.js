@@ -29,10 +29,47 @@ const deleteMatch = async (id) => {
   return await match.destroy();
 };
 
+// Obtener todos los matches con información detallada
+const getAllMatchesDetailed = async () => {
+  return await Match.findAll({
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+};
+
 export {
   getAllMatches,
   getMatchById,
   createMatch,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  getAllMatchesDetailed
 };

@@ -53,10 +53,21 @@ const deleteMatch = async (req, res) => {
   }
 };
 
+// Obtener todos los matches con información detallada
+const getAllMatchesDetailed = async (req, res) => {
+  try {
+    const matches = await matchService.getAllMatchesDetailed();
+    res.json({ success: true, data: matches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
   createMatch,
   updateMatch,
-  deleteMatch
+  deleteMatch,
+  getAllMatchesDetailed
 };

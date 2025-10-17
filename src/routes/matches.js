@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', matchController.getAllMatches);
+router.get('/detailed', matchController.getAllMatchesDetailed);
 router.get('/:id', matchController.getMatchById);
 
 // Rutas protegidas (requieren autenticación)
