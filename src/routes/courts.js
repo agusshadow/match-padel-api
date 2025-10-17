@@ -5,8 +5,6 @@ import { authenticateToken } from '../middleware/auth.js';
 
 // Rutas públicas
 router.get('/', courtController.getAllCourts);
-router.get('/club/:clubId', courtController.getCourtsByClub);
-router.get('/type/:type', courtController.getCourtsByType);
 router.get('/:id', courtController.getCourtById);
 
 // Rutas protegidas (requieren autenticación)
