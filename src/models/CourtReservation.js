@@ -44,13 +44,15 @@ const CourtReservation = sequelize.define('CourtReservation', {
     type: DataTypes.DATEONLY,
     allowNull: false
   },
-  startTime: {
-    type: DataTypes.TIME,
-    allowNull: false
-  },
-  endTime: {
-    type: DataTypes.TIME,
-    allowNull: false
+  slotId: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // Permitir null para datos existentes
+    references: {
+      model: 'court_slots',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
   },
   status: {
     type: DataTypes.ENUM(...RESERVATION_STATUS_VALUES),
@@ -58,13 +60,6 @@ const CourtReservation = sequelize.define('CourtReservation', {
     allowNull: false,
     validate: {
       isIn: [RESERVATION_STATUS_VALUES]
-    }
-  },
-  totalPrice: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
-      min: 0
     }
   }
 }, {

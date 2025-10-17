@@ -66,6 +66,11 @@ CourtReservation.belongsTo(Court, {
   as: 'court'
 });
 
+CourtReservation.belongsTo(CourtSlot, {
+  foreignKey: 'slotId',
+  as: 'slot'
+});
+
 CourtReservation.hasOne(Match, {
   foreignKey: 'reservationId',
   as: 'match'
@@ -101,6 +106,11 @@ Match.belongsTo(User, {
 CourtSlot.belongsTo(Court, {
   foreignKey: 'courtId',
   as: 'court'
+});
+
+CourtSlot.hasMany(CourtReservation, {
+  foreignKey: 'slotId',
+  as: 'reservations'
 });
 
 export {

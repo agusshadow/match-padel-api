@@ -1,5 +1,6 @@
 import Match from '../models/Match.js';
 import CourtReservation from '../models/CourtReservation.js';
+import CourtSlot from '../models/CourtSlot.js';
 import { sequelize } from '../config/connection.js';
 
 // Obtener todos los matches
@@ -38,12 +39,9 @@ const createMatchWithReservation = async (matchData) => {
   try {
     // Extraer datos de la reserva y del partido
     const {
-      courtId,
+      slotId,
       userId,
       scheduledDate,
-      startTime,
-      endTime,
-      totalPrice,
       player1Id,
       player2Id,
       player3Id,
@@ -56,16 +54,36 @@ const createMatchWithReservation = async (matchData) => {
       throw new Error('El usuario que crea el partido debe ser el jugador 1');
     }
 
-    // Crear la reserva de cancha
+    // Obtener información del slot
+    const slot = await CourtSlot.findByPk(slotId, {
+      include: [
+        {
+          association: 'court'
+        }
+      ],
+      transaction
+    });
+
+    if (!slot) {
+      throw new Error('Slot no encontrado');
+    }
+
+    // Verificar que el slot esté disponible
+    if (!slot.isAvailable) {
+      throw new Error('El slot seleccionado no está disponible');
+    }
+
+    // Crear la reserva de cancha usando el slotId
     const reservation = await CourtReservation.create({
-      courtId,
+      courtId: slot.courtId,
       userId,
       scheduledDate,
-      startTime,
-      endTime,
-      totalPrice,
+      slotId: slot.id,
       status: 'confirmed' // La reserva se confirma automáticamente al crear el partido
     }, { transaction });
+
+    // Marcar el slot como no disponible
+    await slot.update({ isAvailable: false }, { transaction });
 
     // Crear el partido
     const match = await Match.create({
@@ -97,6 +115,9 @@ const createMatchWithReservation = async (matchData) => {
             },
             {
               association: 'user'
+            },
+            {
+              association: 'slot'
             }
           ]
         },
@@ -139,6 +160,9 @@ const getAllMatchesDetailed = async () => {
           },
           {
             association: 'user'
+          },
+          {
+            association: 'slot'
           }
         ]
       },
