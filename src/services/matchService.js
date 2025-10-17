@@ -71,9 +71,9 @@ const createMatchWithReservation = async (matchData) => {
     const match = await Match.create({
       reservationId: reservation.id,
       player1Id,
-      player2Id,
-      player3Id,
-      player4Id,
+      player2Id: player2Id || null,
+      player3Id: player3Id || null,
+      player4Id: player4Id || null,
       status: 'scheduled',
       notes
     }, { transaction });
