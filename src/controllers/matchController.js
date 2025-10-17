@@ -31,6 +31,30 @@ const createMatch = async (req, res) => {
   }
 };
 
+// Crear un nuevo match con reserva de cancha
+const createMatchWithReservation = async (req, res) => {
+  try {
+    // Obtener el ID del usuario autenticado
+    const userId = req.user.id;
+    
+    // Combinar los datos del body con el userId
+    const matchData = {
+      ...req.body,
+      userId,
+      player1Id: userId // El usuario autenticado es siempre el jugador 1
+    };
+
+    const match = await matchService.createMatchWithReservation(matchData);
+    res.status(201).json({ 
+      success: true, 
+      data: match,
+      message: 'Partido creado exitosamente con reserva de cancha'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Actualizar un match
 const updateMatch = async (req, res) => {
   try {
@@ -67,6 +91,7 @@ export {
   getAllMatches,
   getMatchById,
   createMatch,
+  createMatchWithReservation,
   updateMatch,
   deleteMatch,
   getAllMatchesDetailed
