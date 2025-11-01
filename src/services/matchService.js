@@ -799,6 +799,74 @@ const getUserMatches = async (userId, status = null) => {
   });
 };
 
+// Obtener partidos disponibles para unirse
+const getAvailableMatches = async (userId = null) => {
+  // Construir condiciones: partidos scheduled que no estén completos
+  const whereConditions = {
+    status: Match.MATCH_STATUS.SCHEDULED,
+    [Op.or]: [
+      { player2Id: null },
+      { player3Id: null },
+      { player4Id: null }
+    ]
+  };
+
+  const matches = await Match.findAll({
+    where: whereConditions,
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ],
+    order: [
+      ['createdAt', 'DESC']
+    ]
+  });
+
+  // Si se proporciona un userId, filtrar partidos donde el usuario ya está participando
+  if (userId) {
+    return matches.filter(match => {
+      const players = [
+        match.player1Id,
+        match.player2Id,
+        match.player3Id,
+        match.player4Id
+      ].filter(id => id !== null);
+      return !players.includes(userId);
+    });
+  }
+
+  return matches;
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -814,5 +882,6 @@ export {
   finishMatch,
   confirmMatch,
   cancelMatch,
-  getUserMatches
+  getUserMatches,
+  getAvailableMatches
 };

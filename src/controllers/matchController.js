@@ -222,6 +222,19 @@ const getUserMatches = async (req, res) => {
   }
 };
 
+// Obtener partidos disponibles para unirse
+const getAvailableMatches = async (req, res) => {
+  try {
+    // El usuario está autenticado (la ruta está protegida)
+    // Usar su ID para excluir partidos donde ya está participando
+    const userId = req.user.id;
+    const matches = await matchService.getAvailableMatches(userId);
+    res.json({ success: true, data: matches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -237,5 +250,6 @@ export {
   finishMatch,
   confirmMatch,
   cancelMatch,
-  getUserMatches
+  getUserMatches,
+  getAvailableMatches
 };

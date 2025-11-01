@@ -6,6 +6,9 @@ import { authenticateToken } from '../middleware/auth.js';
 // Rutas públicas
 router.get('/', matchController.getAllMatches);
 router.get('/detailed', matchController.getAllMatchesDetailed);
+// Ruta para partidos disponibles (puede ser pública o protegida)
+// Si el usuario está autenticado, excluirá sus propios partidos
+router.get('/available', authenticateToken, matchController.getAvailableMatches);
 
 // Rutas protegidas (requieren autenticación)
 // IMPORTANTE: /my-matches debe estar ANTES de /:id para evitar conflictos
