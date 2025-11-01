@@ -3,7 +3,7 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    // Obtener algunos slots disponibles para crear reservas de ejemplo
+    // Obtener más slots disponibles para crear reservas de ejemplo (aumentado para más partidos)
     const availableSlots = await queryInterface.sequelize.query(
       `SELECT cs.id as slotId, cs.courtId, cs.startTime, cs.endTime, cs.price, 
               c.name as courtName, cl.name as clubName
@@ -12,7 +12,7 @@ module.exports = {
        JOIN clubs cl ON c.clubId = cl.id
        WHERE cs.isAvailable = true
        ORDER BY cs.courtId, cs.dayOfWeek, cs.startTime
-       LIMIT 20`,
+       LIMIT 40`,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -30,8 +30,8 @@ module.exports = {
     const reservations = [];
     const today = new Date();
     
-    // Crear algunas reservas de ejemplo
-    for (let i = 0; i < Math.min(10, availableSlots.length); i++) {
+    // Crear más reservas de ejemplo (aumentado de 10 a 30)
+    for (let i = 0; i < Math.min(30, availableSlots.length); i++) {
       const slot = availableSlots[i];
       const user = users[i % users.length];
       
