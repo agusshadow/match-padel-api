@@ -63,10 +63,13 @@ module.exports = {
     // Limpiar la tabla actual
     await queryInterface.bulkDelete('court_schedules', null, {});
 
-    // Insertar los nuevos slots
-    await queryInterface.bulkInsert('court_schedules', newSlots);
-
-    console.log('Transformación completada exitosamente!');
+    // Insertar los nuevos slots solo si hay datos
+    if (newSlots.length > 0) {
+      await queryInterface.bulkInsert('court_schedules', newSlots);
+      console.log('Transformación completada exitosamente!');
+    } else {
+      console.log('No hay datos para transformar. La tabla está vacía.');
+    }
   },
 
   async down (queryInterface, Sequelize) {
