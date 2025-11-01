@@ -9,6 +9,7 @@ import courtRoutes from './courts.js';
 import courtSlotRoutes from './court-slots.js';
 import courtReservationRoutes from './court-reservations.js';
 import matchRoutes from './matches.js';
+import matchScoreRoutes from './match-scores.js';
 
 // Rutas principales
 router.use('/auth', authRoutes);
@@ -18,6 +19,7 @@ router.use('/courts', courtRoutes);
 router.use('/court-slots', courtSlotRoutes);
 router.use('/court-reservations', courtReservationRoutes);
 router.use('/matches', matchRoutes);
+router.use('/match-scores', matchScoreRoutes);
 
 // Ruta de salud
 router.get('/health', (req, res) => {
@@ -41,6 +43,7 @@ router.get('/', (req, res) => {
       'court-slots': '/api/court-slots',
       'court-reservations': '/api/court-reservations',
       matches: '/api/matches',
+      'match-scores': '/api/match-scores',
       health: '/api/health'
     }
   });

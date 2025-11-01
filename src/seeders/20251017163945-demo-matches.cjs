@@ -31,53 +31,9 @@ module.exports = {
 
     const matches = [];
     
-    // Función auxiliar para generar score realista
-    const generateScore = () => {
-      const sets = [];
-      const numSets = 3; // Mejor de 3 sets
-      
-      // Decidir qué equipo ganará el partido (2 de 3 sets)
-      const winnerTeam = Math.random() > 0.5 ? 'team1' : 'team2';
-      const winnerWins = 2;
-      const loserWins = numSets - winnerWins;
-      
-      let team1Wins = 0;
-      let team2Wins = 0;
-      
-      // Generar sets
-      for (let set = 0; set < numSets; set++) {
-        let team1Score, team2Score;
-        
-        // Determinar quién gana este set
-        let shouldTeam1Win;
-        if (winnerTeam === 'team1') {
-          // Si team1 es el ganador, debe ganar 2 sets
-          shouldTeam1Win = team1Wins < winnerWins;
-        } else {
-          // Si team2 es el ganador, team2 debe ganar 2 sets
-          shouldTeam1Win = team2Wins >= winnerWins;
-        }
-        
-        if (shouldTeam1Win) {
-          // Team1 gana este set
-          team1Score = Math.floor(Math.random() * 3) + 6; // 6-8
-          team2Score = Math.floor(Math.random() * 5) + 0; // 0-4
-          team1Wins++;
-        } else {
-          // Team2 gana este set
-          team1Score = Math.floor(Math.random() * 5) + 0; // 0-4
-          team2Score = Math.floor(Math.random() * 3) + 6; // 6-8
-          team2Wins++;
-        }
-        
-        sets.push({
-          team1: team1Score,
-          team2: team2Score
-        });
-      }
-      
-      return JSON.stringify({ sets, winner: winnerTeam });
-    };
+    // Nota: Los scores ahora se manejan en la tabla match_scores separada
+    // Esta función ya no se usa, pero la mantenemos comentada para referencia
+    // const generateScore = () => { ... };
     
     // Seleccionar jugadores de forma distribuida
     const shuffledUsers = [...users].sort(() => 0.5 - Math.random());
@@ -85,7 +41,7 @@ module.exports = {
     
     // Función para obtener jugadores con diferentes niveles de completitud
     const getPlayersWithAvailability = (availableSpots) => {
-      // availableSpots puede ser: 3 (solo player1), 2 (player1+player2), 1 (player1+player2+player3), 0 (completo)
+      // availableSpots puede ser: 3 (solo team1Player1), 2 (team1Player1+team1Player2), 1 (team1Player1+team1Player2+team2Player1), 0 (completo)
       const players = [];
       const neededPlayers = 4 - availableSpots;
       
@@ -95,10 +51,10 @@ module.exports = {
       }
       
       return {
-        player1: players[0] || shuffledUsers[0],
-        player2: neededPlayers > 1 ? (players[1] || shuffledUsers[1 % shuffledUsers.length]) : null,
-        player3: neededPlayers > 2 ? (players[2] || shuffledUsers[2 % shuffledUsers.length]) : null,
-        player4: availableSpots === 0 ? (players[3] || shuffledUsers[3 % shuffledUsers.length]) : null
+        team1Player1: players[0] || shuffledUsers[0], // Siempre el creador
+        team1Player2: neededPlayers > 1 ? (players[1] || shuffledUsers[1 % shuffledUsers.length]) : null,
+        team2Player1: neededPlayers > 2 ? (players[2] || shuffledUsers[2 % shuffledUsers.length]) : null,
+        team2Player2: availableSpots === 0 ? (players[3] || shuffledUsers[3 % shuffledUsers.length]) : null
       };
     };
     
@@ -130,13 +86,12 @@ module.exports = {
         const players = getPlayersWithAvailability(config.availableSpots);
         matches.push({
           reservationId: reservation.reservationId,
-          player1Id: players.player1.id,
-          player2Id: players.player2?.id || null,
-          player3Id: players.player3?.id || null,
-          player4Id: players.player4?.id || null,
-          createdBy: players.player1.id, // El creador siempre es player1
+          team1Player1Id: players.team1Player1.id,
+          team1Player2Id: players.team1Player2?.id || null,
+          team2Player1Id: players.team2Player1?.id || null,
+          team2Player2Id: players.team2Player2?.id || null,
+          createdBy: players.team1Player1.id, // El creador siempre es team1Player1
           status: 'scheduled',
-          score: null,
           notes: `Partido programado en ${reservation.clubName} - ${reservation.courtName}`,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -152,13 +107,12 @@ module.exports = {
       const players = getPlayersWithAvailability(0); // Partidos completos
       matches.push({
         reservationId: reservation.reservationId,
-        player1Id: players.player1.id,
-        player2Id: players.player2?.id || null,
-        player3Id: players.player3?.id || null,
-        player4Id: players.player4?.id || null,
-        createdBy: players.player1.id, // El creador siempre es player1
+        team1Player1Id: players.team1Player1.id,
+        team1Player2Id: players.team1Player2?.id || null,
+        team2Player1Id: players.team2Player1?.id || null,
+        team2Player2Id: players.team2Player2?.id || null,
+        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
         status: 'in_progress',
-        score: null,
         notes: `Partido en curso en ${reservation.clubName} - ${reservation.courtName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -173,13 +127,12 @@ module.exports = {
       const players = getPlayersWithAvailability(0); // Partidos completos
       matches.push({
         reservationId: reservation.reservationId,
-        player1Id: players.player1.id,
-        player2Id: players.player2?.id || null,
-        player3Id: players.player3?.id || null,
-        player4Id: players.player4?.id || null,
-        createdBy: players.player1.id, // El creador siempre es player1
+        team1Player1Id: players.team1Player1.id,
+        team1Player2Id: players.team1Player2?.id || null,
+        team2Player1Id: players.team2Player1?.id || null,
+        team2Player2Id: players.team2Player2?.id || null,
+        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
         status: 'pending_confirmation',
-        score: generateScore(),
         notes: `Partido finalizado, esperando confirmación - ${reservation.clubName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -194,13 +147,12 @@ module.exports = {
       const players = getPlayersWithAvailability(0); // Partidos completos
       matches.push({
         reservationId: reservation.reservationId,
-        player1Id: players.player1.id,
-        player2Id: players.player2?.id || null,
-        player3Id: players.player3?.id || null,
-        player4Id: players.player4?.id || null,
-        createdBy: players.player1.id, // El creador siempre es player1
+        team1Player1Id: players.team1Player1.id,
+        team1Player2Id: players.team1Player2?.id || null,
+        team2Player1Id: players.team2Player1?.id || null,
+        team2Player2Id: players.team2Player2?.id || null,
+        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
         status: 'completed',
-        score: generateScore(),
         notes: `Partido completado en ${reservation.clubName} - ${reservation.courtName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -215,13 +167,12 @@ module.exports = {
       const players = getPlayersWithAvailability(1); // Puede estar incompleto al cancelar
       matches.push({
         reservationId: reservation.reservationId,
-        player1Id: players.player1.id,
-        player2Id: players.player2?.id || null,
-        player3Id: players.player3?.id || null,
-        player4Id: players.player4?.id || null,
-        createdBy: players.player1.id, // El creador siempre es player1
+        team1Player1Id: players.team1Player1.id,
+        team1Player2Id: players.team1Player2?.id || null,
+        team2Player1Id: players.team2Player1?.id || null,
+        team2Player2Id: players.team2Player2?.id || null,
+        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
         status: 'cancelled',
-        score: null,
         notes: `Partido cancelado - ${reservation.clubName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -240,9 +191,9 @@ module.exports = {
     const scheduledMatches = matches.filter(m => m.status === 'scheduled');
     const availableCounts = scheduledMatches.reduce((acc, match) => {
       let availableSpots = 0;
-      if (!match.player2Id) availableSpots++;
-      if (!match.player3Id) availableSpots++;
-      if (!match.player4Id) availableSpots++;
+      if (!match.team1Player2Id) availableSpots++;
+      if (!match.team2Player1Id) availableSpots++;
+      if (!match.team2Player2Id) availableSpots++;
       acc[availableSpots] = (acc[availableSpots] || 0) + 1;
       return acc;
     }, {});

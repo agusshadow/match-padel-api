@@ -726,26 +726,29 @@ const finishMatch = async (matchId, userId) => {
 };
 
 // Confirmar un partido (pending_confirmation -> completed)
+// NOTA: Este endpoint ahora está deprecado. El match se completa automáticamente
+// cuando se confirma el score desde matchScoreService.confirmMatchScore
 const confirmMatch = async (matchId, userId) => {
-  const match = await Match.findByPk(matchId);
+  const match = await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'score'
+      }
+    ]
+  });
   
   if (!match) {
     throw new Error('Partido no encontrado');
   }
 
-  // Validar que el usuario es uno de los jugadores
-  if (!isUserInMatch(match, userId)) {
-    throw new Error('Solo los jugadores del partido pueden confirmarlo');
+  // Validar que existe un score confirmado
+  if (!match.score || match.score.status !== 'confirmed') {
+    throw new Error('No se puede confirmar un partido sin un resultado confirmado. Use el endpoint de confirmación de score.');
   }
 
   // Validar estado actual
   if (match.status !== Match.MATCH_STATUS.PENDING_CONFIRMATION) {
     throw new Error(`No se puede confirmar un partido con estado: ${match.status}`);
-  }
-
-  // Validar que existe un score
-  if (!match.score) {
-    throw new Error('No se puede confirmar un partido sin score');
   }
 
   // Actualizar estado

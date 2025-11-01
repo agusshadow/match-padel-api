@@ -4,6 +4,8 @@ import Court from './Court.js';
 import CourtSlot from './CourtSlot.js';
 import CourtReservation from './CourtReservation.js';
 import Match from './Match.js';
+import MatchScore from './MatchScore.js';
+import MatchScoreSet from './MatchScoreSet.js';
 
 // Asociaciones entre modelos
 
@@ -36,6 +38,16 @@ User.hasMany(Match, {
 User.hasMany(Match, {
   foreignKey: 'team2Player2Id',
   as: 'matchesAsTeam2Player2'
+});
+
+User.hasMany(MatchScore, {
+  foreignKey: 'confirmedBy',
+  as: 'confirmedScores'
+});
+
+User.hasMany(MatchScore, {
+  foreignKey: 'rejectedBy',
+  as: 'rejectedScores'
 });
 
 // Club associations
@@ -112,6 +124,38 @@ Match.belongsTo(User, {
   as: 'team2Player2'
 });
 
+Match.hasOne(MatchScore, {
+  foreignKey: 'matchId',
+  as: 'score'
+});
+
+// MatchScore associations
+MatchScore.belongsTo(Match, {
+  foreignKey: 'matchId',
+  as: 'match'
+});
+
+MatchScore.belongsTo(User, {
+  foreignKey: 'confirmedBy',
+  as: 'confirmer'
+});
+
+MatchScore.belongsTo(User, {
+  foreignKey: 'rejectedBy',
+  as: 'rejecter'
+});
+
+MatchScore.hasMany(MatchScoreSet, {
+  foreignKey: 'matchScoreId',
+  as: 'sets'
+});
+
+// MatchScoreSet associations
+MatchScoreSet.belongsTo(MatchScore, {
+  foreignKey: 'matchScoreId',
+  as: 'matchScore'
+});
+
 // CourtSlot associations
 CourtSlot.belongsTo(Court, {
   foreignKey: 'courtId',
@@ -129,5 +173,7 @@ export {
   Court,
   CourtSlot,
   CourtReservation,
-  Match
+  Match,
+  MatchScore,
+  MatchScoreSet
 };
