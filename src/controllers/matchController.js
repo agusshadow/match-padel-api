@@ -123,8 +123,9 @@ const joinMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params; // Obtener el ID del match de la URL
     const userId = req.user.id; // Obtener el ID del usuario autenticado
+    const { team } = req.body; // Equipo deseado (opcional): 1 o 2
 
-    const result = await matchService.joinMatch(matchId, userId);
+    const result = await matchService.joinMatch(matchId, userId, team);
     
     res.json({ 
       success: true, 
@@ -133,7 +134,10 @@ const joinMatch = async (req, res) => {
       message: result.message 
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const statusCode = error.message.includes('debe ser') || 
+                      error.message.includes('completo') ||
+                      error.message.includes('participando') ? 400 : 500;
+    res.status(statusCode).json({ success: false, message: error.message });
   }
 };
 
@@ -255,6 +259,22 @@ const getAvailableMatches = async (req, res) => {
   }
 };
 
+// Obtener disponibilidad de equipos de un match
+const getMatchTeamAvailability = async (req, res) => {
+  try {
+    const { id: matchId } = req.params;
+    const result = await matchService.getMatchTeamAvailability(matchId);
+    res.json({ 
+      success: true, 
+      data: result,
+      message: `Equipo 1 disponible: ${result.teams.team1.hasSpace}, Equipo 2 disponible: ${result.teams.team2.hasSpace}` 
+    });
+  } catch (error) {
+    const statusCode = error.message.includes('no encontrado') ? 404 : 500;
+    res.status(statusCode).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -271,5 +291,6 @@ export {
   confirmMatch,
   cancelMatch,
   getUserMatches,
-  getAvailableMatches
+  getAvailableMatches,
+  getMatchTeamAvailability
 };

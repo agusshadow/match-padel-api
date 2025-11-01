@@ -19,6 +19,28 @@ const isUserInMatch = (match, userId) => {
   return getAllMatchPlayers(match).includes(userId);
 };
 
+// Helper para obtener información de disponibilidad por equipo
+const getTeamAvailability = (match) => {
+  return {
+    team1: {
+      available: !match.team1Player2Id,
+      hasSpace: !match.team1Player2Id,
+      players: [
+        match.team1Player1,
+        match.team1Player2
+      ].filter(Boolean)
+    },
+    team2: {
+      available: !match.team2Player1Id || !match.team2Player2Id,
+      hasSpace: !match.team2Player1Id || !match.team2Player2Id,
+      players: [
+        match.team2Player1,
+        match.team2Player2
+      ].filter(Boolean)
+    }
+  };
+};
+
 // Obtener todos los matches
 const getAllMatches = async () => {
   return await Match.findAll();
@@ -269,8 +291,56 @@ const getMatchByIdDetailed = async (id) => {
   return match;
 };
 
+// Obtener disponibilidad de equipos de un match
+const getMatchTeamAvailability = async (matchId) => {
+  const match = await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'team1Player1'
+      },
+      {
+        association: 'team1Player2'
+      },
+      {
+        association: 'team2Player1'
+      },
+      {
+        association: 'team2Player2'
+      },
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      }
+    ]
+  });
+
+  if (!match) {
+    throw new Error('Partido no encontrado');
+  }
+
+  const teamAvailability = getTeamAvailability(match);
+
+  return {
+    match,
+    teams: teamAvailability,
+    isFull: getAllMatchPlayers(match).length >= 4
+  };
+};
+
 // Unirse a un partido
-const joinMatch = async (matchId, userId) => {
+const joinMatch = async (matchId, userId, desiredTeam = null) => {
   const transaction = await sequelize.transaction();
 
   try {
@@ -302,21 +372,56 @@ const joinMatch = async (matchId, userId) => {
       throw new Error('Ya estás participando en este partido');
     }
 
-    // Determinar en qué posición agregar al usuario (por orden: team1Player2, team2Player1, team2Player2)
+    // Verificar que el partido no esté completo
+    const allPlayers = getAllMatchPlayers(match);
+    if (allPlayers.length >= 4) {
+      throw new Error('El partido ya está completo (4 jugadores)');
+    }
+
     let updateData = {};
     let position = '';
 
-    if (!match.team1Player2Id) {
-      updateData.team1Player2Id = userId;
-      position = 'team1Player2';
-    } else if (!match.team2Player1Id) {
-      updateData.team2Player1Id = userId;
-      position = 'team2Player1';
-    } else if (!match.team2Player2Id) {
-      updateData.team2Player2Id = userId;
-      position = 'team2Player2';
+    if (desiredTeam !== null) {
+      // Validar que el equipo sea válido (1 o 2)
+      if (desiredTeam !== 1 && desiredTeam !== 2) {
+        throw new Error('El equipo debe ser 1 o 2');
+      }
+
+      // Asignar al lugar disponible en el equipo elegido
+      if (desiredTeam === 1) {
+        // Equipo 1: solo team1Player2 está disponible (team1Player1 es el creador)
+        if (!match.team1Player2Id) {
+          updateData.team1Player2Id = userId;
+          position = 'team1Player2';
+        } else {
+          throw new Error('El equipo 1 ya está completo');
+        }
+      } else if (desiredTeam === 2) {
+        // Equipo 2: asignar a team2Player1 o team2Player2 según disponibilidad
+        if (!match.team2Player1Id) {
+          updateData.team2Player1Id = userId;
+          position = 'team2Player1';
+        } else if (!match.team2Player2Id) {
+          updateData.team2Player2Id = userId;
+          position = 'team2Player2';
+        } else {
+          throw new Error('El equipo 2 ya está completo');
+        }
+      }
     } else {
-      throw new Error('El partido ya está completo (4 jugadores)');
+      // Asignación automática (fallback): team1Player2 → team2Player1 → team2Player2
+      if (!match.team1Player2Id) {
+        updateData.team1Player2Id = userId;
+        position = 'team1Player2';
+      } else if (!match.team2Player1Id) {
+        updateData.team2Player1Id = userId;
+        position = 'team2Player1';
+      } else if (!match.team2Player2Id) {
+        updateData.team2Player2Id = userId;
+        position = 'team2Player2';
+      } else {
+        throw new Error('El partido ya está completo (4 jugadores)');
+      }
     }
 
     // Actualizar el partido
@@ -876,6 +981,7 @@ export {
   deleteMatch,
   getAllMatchesDetailed,
   getMatchByIdDetailed,
+  getMatchTeamAvailability,
   joinMatch,
   leaveMatch,
   startMatch,

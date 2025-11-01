@@ -13,6 +13,8 @@ router.get('/available', authenticateToken, matchController.getAvailableMatches)
 // Rutas protegidas (requieren autenticación)
 // IMPORTANTE: /my-matches debe estar ANTES de /:id para evitar conflictos
 router.get('/my-matches', authenticateToken, matchController.getUserMatches);
+// IMPORTANTE: /:id/team-availability debe estar ANTES de /:id para evitar conflictos
+router.get('/:id/team-availability', authenticateToken, matchController.getMatchTeamAvailability);
 
 // Rutas públicas (continuación)
 router.get('/:id', matchController.getMatchById);
