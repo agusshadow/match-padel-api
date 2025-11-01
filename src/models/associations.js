@@ -33,6 +33,11 @@ User.hasMany(Match, {
   as: 'matchesAsPlayer4'
 });
 
+User.hasMany(Match, {
+  foreignKey: 'createdBy',
+  as: 'createdMatches'
+});
+
 // Club associations
 Club.hasMany(Court, {
   foreignKey: 'clubId',
@@ -100,6 +105,11 @@ Match.belongsTo(User, {
 Match.belongsTo(User, {
   foreignKey: 'player4Id',
   as: 'player4'
+});
+
+Match.belongsTo(User, {
+  foreignKey: 'createdBy',
+  as: 'creator'
 });
 
 // CourtSlot associations

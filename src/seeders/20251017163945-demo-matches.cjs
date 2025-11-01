@@ -134,6 +134,7 @@ module.exports = {
           player2Id: players.player2?.id || null,
           player3Id: players.player3?.id || null,
           player4Id: players.player4?.id || null,
+          createdBy: players.player1.id, // El creador siempre es player1
           status: 'scheduled',
           score: null,
           notes: `Partido programado en ${reservation.clubName} - ${reservation.courtName}`,
@@ -155,6 +156,7 @@ module.exports = {
         player2Id: players.player2?.id || null,
         player3Id: players.player3?.id || null,
         player4Id: players.player4?.id || null,
+        createdBy: players.player1.id, // El creador siempre es player1
         status: 'in_progress',
         score: null,
         notes: `Partido en curso en ${reservation.clubName} - ${reservation.courtName}`,
@@ -175,6 +177,7 @@ module.exports = {
         player2Id: players.player2?.id || null,
         player3Id: players.player3?.id || null,
         player4Id: players.player4?.id || null,
+        createdBy: players.player1.id, // El creador siempre es player1
         status: 'pending_confirmation',
         score: generateScore(),
         notes: `Partido finalizado, esperando confirmación - ${reservation.clubName}`,
@@ -195,6 +198,7 @@ module.exports = {
         player2Id: players.player2?.id || null,
         player3Id: players.player3?.id || null,
         player4Id: players.player4?.id || null,
+        createdBy: players.player1.id, // El creador siempre es player1
         status: 'completed',
         score: generateScore(),
         notes: `Partido completado en ${reservation.clubName} - ${reservation.courtName}`,
@@ -215,6 +219,7 @@ module.exports = {
         player2Id: players.player2?.id || null,
         player3Id: players.player3?.id || null,
         player4Id: players.player4?.id || null,
+        createdBy: players.player1.id, // El creador siempre es player1
         status: 'cancelled',
         score: null,
         notes: `Partido cancelado - ${reservation.clubName}`,

@@ -35,7 +35,26 @@ const getMatchByIdDetailed = async (req, res) => {
 // Crear un nuevo match
 const createMatch = async (req, res) => {
   try {
-    const match = await matchService.createMatch(req.body);
+    // Obtener el ID del usuario autenticado
+    const userId = req.user.id;
+    
+    // Establecer player1Id y createdBy desde el usuario autenticado
+    // El usuario autenticado es siempre el jugador 1 y el creador
+    const matchData = {
+      ...req.body,
+      player1Id: userId, // El usuario autenticado es siempre el jugador 1
+      createdBy: userId // El usuario autenticado es el creador
+    };
+    
+    // Si el body intenta establecer un player1Id diferente, rechazarlo
+    if (req.body.player1Id && req.body.player1Id !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Solo puedes crear partidos como jugador 1 (anfitrión). No puedes establecer un player1Id diferente' 
+      });
+    }
+    
+    const match = await matchService.createMatch(matchData);
     res.status(201).json({ success: true, data: match });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -52,7 +71,8 @@ const createMatchWithReservation = async (req, res) => {
     const matchData = {
       ...req.body,
       userId,
-      player1Id: userId // El usuario autenticado es siempre el jugador 1
+      player1Id: userId, // El usuario autenticado es siempre el jugador 1
+      createdBy: userId // El usuario autenticado es el creador
     };
 
     const match = await matchService.createMatchWithReservation(matchData);

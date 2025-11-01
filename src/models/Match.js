@@ -68,6 +68,16 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
+  createdBy: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
+  },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
     defaultValue: MATCH_STATUS.SCHEDULED,

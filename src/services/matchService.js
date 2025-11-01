@@ -16,6 +16,16 @@ const getMatchById = async (id) => {
 
 // Crear un nuevo match
 const createMatch = async (matchData) => {
+  // Validar que createdBy esté establecido
+  if (!matchData.createdBy) {
+    throw new Error('El campo createdBy es requerido');
+  }
+  
+  // Validar que createdBy coincida con player1Id (el creador debe ser player1)
+  if (matchData.createdBy !== matchData.player1Id) {
+    throw new Error('El creador del partido debe ser el jugador 1 (player1Id)');
+  }
+  
   return await Match.create(matchData);
 };
 
@@ -23,6 +33,12 @@ const createMatch = async (matchData) => {
 const updateMatch = async (id, updateData) => {
   const match = await Match.findByPk(id);
   if (!match) throw new Error('Match no encontrado');
+  
+  // No permitir modificar createdBy (es inmutable)
+  if (updateData.hasOwnProperty('createdBy')) {
+    delete updateData.createdBy;
+  }
+  
   return await match.update(updateData);
 };
 
@@ -93,6 +109,7 @@ const createMatchWithReservation = async (matchData) => {
       player2Id: player2Id || null,
       player3Id: player3Id || null,
       player4Id: player4Id || null,
+      createdBy: userId, // El usuario que crea el partido
       status: Match.MATCH_STATUS.SCHEDULED,
       notes
     }, { transaction });
