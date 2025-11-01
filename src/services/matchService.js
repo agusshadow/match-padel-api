@@ -2,6 +2,7 @@ import Match from '../models/Match.js';
 import CourtReservation from '../models/CourtReservation.js';
 import CourtSlot from '../models/CourtSlot.js';
 import { sequelize } from '../config/connection.js';
+import { Op } from 'sequelize';
 
 // Obtener todos los matches
 const getAllMatches = async () => {
@@ -738,6 +739,54 @@ const cancelMatch = async (matchId, userId) => {
   });
 };
 
+// Obtener todos los partidos en los que participa un usuario
+const getUserMatches = async (userId) => {
+  return await Match.findAll({
+    where: {
+      [Op.or]: [
+        { player1Id: userId },
+        { player2Id: userId },
+        { player3Id: userId },
+        { player4Id: userId }
+      ]
+    },
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -752,5 +801,6 @@ export {
   startMatch,
   finishMatch,
   confirmMatch,
-  cancelMatch
+  cancelMatch,
+  getUserMatches
 };

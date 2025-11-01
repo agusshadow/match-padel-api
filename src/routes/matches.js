@@ -6,10 +6,14 @@ import { authenticateToken } from '../middleware/auth.js';
 // Rutas públicas
 router.get('/', matchController.getAllMatches);
 router.get('/detailed', matchController.getAllMatchesDetailed);
-router.get('/:id', matchController.getMatchById);
-router.get('/:id/detailed', matchController.getMatchByIdDetailed);
 
 // Rutas protegidas (requieren autenticación)
+// IMPORTANTE: /my-matches debe estar ANTES de /:id para evitar conflictos
+router.get('/my-matches', authenticateToken, matchController.getUserMatches);
+
+// Rutas públicas (continuación)
+router.get('/:id', matchController.getMatchById);
+router.get('/:id/detailed', matchController.getMatchByIdDetailed);
 router.post('/', authenticateToken, matchController.createMatch);
 router.post('/with-reservation', authenticateToken, matchController.createMatchWithReservation);
 router.post('/:id/join', authenticateToken, matchController.joinMatch);

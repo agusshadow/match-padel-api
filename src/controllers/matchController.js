@@ -208,6 +208,17 @@ const cancelMatch = async (req, res) => {
   }
 };
 
+// Obtener todos los partidos en los que participa el usuario autenticado
+const getUserMatches = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const matches = await matchService.getUserMatches(userId);
+    res.json({ success: true, data: matches });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -222,5 +233,6 @@ export {
   startMatch,
   finishMatch,
   confirmMatch,
-  cancelMatch
+  cancelMatch,
+  getUserMatches
 };
