@@ -2,7 +2,6 @@ import Match from '../models/Match.js';
 import CourtReservation from '../models/CourtReservation.js';
 import CourtSlot from '../models/CourtSlot.js';
 import { sequelize } from '../config/connection.js';
-import { Op } from 'sequelize';
 
 // Obtener todos los matches
 const getAllMatches = async () => {
@@ -145,46 +144,8 @@ const createMatchWithReservation = async (matchData) => {
 };
 
 // Obtener todos los matches con información detallada
-const getAllMatchesDetailed = async (filters = {}) => {
-  const { status, filterByPlayerId, userId } = filters;
-  
-  // Construir condiciones WHERE
-  const whereConditions = [];
-  
-  // Filtro por estado de disponibilidad
-  if (status === 'available') {
-    // Solo partidos que NO tengan los 4 jugadores completos
-    whereConditions.push({
-      [Op.and]: [
-        { player1Id: { [Op.ne]: null } }, // Player1 siempre debe existir
-        {
-          [Op.or]: [
-            { player2Id: null },
-            { player3Id: null },
-            { player4Id: null }
-          ]
-        }
-      ]
-    });
-  }
-  
-  // Filtro por jugador específico
-  if (filterByPlayerId && userId) {
-    whereConditions.push({
-      [Op.or]: [
-        { player1Id: userId },
-        { player2Id: userId },
-        { player3Id: userId },
-        { player4Id: userId }
-      ]
-    });
-  }
-
-  // Combinar todas las condiciones con AND
-  const finalWhere = whereConditions.length > 0 ? { [Op.and]: whereConditions } : undefined;
-
+const getAllMatchesDetailed = async () => {
   return await Match.findAll({
-    where: finalWhere,
     include: [
       {
         association: 'reservation',
