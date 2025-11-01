@@ -380,6 +380,126 @@ const joinMatch = async (matchId, userId) => {
   }
 };
 
+// Abandonar un partido
+const leaveMatch = async (matchId, userId) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    // Obtener el partido con información de los jugadores
+    const match = await Match.findByPk(matchId, {
+      include: [
+        {
+          association: 'player1'
+        },
+        {
+          association: 'player2'
+        },
+        {
+          association: 'player3'
+        },
+        {
+          association: 'player4'
+        }
+      ],
+      transaction
+    });
+
+    if (!match) {
+      throw new Error('Partido no encontrado');
+    }
+
+    // Verificar que el usuario esté en el partido
+    const players = [
+      { id: match.player1Id, position: 'player1' },
+      { id: match.player2Id, position: 'player2' },
+      { id: match.player3Id, position: 'player3' },
+      { id: match.player4Id, position: 'player4' }
+    ].filter(p => p.id !== null);
+
+    const userPosition = players.find(p => p.id === userId);
+
+    if (!userPosition) {
+      throw new Error('No estás participando en este partido');
+    }
+
+    // No permitir que el creador (player1) abandone el partido
+    if (userPosition.position === 'player1') {
+      throw new Error('El creador del partido no puede abandonarlo. Si deseas cancelar el partido, debes eliminarlo');
+    }
+
+    // Verificar que el partido no esté en progreso o completado
+    if (match.status === 'in_progress' || match.status === 'completed') {
+      throw new Error('No puedes abandonar un partido que ya está en progreso o completado');
+    }
+
+    // Determinar qué posición vaciar
+    let updateData = {};
+    let position = userPosition.position;
+
+    if (position === 'player2') {
+      updateData.player2Id = null;
+    } else if (position === 'player3') {
+      updateData.player3Id = null;
+    } else if (position === 'player4') {
+      updateData.player4Id = null;
+    }
+
+    // Actualizar el partido
+    await match.update(updateData, { transaction });
+
+    // Confirmar la transacción
+    await transaction.commit();
+
+    // Obtener el partido actualizado con todas las relaciones
+    const updatedMatch = await Match.findByPk(matchId, {
+      include: [
+        {
+          association: 'reservation',
+          include: [
+            {
+              association: 'court',
+              include: [
+                {
+                  association: 'club'
+                }
+              ]
+            },
+            {
+              association: 'user'
+            },
+            {
+              association: 'slot'
+            }
+          ]
+        },
+        {
+          association: 'player1'
+        },
+        {
+          association: 'player2'
+        },
+        {
+          association: 'player3'
+        },
+        {
+          association: 'player4'
+        }
+      ]
+    });
+
+    return {
+      match: updatedMatch,
+      position: position,
+      message: `Has abandonado el partido exitosamente`
+    };
+
+  } catch (error) {
+    // Revertir la transacción en caso de error
+    await transaction.rollback();
+    throw error;
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -389,5 +509,6 @@ export {
   deleteMatch,
   getAllMatchesDetailed,
   getMatchByIdDetailed,
-  joinMatch
+  joinMatch,
+  leaveMatch
 };

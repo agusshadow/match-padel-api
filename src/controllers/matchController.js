@@ -126,6 +126,25 @@ const joinMatch = async (req, res) => {
   }
 };
 
+// Abandonar un partido
+const leaveMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params; // Obtener el ID del match de la URL
+    const userId = req.user.id; // Obtener el ID del usuario autenticado
+
+    const result = await matchService.leaveMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: result.match,
+      position: result.position,
+      message: result.message 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -135,5 +154,6 @@ export {
   updateMatch,
   deleteMatch,
   getAllMatchesDetailed,
-  joinMatch
+  joinMatch,
+  leaveMatch
 };
