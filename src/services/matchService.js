@@ -4,6 +4,21 @@ import CourtSlot from '../models/CourtSlot.js';
 import { sequelize } from '../config/connection.js';
 import { Op } from 'sequelize';
 
+// Helper para obtener todos los jugadores de un match
+const getAllMatchPlayers = (match) => {
+  return [
+    match.team1Player1Id,
+    match.team1Player2Id,
+    match.team2Player1Id,
+    match.team2Player2Id
+  ].filter(id => id !== null);
+};
+
+// Helper para verificar si un usuario está en el match
+const isUserInMatch = (match, userId) => {
+  return getAllMatchPlayers(match).includes(userId);
+};
+
 // Obtener todos los matches
 const getAllMatches = async () => {
   return await Match.findAll();
@@ -21,9 +36,14 @@ const createMatch = async (matchData) => {
     throw new Error('El campo createdBy es requerido');
   }
   
-  // Validar que createdBy coincida con player1Id (el creador debe ser player1)
-  if (matchData.createdBy !== matchData.player1Id) {
-    throw new Error('El creador del partido debe ser el jugador 1 (player1Id)');
+  // Validar que createdBy coincida con team1Player1Id (el creador debe ser team1Player1)
+  if (matchData.createdBy && matchData.team1Player1Id && matchData.createdBy !== matchData.team1Player1Id) {
+    throw new Error('El creador del partido debe ser team1Player1Id');
+  }
+  
+  // Asegurar que team1Player1Id sea igual a createdBy si no está especificado
+  if (!matchData.team1Player1Id) {
+    matchData.team1Player1Id = matchData.createdBy;
   }
   
   return await Match.create(matchData);
@@ -59,17 +79,20 @@ const createMatchWithReservation = async (matchData) => {
       slotId,
       userId,
       scheduledDate,
-      player1Id,
-      player2Id,
-      player3Id,
-      player4Id,
+      team1Player1Id,
+      team1Player2Id,
+      team2Player1Id,
+      team2Player2Id,
       notes
     } = matchData;
 
-    // Validar que el usuario que crea el partido sea el mismo que hace la reserva
-    if (userId !== player1Id) {
-      throw new Error('El usuario que crea el partido debe ser el jugador 1');
+    // Validar que el usuario que crea el partido sea el mismo que team1Player1Id
+    if (userId && team1Player1Id && userId !== team1Player1Id) {
+      throw new Error('El usuario que crea el partido debe ser team1Player1Id');
     }
+    
+    // Si no se especifica team1Player1Id, usar userId
+    const finalTeam1Player1Id = team1Player1Id || userId;
 
     // Obtener información del slot
     const slot = await CourtSlot.findByPk(slotId, {
@@ -105,10 +128,10 @@ const createMatchWithReservation = async (matchData) => {
     // Crear el partido
     const match = await Match.create({
       reservationId: reservation.id,
-      player1Id,
-      player2Id: player2Id || null,
-      player3Id: player3Id || null,
-      player4Id: player4Id || null,
+      team1Player1Id: finalTeam1Player1Id,
+      team1Player2Id: team1Player2Id || null,
+      team2Player1Id: team2Player1Id || null,
+      team2Player2Id: team2Player2Id || null,
       createdBy: userId, // El usuario que crea el partido
       status: Match.MATCH_STATUS.SCHEDULED,
       notes
@@ -140,16 +163,16 @@ const createMatchWithReservation = async (matchData) => {
           ]
         },
         {
-          association: 'player1'
+          association: 'team1Player1'
         },
         {
-          association: 'player2'
+          association: 'team1Player2'
         },
         {
-          association: 'player3'
+          association: 'team2Player1'
         },
         {
-          association: 'player4'
+          association: 'team2Player2'
         }
       ]
     });
@@ -185,16 +208,16 @@ const getAllMatchesDetailed = async () => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ],
     order: [['createdAt', 'DESC']]
@@ -225,16 +248,16 @@ const getMatchByIdDetailed = async (id) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ]
   });
@@ -255,16 +278,16 @@ const joinMatch = async (matchId, userId) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'player1'
+          association: 'team1Player1'
         },
         {
-          association: 'player2'
+          association: 'team1Player2'
         },
         {
-          association: 'player3'
+          association: 'team2Player1'
         },
         {
-          association: 'player4'
+          association: 'team2Player2'
         }
       ],
       transaction
@@ -275,30 +298,23 @@ const joinMatch = async (matchId, userId) => {
     }
 
     // Verificar que el usuario no esté ya en el partido
-    const existingPlayers = [
-      match.player1Id,
-      match.player2Id,
-      match.player3Id,
-      match.player4Id
-    ].filter(id => id !== null);
-
-    if (existingPlayers.includes(userId)) {
+    if (isUserInMatch(match, userId)) {
       throw new Error('Ya estás participando en este partido');
     }
 
-    // Determinar en qué posición agregar al usuario
+    // Determinar en qué posición agregar al usuario (por orden: team1Player2, team2Player1, team2Player2)
     let updateData = {};
     let position = '';
 
-    if (match.player2Id === null) {
-      updateData.player2Id = userId;
-      position = 'player2';
-    } else if (match.player3Id === null) {
-      updateData.player3Id = userId;
-      position = 'player3';
-    } else if (match.player4Id === null) {
-      updateData.player4Id = userId;
-      position = 'player4';
+    if (!match.team1Player2Id) {
+      updateData.team1Player2Id = userId;
+      position = 'team1Player2';
+    } else if (!match.team2Player1Id) {
+      updateData.team2Player1Id = userId;
+      position = 'team2Player1';
+    } else if (!match.team2Player2Id) {
+      updateData.team2Player2Id = userId;
+      position = 'team2Player2';
     } else {
       throw new Error('El partido ya está completo (4 jugadores)');
     }
@@ -332,16 +348,16 @@ const joinMatch = async (matchId, userId) => {
           ]
         },
         {
-          association: 'player1'
+          association: 'team1Player1'
         },
         {
-          association: 'player2'
+          association: 'team1Player2'
         },
         {
-          association: 'player3'
+          association: 'team2Player1'
         },
         {
-          association: 'player4'
+          association: 'team2Player2'
         }
       ]
     });
@@ -368,16 +384,16 @@ const leaveMatch = async (matchId, userId) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'player1'
+          association: 'team1Player1'
         },
         {
-          association: 'player2'
+          association: 'team1Player2'
         },
         {
-          association: 'player3'
+          association: 'team2Player1'
         },
         {
-          association: 'player4'
+          association: 'team2Player2'
         }
       ],
       transaction
@@ -387,22 +403,25 @@ const leaveMatch = async (matchId, userId) => {
       throw new Error('Partido no encontrado');
     }
 
-    // Verificar que el usuario esté en el partido
-    const players = [
-      { id: match.player1Id, position: 'player1' },
-      { id: match.player2Id, position: 'player2' },
-      { id: match.player3Id, position: 'player3' },
-      { id: match.player4Id, position: 'player4' }
-    ].filter(p => p.id !== null);
-
-    const userPosition = players.find(p => p.id === userId);
+    // Verificar que el usuario esté en el partido y obtener su posición
+    let userPosition = null;
+    
+    if (match.team1Player1Id === userId) {
+      userPosition = 'team1Player1';
+    } else if (match.team1Player2Id === userId) {
+      userPosition = 'team1Player2';
+    } else if (match.team2Player1Id === userId) {
+      userPosition = 'team2Player1';
+    } else if (match.team2Player2Id === userId) {
+      userPosition = 'team2Player2';
+    }
 
     if (!userPosition) {
       throw new Error('No estás participando en este partido');
     }
 
-    // No permitir que el creador (player1) abandone el partido
-    if (userPosition.position === 'player1') {
+    // No permitir que el creador (team1Player1) abandone el partido
+    if (userPosition === 'team1Player1') {
       throw new Error('El creador del partido no puede abandonarlo. Si deseas cancelar el partido, debes eliminarlo');
     }
 
@@ -417,14 +436,14 @@ const leaveMatch = async (matchId, userId) => {
 
     // Determinar qué posición vaciar
     let updateData = {};
-    let position = userPosition.position;
+    const position = userPosition;
 
-    if (position === 'player2') {
-      updateData.player2Id = null;
-    } else if (position === 'player3') {
-      updateData.player3Id = null;
-    } else if (position === 'player4') {
-      updateData.player4Id = null;
+    if (position === 'team1Player2') {
+      updateData.team1Player2Id = null;
+    } else if (position === 'team2Player1') {
+      updateData.team2Player1Id = null;
+    } else if (position === 'team2Player2') {
+      updateData.team2Player2Id = null;
     }
 
     // Actualizar el partido
@@ -456,16 +475,16 @@ const leaveMatch = async (matchId, userId) => {
           ]
         },
         {
-          association: 'player1'
+          association: 'team1Player1'
         },
         {
-          association: 'player2'
+          association: 'team1Player2'
         },
         {
-          association: 'player3'
+          association: 'team2Player1'
         },
         {
-          association: 'player4'
+          association: 'team2Player2'
         }
       ]
     });
@@ -492,14 +511,7 @@ const startMatch = async (matchId, userId) => {
   }
 
   // Validar que el usuario es uno de los jugadores
-  const players = [
-    match.player1Id,
-    match.player2Id,
-    match.player3Id,
-    match.player4Id
-  ].filter(id => id !== null);
-
-  if (!players.includes(userId)) {
+  if (!isUserInMatch(match, userId)) {
     throw new Error('Solo los jugadores del partido pueden iniciarlo');
   }
 
@@ -534,16 +546,16 @@ const startMatch = async (matchId, userId) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ]
   });
@@ -558,14 +570,7 @@ const finishMatch = async (matchId, userId) => {
   }
 
   // Validar que el usuario es uno de los jugadores
-  const players = [
-    match.player1Id,
-    match.player2Id,
-    match.player3Id,
-    match.player4Id
-  ].filter(id => id !== null);
-
-  if (!players.includes(userId)) {
+  if (!isUserInMatch(match, userId)) {
     throw new Error('Solo los jugadores del partido pueden finalizarlo');
   }
 
@@ -600,16 +605,16 @@ const finishMatch = async (matchId, userId) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ]
   });
@@ -624,14 +629,7 @@ const confirmMatch = async (matchId, userId) => {
   }
 
   // Validar que el usuario es uno de los jugadores
-  const players = [
-    match.player1Id,
-    match.player2Id,
-    match.player3Id,
-    match.player4Id
-  ].filter(id => id !== null);
-
-  if (!players.includes(userId)) {
+  if (!isUserInMatch(match, userId)) {
     throw new Error('Solo los jugadores del partido pueden confirmarlo');
   }
 
@@ -671,16 +669,16 @@ const confirmMatch = async (matchId, userId) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ]
   });
@@ -695,14 +693,7 @@ const cancelMatch = async (matchId, userId) => {
   }
 
   // Validar que el usuario es uno de los jugadores (preferiblemente el creador)
-  const players = [
-    match.player1Id,
-    match.player2Id,
-    match.player3Id,
-    match.player4Id
-  ].filter(id => id !== null);
-
-  if (!players.includes(userId)) {
+  if (!isUserInMatch(match, userId)) {
     throw new Error('Solo los jugadores del partido pueden cancelarlo');
   }
 
@@ -741,16 +732,16 @@ const cancelMatch = async (matchId, userId) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ]
   });
@@ -761,10 +752,10 @@ const getUserMatches = async (userId, status = null) => {
   // Construir condiciones del where
   const whereConditions = {
     [Op.or]: [
-      { player1Id: userId },
-      { player2Id: userId },
-      { player3Id: userId },
-      { player4Id: userId }
+      { team1Player1Id: userId },
+      { team1Player2Id: userId },
+      { team2Player1Id: userId },
+      { team2Player2Id: userId }
     ]
   };
 
@@ -800,16 +791,16 @@ const getUserMatches = async (userId, status = null) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ],
     order: [['createdAt', 'DESC']]
@@ -822,9 +813,9 @@ const getAvailableMatches = async (userId = null) => {
   const whereConditions = {
     status: Match.MATCH_STATUS.SCHEDULED,
     [Op.or]: [
-      { player2Id: null },
-      { player3Id: null },
-      { player4Id: null }
+      { team1Player2Id: null },
+      { team2Player1Id: null },
+      { team2Player2Id: null }
     ]
   };
 
@@ -851,16 +842,16 @@ const getAvailableMatches = async (userId = null) => {
         ]
       },
       {
-        association: 'player1'
+        association: 'team1Player1'
       },
       {
-        association: 'player2'
+        association: 'team1Player2'
       },
       {
-        association: 'player3'
+        association: 'team2Player1'
       },
       {
-        association: 'player4'
+        association: 'team2Player2'
       }
     ],
     order: [
@@ -870,15 +861,7 @@ const getAvailableMatches = async (userId = null) => {
 
   // Si se proporciona un userId, filtrar partidos donde el usuario ya está participando
   if (userId) {
-    return matches.filter(match => {
-      const players = [
-        match.player1Id,
-        match.player2Id,
-        match.player3Id,
-        match.player4Id
-      ].filter(id => id !== null);
-      return !players.includes(userId);
-    });
+    return matches.filter(match => !isUserInMatch(match, userId));
   }
 
   return matches;

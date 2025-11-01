@@ -14,28 +14,28 @@ User.hasMany(CourtReservation, {
 });
 
 User.hasMany(Match, {
-  foreignKey: 'player1Id',
-  as: 'matchesAsPlayer1'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'player2Id',
-  as: 'matchesAsPlayer2'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'player3Id',
-  as: 'matchesAsPlayer3'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'player4Id',
-  as: 'matchesAsPlayer4'
-});
-
-User.hasMany(Match, {
   foreignKey: 'createdBy',
   as: 'createdMatches'
+});
+
+User.hasMany(Match, {
+  foreignKey: 'team1Player1Id',
+  as: 'matchesAsTeam1Player1'
+});
+
+User.hasMany(Match, {
+  foreignKey: 'team1Player2Id',
+  as: 'matchesAsTeam1Player2'
+});
+
+User.hasMany(Match, {
+  foreignKey: 'team2Player1Id',
+  as: 'matchesAsTeam2Player1'
+});
+
+User.hasMany(Match, {
+  foreignKey: 'team2Player2Id',
+  as: 'matchesAsTeam2Player2'
 });
 
 // Club associations
@@ -88,28 +88,28 @@ Match.belongsTo(CourtReservation, {
 });
 
 Match.belongsTo(User, {
-  foreignKey: 'player1Id',
-  as: 'player1'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'player2Id',
-  as: 'player2'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'player3Id',
-  as: 'player3'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'player4Id',
-  as: 'player4'
-});
-
-Match.belongsTo(User, {
   foreignKey: 'createdBy',
   as: 'creator'
+});
+
+Match.belongsTo(User, {
+  foreignKey: 'team1Player1Id',
+  as: 'team1Player1'
+});
+
+Match.belongsTo(User, {
+  foreignKey: 'team1Player2Id',
+  as: 'team1Player2'
+});
+
+Match.belongsTo(User, {
+  foreignKey: 'team2Player1Id',
+  as: 'team2Player1'
+});
+
+Match.belongsTo(User, {
+  foreignKey: 'team2Player2Id',
+  as: 'team2Player2'
 });
 
 // CourtSlot associations

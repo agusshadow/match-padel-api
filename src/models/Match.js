@@ -28,46 +28,6 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  player1Id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE'
-  },
-  player2Id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE'
-  },
-  player3Id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE'
-  },
-  player4Id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'CASCADE'
-  },
   createdBy: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -78,28 +38,52 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
+  team1Player1Id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
+  },
+  team1Player2Id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
+  },
+  team2Player1Id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
+  },
+  team2Player2Id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
+  },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
     defaultValue: MATCH_STATUS.SCHEDULED,
     allowNull: false,
     validate: {
       isIn: [MATCH_STATUS_VALUES]
-    }
-  },
-  score: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    validate: {
-      isValidScore(value) {
-        if (value && typeof value === 'object') {
-          if (!value.sets || !Array.isArray(value.sets)) {
-            throw new Error('Score debe tener un array de sets');
-          }
-          if (!value.winner || !['team1', 'team2'].includes(value.winner)) {
-            throw new Error('Score debe tener un winner válido (team1 o team2)');
-          }
-        }
-      }
     }
   },
   notes: {
@@ -111,17 +95,23 @@ const Match = sequelize.define('Match', {
   timestamps: true,
   paranoid: false,
   validate: {
-    validatePlayers() {
-      // Mínimo 1 jugador requerido (el creador), máximo 4
-      if (!this.player1Id) {
-        throw new Error('Los partidos requieren al menos 1 jugador (el creador)');
+    validateTeams() {
+      // El creador debe estar en team1Player1Id
+      if (this.createdBy && this.team1Player1Id && this.createdBy !== this.team1Player1Id) {
+        throw new Error('El creador del partido debe ser team1Player1Id');
       }
-    },
-    validateUniquePlayers() {
-      const players = [this.player1Id, this.player2Id, this.player3Id, this.player4Id].filter(Boolean);
+      
+      // Validar que no haya jugadores duplicados entre equipos
+      const players = [
+        this.team1Player1Id,
+        this.team1Player2Id,
+        this.team2Player1Id,
+        this.team2Player2Id
+      ].filter(Boolean);
+      
       const uniquePlayers = [...new Set(players)];
       if (players.length !== uniquePlayers.length) {
-        throw new Error('Los jugadores deben ser únicos');
+        throw new Error('Los jugadores deben ser únicos entre equipos');
       }
     }
   }
