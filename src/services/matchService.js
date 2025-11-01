@@ -740,16 +740,28 @@ const cancelMatch = async (matchId, userId) => {
 };
 
 // Obtener todos los partidos en los que participa un usuario
-const getUserMatches = async (userId) => {
+const getUserMatches = async (userId, status = null) => {
+  // Construir condiciones del where
+  const whereConditions = {
+    [Op.or]: [
+      { player1Id: userId },
+      { player2Id: userId },
+      { player3Id: userId },
+      { player4Id: userId }
+    ]
+  };
+
+  // Agregar filtro por status si se proporciona
+  if (status) {
+    // Validar que el status sea válido
+    if (!Match.MATCH_STATUS_VALUES.includes(status)) {
+      throw new Error(`Status inválido. Valores válidos: ${Match.MATCH_STATUS_VALUES.join(', ')}`);
+    }
+    whereConditions.status = status;
+  }
+
   return await Match.findAll({
-    where: {
-      [Op.or]: [
-        { player1Id: userId },
-        { player2Id: userId },
-        { player3Id: userId },
-        { player4Id: userId }
-      ]
-    },
+    where: whereConditions,
     include: [
       {
         association: 'reservation',

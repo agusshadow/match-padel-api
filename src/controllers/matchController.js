@@ -212,10 +212,13 @@ const cancelMatch = async (req, res) => {
 const getUserMatches = async (req, res) => {
   try {
     const userId = req.user.id;
-    const matches = await matchService.getUserMatches(userId);
+    const status = req.query.status || null; // Obtener status de query params
+    const matches = await matchService.getUserMatches(userId, status);
     res.json({ success: true, data: matches });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // Si es error de validación, devolver 400, sino 500
+    const statusCode = error.message.includes('Status inválido') ? 400 : 500;
+    res.status(statusCode).json({ success: false, message: error.message });
   }
 };
 
