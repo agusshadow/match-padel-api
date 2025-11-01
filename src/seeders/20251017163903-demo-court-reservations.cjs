@@ -44,7 +44,7 @@ module.exports = {
         userId: user.id,
         scheduledDate: scheduledDate.toISOString().split('T')[0], // YYYY-MM-DD
         slotId: slot.slotId,
-        status: ['pending', 'confirmed', 'completed'][Math.floor(Math.random() * 3)],
+        status: 'confirmed', // Todas confirmadas para poder crear matches
         createdAt: new Date(),
         updatedAt: new Date()
       });

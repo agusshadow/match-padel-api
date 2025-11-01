@@ -145,6 +145,78 @@ const leaveMatch = async (req, res) => {
   }
 };
 
+// Iniciar un partido (scheduled -> in_progress)
+const startMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
+
+    const match = await matchService.startMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: match,
+      message: 'Partido iniciado exitosamente' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Finalizar un partido (in_progress -> pending_confirmation)
+const finishMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
+
+    const match = await matchService.finishMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: match,
+      message: 'Partido finalizado, pendiente de confirmación' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Confirmar un partido (pending_confirmation -> completed)
+const confirmMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
+
+    const match = await matchService.confirmMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: match,
+      message: 'Partido confirmado y completado' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Cancelar un partido (cualquier estado -> cancelled)
+const cancelMatch = async (req, res) => {
+  try {
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
+
+    const match = await matchService.cancelMatch(matchId, userId);
+    
+    res.json({ 
+      success: true, 
+      data: match,
+      message: 'Partido cancelado exitosamente' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -155,5 +227,9 @@ export {
   deleteMatch,
   getAllMatchesDetailed,
   joinMatch,
-  leaveMatch
+  leaveMatch,
+  startMatch,
+  finishMatch,
+  confirmMatch,
+  cancelMatch
 };

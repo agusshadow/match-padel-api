@@ -5,6 +5,7 @@ import { sequelize } from '../config/connection.js';
 const MATCH_STATUS = {
   SCHEDULED: 'scheduled',
   IN_PROGRESS: 'in_progress',
+  PENDING_CONFIRMATION: 'pending_confirmation',
   COMPLETED: 'completed',
   CANCELLED: 'cancelled'
 };

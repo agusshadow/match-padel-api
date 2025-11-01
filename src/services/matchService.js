@@ -93,7 +93,7 @@ const createMatchWithReservation = async (matchData) => {
       player2Id: player2Id || null,
       player3Id: player3Id || null,
       player4Id: player4Id || null,
-      status: 'scheduled',
+      status: Match.MATCH_STATUS.SCHEDULED,
       notes
     }, { transaction });
 
@@ -427,9 +427,13 @@ const leaveMatch = async (matchId, userId) => {
       throw new Error('El creador del partido no puede abandonarlo. Si deseas cancelar el partido, debes eliminarlo');
     }
 
-    // Verificar que el partido no esté en progreso o completado
-    if (match.status === 'in_progress' || match.status === 'completed') {
-      throw new Error('No puedes abandonar un partido que ya está en progreso o completado');
+    // Verificar que el partido no esté en progreso, pendiente de confirmación o completado
+    if (
+      match.status === Match.MATCH_STATUS.IN_PROGRESS ||
+      match.status === Match.MATCH_STATUS.PENDING_CONFIRMATION ||
+      match.status === Match.MATCH_STATUS.COMPLETED
+    ) {
+      throw new Error('No puedes abandonar un partido que ya está en progreso, pendiente de confirmación o completado');
     }
 
     // Determinar qué posición vaciar
@@ -500,6 +504,279 @@ const leaveMatch = async (matchId, userId) => {
   }
 };
 
+// Iniciar un partido (scheduled -> in_progress)
+const startMatch = async (matchId, userId) => {
+  const match = await Match.findByPk(matchId);
+  
+  if (!match) {
+    throw new Error('Partido no encontrado');
+  }
+
+  // Validar que el usuario es uno de los jugadores
+  const players = [
+    match.player1Id,
+    match.player2Id,
+    match.player3Id,
+    match.player4Id
+  ].filter(id => id !== null);
+
+  if (!players.includes(userId)) {
+    throw new Error('Solo los jugadores del partido pueden iniciarlo');
+  }
+
+  // Validar estado actual
+  if (match.status !== Match.MATCH_STATUS.SCHEDULED) {
+    throw new Error(`No se puede iniciar un partido con estado: ${match.status}`);
+  }
+
+  // Actualizar estado
+  await match.update({ status: Match.MATCH_STATUS.IN_PROGRESS });
+
+  // Retornar el partido actualizado con información completa
+  return await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+};
+
+// Finalizar un partido (in_progress -> pending_confirmation)
+const finishMatch = async (matchId, userId) => {
+  const match = await Match.findByPk(matchId);
+  
+  if (!match) {
+    throw new Error('Partido no encontrado');
+  }
+
+  // Validar que el usuario es uno de los jugadores
+  const players = [
+    match.player1Id,
+    match.player2Id,
+    match.player3Id,
+    match.player4Id
+  ].filter(id => id !== null);
+
+  if (!players.includes(userId)) {
+    throw new Error('Solo los jugadores del partido pueden finalizarlo');
+  }
+
+  // Validar estado actual
+  if (match.status !== Match.MATCH_STATUS.IN_PROGRESS) {
+    throw new Error(`No se puede finalizar un partido con estado: ${match.status}`);
+  }
+
+  // Actualizar estado
+  await match.update({ status: Match.MATCH_STATUS.PENDING_CONFIRMATION });
+
+  // Retornar el partido actualizado con información completa
+  return await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+};
+
+// Confirmar un partido (pending_confirmation -> completed)
+const confirmMatch = async (matchId, userId) => {
+  const match = await Match.findByPk(matchId);
+  
+  if (!match) {
+    throw new Error('Partido no encontrado');
+  }
+
+  // Validar que el usuario es uno de los jugadores
+  const players = [
+    match.player1Id,
+    match.player2Id,
+    match.player3Id,
+    match.player4Id
+  ].filter(id => id !== null);
+
+  if (!players.includes(userId)) {
+    throw new Error('Solo los jugadores del partido pueden confirmarlo');
+  }
+
+  // Validar estado actual
+  if (match.status !== Match.MATCH_STATUS.PENDING_CONFIRMATION) {
+    throw new Error(`No se puede confirmar un partido con estado: ${match.status}`);
+  }
+
+  // Validar que existe un score
+  if (!match.score) {
+    throw new Error('No se puede confirmar un partido sin score');
+  }
+
+  // Actualizar estado
+  await match.update({ status: Match.MATCH_STATUS.COMPLETED });
+
+  // Retornar el partido actualizado con información completa
+  return await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+};
+
+// Cancelar un partido (cualquier estado -> cancelled)
+const cancelMatch = async (matchId, userId) => {
+  const match = await Match.findByPk(matchId);
+  
+  if (!match) {
+    throw new Error('Partido no encontrado');
+  }
+
+  // Validar que el usuario es uno de los jugadores (preferiblemente el creador)
+  const players = [
+    match.player1Id,
+    match.player2Id,
+    match.player3Id,
+    match.player4Id
+  ].filter(id => id !== null);
+
+  if (!players.includes(userId)) {
+    throw new Error('Solo los jugadores del partido pueden cancelarlo');
+  }
+
+  // Validar que no esté ya cancelado o completado
+  if (match.status === Match.MATCH_STATUS.CANCELLED) {
+    throw new Error('El partido ya está cancelado');
+  }
+
+  if (match.status === Match.MATCH_STATUS.COMPLETED) {
+    throw new Error('No se puede cancelar un partido completado');
+  }
+
+  // Actualizar estado
+  await match.update({ status: Match.MATCH_STATUS.CANCELLED });
+
+  // Retornar el partido actualizado con información completa
+  return await Match.findByPk(matchId, {
+    include: [
+      {
+        association: 'reservation',
+        include: [
+          {
+            association: 'court',
+            include: [
+              {
+                association: 'club'
+              }
+            ]
+          },
+          {
+            association: 'user'
+          },
+          {
+            association: 'slot'
+          }
+        ]
+      },
+      {
+        association: 'player1'
+      },
+      {
+        association: 'player2'
+      },
+      {
+        association: 'player3'
+      },
+      {
+        association: 'player4'
+      }
+    ]
+  });
+};
+
 export {
   getAllMatches,
   getMatchById,
@@ -510,5 +787,9 @@ export {
   getAllMatchesDetailed,
   getMatchByIdDetailed,
   joinMatch,
-  leaveMatch
+  leaveMatch,
+  startMatch,
+  finishMatch,
+  confirmMatch,
+  cancelMatch
 };
