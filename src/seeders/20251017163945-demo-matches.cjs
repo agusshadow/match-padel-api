@@ -4,8 +4,19 @@
 module.exports = {
   async up (queryInterface, Sequelize) {
     // Obtener reservas confirmadas para crear matches (aumentado para más partidos)
-    const confirmedReservations = await queryInterface.sequelize.query(
-      `SELECT cr.id as reservationId, cr.userId, cr.slotId,
+    const dialect = queryInterface.sequelize.getDialect();
+    const query = dialect === 'postgres'
+      ? `SELECT cr.id as "reservationId", cr."userId", cr."slotId",
+              cs."startTime", cs."endTime", cs.price,
+              c.name as "courtName", cl.name as "clubName"
+       FROM court_reservations cr
+       JOIN court_slots cs ON cr."slotId" = cs.id
+       JOIN courts c ON cr."courtId" = c.id
+       JOIN clubs cl ON c."clubId" = cl.id
+       WHERE cr.status = 'confirmed'
+       ORDER BY cr.id
+       LIMIT 30`
+      : `SELECT cr.id as reservationId, cr.userId, cr.slotId,
               cs.startTime, cs.endTime, cs.price,
               c.name as courtName, cl.name as clubName
        FROM court_reservations cr
@@ -14,7 +25,10 @@ module.exports = {
        JOIN clubs cl ON c.clubId = cl.id
        WHERE cr.status = 'confirmed'
        ORDER BY cr.id
-       LIMIT 30`,
+       LIMIT 30`;
+    
+    const confirmedReservations = await queryInterface.sequelize.query(
+      query,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -34,6 +48,15 @@ module.exports = {
     // Nota: Los scores ahora se manejan en la tabla match_scores separada
     // Esta función ya no se usa, pero la mantenemos comentada para referencia
     // const generateScore = () => { ... };
+    
+    // Normalizar datos de reservas (PostgreSQL devuelve nombres en minúsculas)
+    const normalizedReservations = confirmedReservations.map(res => ({
+      reservationId: res.reservationId || res.reservationid,
+      userId: res.userId || res.userid,
+      slotId: res.slotId || res.slotid,
+      courtName: res.courtName || res.courtname,
+      clubName: res.clubName || res.clubname
+    }));
     
     // Seleccionar jugadores de forma distribuida
     const shuffledUsers = [...users].sort(() => 0.5 - Math.random());
@@ -63,10 +86,10 @@ module.exports = {
     
     // Función auxiliar para obtener la siguiente reserva disponible
     const getNextReservation = () => {
-      if (reservationIndex >= confirmedReservations.length) {
+      if (reservationIndex >= normalizedReservations.length) {
         return null;
       }
-      return confirmedReservations[reservationIndex++];
+      return normalizedReservations[reservationIndex++];
     };
     
     // 1. Partidos SCHEDULED (15 partidos con diferentes niveles de completitud)

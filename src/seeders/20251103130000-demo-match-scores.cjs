@@ -4,15 +4,27 @@
 module.exports = {
   async up (queryInterface, Sequelize) {
     // Obtener todos los matches completados y pendientes de confirmación que estén completos (4 jugadores)
-    const completedMatches = await queryInterface.sequelize.query(
-      `SELECT id, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, createdAt
+    const dialect = queryInterface.sequelize.getDialect();
+    const query = dialect === 'postgres'
+      ? `SELECT id, "team1Player1Id", "team1Player2Id", "team2Player1Id", "team2Player2Id", status, "createdAt"
+       FROM matches 
+       WHERE status IN ('completed', 'pending_confirmation')
+       AND "team1Player1Id" IS NOT NULL
+       AND "team1Player2Id" IS NOT NULL
+       AND "team2Player1Id" IS NOT NULL
+       AND "team2Player2Id" IS NOT NULL
+       ORDER BY id`
+      : `SELECT id, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, createdAt
        FROM matches 
        WHERE status IN ('completed', 'pending_confirmation')
        AND team1Player1Id IS NOT NULL
        AND team1Player2Id IS NOT NULL
        AND team2Player1Id IS NOT NULL
        AND team2Player2Id IS NOT NULL
-       ORDER BY id`,
+       ORDER BY id`;
+    
+    const completedMatches = await queryInterface.sequelize.query(
+      query,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -20,6 +32,17 @@ module.exports = {
       console.log('⚠️ No hay partidos completados o pendientes de confirmación para crear scores');
       return;
     }
+
+    // Normalizar datos de matches (PostgreSQL devuelve nombres en minúsculas)
+    const normalizedMatches = completedMatches.map(match => ({
+      id: match.id,
+      team1Player1Id: match.team1Player1Id || match.team1player1id,
+      team1Player2Id: match.team1Player2Id || match.team1player2id,
+      team2Player1Id: match.team2Player1Id || match.team2player1id,
+      team2Player2Id: match.team2Player2Id || match.team2player2id,
+      status: match.status,
+      createdAt: match.createdAt || match.createdat
+    }));
 
     // Función para generar sets realistas
     const generateSets = (winnerTeam) => {
@@ -165,19 +188,24 @@ module.exports = {
       });
       
       // Obtener los IDs de los scores insertados
+      const matchIdsQuery = dialect === 'postgres'
+        ? `SELECT id, "matchId" FROM match_scores WHERE "matchId" IN (${normalizedMatches.map(m => m.id).join(',')})`
+        : `SELECT id, matchId FROM match_scores WHERE matchId IN (${normalizedMatches.map(m => m.id).join(',')})`;
+      
       const matchScoreIds = await queryInterface.sequelize.query(
-        `SELECT id, matchId FROM match_scores WHERE matchId IN (${completedMatches.map(m => m.id).join(',')})`,
+        matchIdsQuery,
         { type: queryInterface.sequelize.QueryTypes.SELECT }
       );
       
       // Crear un mapa de matchId -> matchScoreId
       const matchIdToScoreId = {};
       matchScoreIds.forEach(score => {
-        matchIdToScoreId[score.matchId] = score.id;
+        const matchId = score.matchId || score.matchid;
+        matchIdToScoreId[matchId] = score.id;
       });
       
       // Crear los MatchScoreSets para cada score
-      for (const match of completedMatches) {
+      for (const match of normalizedMatches) {
         const matchScoreId = matchIdToScoreId[match.id];
         if (!matchScoreId) continue;
         
@@ -186,9 +214,11 @@ module.exports = {
         const sets = generateSets(winnerTeam);
         
         // Actualizar el winnerTeam en el MatchScore si aún no se hizo
-        await queryInterface.sequelize.query(
-          `UPDATE match_scores SET winnerTeam = ${winnerTeam} WHERE id = ${matchScoreId}`
-        );
+        const updateQuery = dialect === 'postgres'
+          ? `UPDATE match_scores SET "winnerTeam" = ${winnerTeam} WHERE id = ${matchScoreId}`
+          : `UPDATE match_scores SET winnerTeam = ${winnerTeam} WHERE id = ${matchScoreId}`;
+        
+        await queryInterface.sequelize.query(updateQuery);
         
         // Crear los sets
         for (const set of sets) {

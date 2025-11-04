@@ -34,32 +34,20 @@ module.exports = {
         type: Sequelize.DATEONLY,
         allowNull: false
       },
-      startTime: {
-        type: Sequelize.TIME,
-        allowNull: false
-      },
-      endTime: {
-        type: Sequelize.TIME,
-        allowNull: false
-      },
-      duration: {
+      slotId: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          isIn: [[60, 90]]
-        }
+        allowNull: true,
+        references: {
+          model: 'court_slots',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE'
       },
       status: {
         type: Sequelize.ENUM('pending', 'confirmed', 'cancelled', 'completed'),
         defaultValue: 'pending',
         allowNull: false
-      },
-      totalPrice: {
-        type: Sequelize.DECIMAL(10, 2),
-        allowNull: false,
-        validate: {
-          min: 0
-        }
       },
       createdAt: {
         allowNull: false,
@@ -69,8 +57,20 @@ module.exports = {
       updatedAt: {
         allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
+    });
+
+    await queryInterface.addIndex('court_reservations', ['courtId'], {
+      name: 'idx_court_reservations_court_id'
+    });
+
+    await queryInterface.addIndex('court_reservations', ['userId'], {
+      name: 'idx_court_reservations_user_id'
+    });
+
+    await queryInterface.addIndex('court_reservations', ['slotId'], {
+      name: 'idx_court_reservations_slot_id'
     });
   },
 
@@ -78,3 +78,4 @@ module.exports = {
     await queryInterface.dropTable('court_reservations');
   }
 };
+

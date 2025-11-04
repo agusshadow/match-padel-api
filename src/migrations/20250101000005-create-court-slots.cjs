@@ -3,7 +3,7 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.createTable('court_schedules', {
+    await queryInterface.createTable('court_slots', {
       id: {
         allowNull: false,
         autoIncrement: true,
@@ -55,12 +55,22 @@ module.exports = {
       updatedAt: {
         allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
+    });
+
+    await queryInterface.addIndex('court_slots', ['courtId'], {
+      name: 'idx_court_slots_court_id'
+    });
+
+    await queryInterface.addIndex('court_slots', ['courtId', 'dayOfWeek', 'startTime'], {
+      unique: true,
+      name: 'idx_court_slots_unique'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.dropTable('court_schedules');
+    await queryInterface.dropTable('court_slots');
   }
 };
+

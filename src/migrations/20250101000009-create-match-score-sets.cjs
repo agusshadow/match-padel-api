@@ -25,8 +25,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 5
-        },
-        comment: 'Número de set (1-5)'
+        }
       },
       team1Score: {
         type: Sequelize.INTEGER,
@@ -50,22 +49,21 @@ module.exports = {
       updatedAt: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    // Índices
     await queryInterface.addIndex('match_score_sets', ['matchScoreId'], {
       name: 'idx_match_score_sets_match_score_id'
     });
+
     await queryInterface.addIndex('match_score_sets', ['setNumber'], {
       name: 'idx_match_score_sets_set_number'
     });
-    
-    // Índice único para evitar sets duplicados
+
     await queryInterface.addIndex('match_score_sets', ['matchScoreId', 'setNumber'], {
-      name: 'idx_match_score_sets_unique',
-      unique: true
+      unique: true,
+      name: 'idx_match_score_sets_unique'
     });
   },
 

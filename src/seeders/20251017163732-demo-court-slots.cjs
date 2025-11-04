@@ -36,14 +36,22 @@ module.exports = {
     }
 
     // Obtener los IDs de las canchas
+    const dialect = queryInterface.sequelize.getDialect();
+    const query = dialect === 'postgres' 
+      ? 'SELECT c.id, c.name, cl.name as "clubName" FROM courts c JOIN clubs cl ON c."clubId" = cl.id ORDER BY c.id'
+      : 'SELECT c.id, c.name, cl.name as clubName FROM courts c JOIN clubs cl ON c.clubId = cl.id ORDER BY c.id';
+    
     const courts = await queryInterface.sequelize.query(
-      'SELECT c.id, c.name, cl.name as clubName FROM courts c JOIN clubs cl ON c.clubId = cl.id ORDER BY c.id',
+      query,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
     
     const courtIds = {};
     courts.forEach(court => {
-      const key = `${court.clubName} - ${court.name}`;
+      // PostgreSQL devuelve los nombres en minúsculas, normalizar
+      const clubName = court.clubName || court.clubname;
+      const courtName = court.name;
+      const key = `${clubName} - ${courtName}`;
       courtIds[key] = court.id;
     });
 
@@ -190,7 +198,10 @@ module.exports = {
     slots.forEach(slot => courtsWithSlots.add(slot.courtId));
     
     courts.forEach(court => {
-      const key = `${court.clubName} - ${court.name}`;
+      // PostgreSQL devuelve los nombres en minúsculas, normalizar
+      const clubName = court.clubName || court.clubname;
+      const courtName = court.name;
+      const key = `${clubName} - ${courtName}`;
       const courtId = courtIds[key];
       if (courtId && !courtsWithSlots.has(courtId)) {
         console.log(`⚠️ La cancha "${key}" no tiene slots asignados`);

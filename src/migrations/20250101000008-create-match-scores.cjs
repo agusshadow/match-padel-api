@@ -18,15 +18,14 @@ module.exports = {
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE',
-        unique: true // Un partido solo puede tener un score
+        unique: true
       },
       winnerTeam: {
         type: Sequelize.INTEGER,
         allowNull: false,
         validate: {
           isIn: [[1, 2]]
-        },
-        comment: '1 = Team 1, 2 = Team 2'
+        }
       },
       status: {
         type: Sequelize.ENUM('pending_confirmation', 'confirmed', 'rejected'),
@@ -41,8 +40,7 @@ module.exports = {
           key: 'id'
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
-        comment: 'Usuario del equipo contrario que confirmó el resultado'
+        onDelete: 'SET NULL'
       },
       rejectedBy: {
         type: Sequelize.INTEGER,
@@ -52,8 +50,7 @@ module.exports = {
           key: 'id'
         },
         onUpdate: 'CASCADE',
-        onDelete: 'SET NULL',
-        comment: 'Usuario del equipo contrario que rechazó el resultado'
+        onDelete: 'SET NULL'
       },
       confirmationComment: {
         type: Sequelize.TEXT,
@@ -71,7 +68,7 @@ module.exports = {
       updatedAt: {
         type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
       confirmedAt: {
         type: Sequelize.DATE,
@@ -83,17 +80,19 @@ module.exports = {
       }
     });
 
-    // Índices
     await queryInterface.addIndex('match_scores', ['matchId'], {
-      name: 'idx_match_scores_match_id',
-      unique: true
+      unique: true,
+      name: 'idx_match_scores_match_id'
     });
+
     await queryInterface.addIndex('match_scores', ['status'], {
       name: 'idx_match_scores_status'
     });
+
     await queryInterface.addIndex('match_scores', ['confirmedBy'], {
       name: 'idx_match_scores_confirmed_by'
     });
+
     await queryInterface.addIndex('match_scores', ['rejectedBy'], {
       name: 'idx_match_scores_rejected_by'
     });

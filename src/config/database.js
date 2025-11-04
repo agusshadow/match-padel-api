@@ -2,33 +2,76 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Configuración para Sequelize CLI
+// Función para parsear connection string
+function parseDatabaseUrl(url) {
+  if (!url) {
+    throw new Error('DATABASE_URL es requerida en el archivo .env');
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    return {
+      username: urlObj.username,
+      password: urlObj.password,
+      database: urlObj.pathname.slice(1), // Remover el '/' inicial
+      host: urlObj.hostname,
+      port: parseInt(urlObj.port) || 5432,
+      ssl: urlObj.hostname.includes('supabase.co') || process.env.DB_SSL === 'true'
+    };
+  } catch (error) {
+    throw new Error(`DATABASE_URL inválida: ${error.message}`);
+  }
+}
+
+// Parsear connection string
+const dbConfig = parseDatabaseUrl(process.env.DATABASE_URL);
+
+// Configuración para Sequelize CLI (PostgreSQL/Supabase)
+// Requiere DATABASE_URL en el archivo .env
 const config = {
   development: {
-    username: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'match_padel',
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 3306,
-    dialect: 'mysql',
+    username: dbConfig.username,
+    password: dbConfig.password,
+    database: dbConfig.database,
+    host: dbConfig.host,
+    port: dbConfig.port,
+    dialect: 'postgres',
+    dialectOptions: dbConfig.ssl ? {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    } : {},
     logging: false
   },
   test: {
-    username: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME + '_test' || 'match_padel_test',
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 3306,
-    dialect: 'mysql',
+    username: dbConfig.username,
+    password: dbConfig.password,
+    database: dbConfig.database + '_test',
+    host: dbConfig.host,
+    port: dbConfig.port,
+    dialect: 'postgres',
+    dialectOptions: dbConfig.ssl ? {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    } : {},
     logging: false
   },
   production: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 3306,
-    dialect: 'mysql',
+    username: dbConfig.username,
+    password: dbConfig.password,
+    database: dbConfig.database,
+    host: dbConfig.host,
+    port: dbConfig.port,
+    dialect: 'postgres',
+    dialectOptions: dbConfig.ssl ? {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    } : {},
     logging: false
   }
 };

@@ -23,23 +23,19 @@ module.exports = {
       },
       location: {
         type: Sequelize.STRING(255),
-        allowNull: true,
-        comment: 'Ubicación del usuario (ciudad, país)'
+        allowNull: true
       },
       favoritePosition: {
         type: Sequelize.ENUM('left', 'right'),
-        allowNull: true,
-        comment: 'Posición favorita en la cancha'
+        allowNull: true
       },
       gameStyle: {
         type: Sequelize.ENUM('offensive', 'defensive', 'balanced'),
-        allowNull: true,
-        comment: 'Estilo de juego preferido'
+        allowNull: true
       },
       dominantHand: {
         type: Sequelize.ENUM('left', 'right', 'ambidextrous'),
-        allowNull: true,
-        comment: 'Mano hábil del usuario'
+        allowNull: true
       },
       skillServe: {
         type: Sequelize.INTEGER,
@@ -47,8 +43,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de saque (1-10)'
+        }
       },
       skillVolley: {
         type: Sequelize.INTEGER,
@@ -56,8 +51,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de volea (1-10)'
+        }
       },
       skillForehand: {
         type: Sequelize.INTEGER,
@@ -65,8 +59,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de derecha (1-10)'
+        }
       },
       skillWall: {
         type: Sequelize.INTEGER,
@@ -74,8 +67,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de pared (1-10)'
+        }
       },
       skillSmash: {
         type: Sequelize.INTEGER,
@@ -83,8 +75,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de remate (1-10)'
+        }
       },
       skillAgility: {
         type: Sequelize.INTEGER,
@@ -92,8 +83,7 @@ module.exports = {
         validate: {
           min: 1,
           max: 10
-        },
-        comment: 'Nivel de agilidad (1-10)'
+        }
       },
       createdAt: {
         allowNull: false,
@@ -103,11 +93,10 @@ module.exports = {
       updatedAt: {
         allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    // Crear índice único para userId
     await queryInterface.addIndex('user_profiles', ['userId'], {
       unique: true,
       name: 'user_profiles_userId_unique'
