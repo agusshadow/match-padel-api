@@ -11,6 +11,7 @@ import courtReservationRoutes from './court-reservations.js';
 import matchRoutes from './matches.js';
 import matchScoreRoutes from './match-scores.js';
 import userProfileRoutes from './user-profiles.js';
+import experienceRoutes from './experience.js';
 
 // Rutas principales
 router.use('/auth', authRoutes);
@@ -22,6 +23,7 @@ router.use('/court-reservations', courtReservationRoutes);
 router.use('/matches', matchRoutes);
 router.use('/match-scores', matchScoreRoutes);
 router.use('/user-profiles', userProfileRoutes);
+router.use('/experience', experienceRoutes);
 
 // Ruta de salud
 router.get('/health', (req, res) => {
@@ -47,6 +49,7 @@ router.get('/', (req, res) => {
       matches: '/api/matches',
       'match-scores': '/api/match-scores',
       'user-profiles': '/api/user-profiles',
+      experience: '/api/experience',
       health: '/api/health'
     }
   });
