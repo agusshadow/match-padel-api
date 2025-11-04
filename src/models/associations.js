@@ -1,4 +1,5 @@
 import User from './User.js';
+import UserProfile from './UserProfile.js';
 import Club from './Club.js';
 import Court from './Court.js';
 import CourtSlot from './CourtSlot.js';
@@ -10,6 +11,11 @@ import MatchScoreSet from './MatchScoreSet.js';
 // Asociaciones entre modelos
 
 // User associations
+User.hasOne(UserProfile, {
+  foreignKey: 'userId',
+  as: 'profile'
+});
+
 User.hasMany(CourtReservation, {
   foreignKey: 'userId',
   as: 'reservations'
@@ -156,6 +162,12 @@ MatchScoreSet.belongsTo(MatchScore, {
   as: 'matchScore'
 });
 
+// UserProfile associations
+UserProfile.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
 // CourtSlot associations
 CourtSlot.belongsTo(Court, {
   foreignKey: 'courtId',
@@ -169,6 +181,7 @@ CourtSlot.hasMany(CourtReservation, {
 
 export {
   User,
+  UserProfile,
   Club,
   Court,
   CourtSlot,
