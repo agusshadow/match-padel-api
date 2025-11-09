@@ -124,6 +124,11 @@ const UserProfile = sequelize.define('UserProfile', {
       max: 10
     },
     comment: 'Nivel de agilidad (1-10)'
+  },
+  picture: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    comment: 'URL de la foto de perfil'
   }
 }, {
   tableName: 'user_profiles',
