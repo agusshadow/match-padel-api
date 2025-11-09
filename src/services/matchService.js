@@ -916,7 +916,9 @@ const getUserMatches = async (userId, status = null) => {
 };
 
 // Obtener partidos disponibles para unirse
-const getAvailableMatches = async (userId = null) => {
+const getAvailableMatches = async (userId = null, filters = {}) => {
+  const { dateFilter, availableSpaces } = filters;
+  
   // Construir condiciones: partidos scheduled que no estén completos
   const whereConditions = {
     status: Match.MATCH_STATUS.SCHEDULED,
@@ -927,11 +929,49 @@ const getAvailableMatches = async (userId = null) => {
     ]
   };
 
+  // Construir condiciones para el filtro de fecha
+  const reservationWhereConditions = {};
+  if (dateFilter) {
+    // Obtener fecha actual en formato YYYY-MM-DD (sin problemas de zona horaria)
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayStr = today.toISOString().split('T')[0];
+    
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+    switch (dateFilter) {
+      case 'today':
+        reservationWhereConditions.scheduledDate = {
+          [Op.eq]: todayStr // Formato YYYY-MM-DD
+        };
+        break;
+      case 'tomorrow':
+        reservationWhereConditions.scheduledDate = {
+          [Op.eq]: tomorrowStr // Formato YYYY-MM-DD
+        };
+        break;
+      case 'thisWeek':
+        reservationWhereConditions.scheduledDate = {
+          [Op.gte]: todayStr,
+          [Op.lte]: nextWeekStr
+        };
+        break;
+    }
+  }
+
   const matches = await Match.findAll({
     where: whereConditions,
     include: [
       {
         association: 'reservation',
+        where: Object.keys(reservationWhereConditions).length > 0 ? reservationWhereConditions : undefined,
+        required: true,
         include: [
           {
             association: 'court',
@@ -967,12 +1007,29 @@ const getAvailableMatches = async (userId = null) => {
     ]
   });
 
-  // Si se proporciona un userId, filtrar partidos donde el usuario ya está participando
-  if (userId) {
-    return matches.filter(match => !isUserInMatch(match, userId));
+  // Aplicar filtro de espacios disponibles
+  let filteredMatches = matches;
+  if (availableSpaces) {
+    filteredMatches = matches.filter(match => {
+      const playersCount = getAllMatchPlayers(match).length;
+      const availableSpots = 4 - playersCount;
+      
+      if (availableSpaces === 'one') {
+        return availableSpots === 1; // Exactamente 1 espacio (3 jugadores)
+      } else if (availableSpaces === 'twoOrMore') {
+        return availableSpots >= 2; // 2 o más espacios (2 o menos jugadores)
+      }
+      
+      return true;
+    });
   }
 
-  return matches;
+  // Si se proporciona un userId, filtrar partidos donde el usuario ya está participando
+  if (userId) {
+    filteredMatches = filteredMatches.filter(match => !isUserInMatch(match, userId));
+  }
+
+  return filteredMatches;
 };
 
 export {

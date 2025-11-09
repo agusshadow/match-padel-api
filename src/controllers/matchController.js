@@ -252,7 +252,8 @@ const getAvailableMatches = async (req, res) => {
     // El usuario está autenticado (la ruta está protegida)
     // Usar su ID para excluir partidos donde ya está participando
     const userId = req.user.id;
-    const matches = await matchService.getAvailableMatches(userId);
+    const { dateFilter, availableSpaces } = req.query;
+    const matches = await matchService.getAvailableMatches(userId, { dateFilter, availableSpaces });
     res.json({ success: true, data: matches });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
