@@ -2,6 +2,7 @@ import MatchScore, { SCORE_STATUS } from '../models/MatchScore.js';
 import MatchScoreSet from '../models/MatchScoreSet.js';
 import Match from '../models/Match.js';
 import { sequelize } from '../config/connection.js';
+import { awardMatchExperience } from './experienceService.js';
 
 // Helper para determinar el equipo contrario al creador
 const getOpponentTeam = (match) => {
@@ -269,11 +270,24 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
       status: Match.MATCH_STATUS.COMPLETED
     }, { transaction });
 
+    // Otorgar experiencia a los jugadores
+    const levelUps = await awardMatchExperience(match, matchScore, transaction);
+
     // Confirmar la transacción
     await transaction.commit();
 
-    // Retornar el score completo
-    return await getMatchScore(matchId);
+    // Obtener el score completo
+    const scoreData = await getMatchScore(matchId);
+
+    // Agregar información de level ups al resultado si hay
+    if (levelUps.length > 0) {
+      // Convertir a JSON y agregar levelUps
+      const result = scoreData.toJSON();
+      result.levelUps = levelUps;
+      return result;
+    }
+
+    return scoreData;
 
   } catch (error) {
     await transaction.rollback();

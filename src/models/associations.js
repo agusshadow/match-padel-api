@@ -1,5 +1,8 @@
 import User from './User.js';
 import UserProfile from './UserProfile.js';
+import UserLevel from './UserLevel.js';
+import UserExperience from './UserExperience.js';
+import Notification from './Notification.js';
 import Club from './Club.js';
 import Court from './Court.js';
 import CourtSlot from './CourtSlot.js';
@@ -54,6 +57,21 @@ User.hasMany(MatchScore, {
 User.hasMany(MatchScore, {
   foreignKey: 'rejectedBy',
   as: 'rejectedScores'
+});
+
+User.hasOne(UserLevel, {
+  foreignKey: 'userId',
+  as: 'level'
+});
+
+User.hasMany(UserExperience, {
+  foreignKey: 'userId',
+  as: 'experienceLog'
+});
+
+User.hasMany(Notification, {
+  foreignKey: 'userId',
+  as: 'notifications'
 });
 
 // Club associations
@@ -179,9 +197,30 @@ CourtSlot.hasMany(CourtReservation, {
   as: 'reservations'
 });
 
+// UserLevel associations
+UserLevel.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+// UserExperience associations
+UserExperience.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+// Notification associations
+Notification.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
 export {
   User,
   UserProfile,
+  UserLevel,
+  UserExperience,
+  Notification,
   Club,
   Court,
   CourtSlot,

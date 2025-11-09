@@ -1,0 +1,72 @@
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
+
+// Constantes para tipos de notificaciones
+const NOTIFICATION_TYPE = {
+  LEVEL_UP: 'LEVEL_UP',
+  ACHIEVEMENT: 'ACHIEVEMENT',
+  MATCH_COMPLETED: 'MATCH_COMPLETED'
+};
+
+const NOTIFICATION_TYPE_VALUES = Object.values(NOTIFICATION_TYPE);
+
+const Notification = sequelize.define('Notification', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'CASCADE'
+  },
+  type: {
+    type: DataTypes.ENUM(...NOTIFICATION_TYPE_VALUES),
+    allowNull: false,
+    validate: {
+      isIn: [NOTIFICATION_TYPE_VALUES]
+    }
+  },
+  data: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Additional data for the notification (e.g., levelUp info)'
+  },
+  read: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  readAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  }
+}, {
+  tableName: 'notifications',
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['userId']
+    },
+    {
+      fields: ['read']
+    },
+    {
+      fields: ['userId', 'read']
+    }
+  ]
+});
+
+// Exportar constantes para uso en otros archivos
+Notification.NOTIFICATION_TYPE = NOTIFICATION_TYPE;
+Notification.NOTIFICATION_TYPE_VALUES = NOTIFICATION_TYPE_VALUES;
+
+export default Notification;
+export { NOTIFICATION_TYPE, NOTIFICATION_TYPE_VALUES };
+
