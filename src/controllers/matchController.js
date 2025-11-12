@@ -236,8 +236,13 @@ const cancelMatch = async (req, res) => {
 const getUserMatches = async (req, res) => {
   try {
     const userId = req.user.id;
-    const status = req.query.status || null; // Obtener status de query params
-    const matches = await matchService.getUserMatches(userId, status);
+    // ⭐ Nuevo: Soporta filtros opcionales (status, upcoming, past)
+    const filters = {
+      status: req.query.status || null,
+      upcoming: req.query.upcoming === 'true',
+      past: req.query.past === 'true'
+    };
+    const matches = await matchService.getUserMatches(userId, filters);
     res.json({ success: true, data: matches });
   } catch (error) {
     // Si es error de validación, devolver 400, sino 500

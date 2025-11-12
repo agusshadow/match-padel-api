@@ -182,10 +182,8 @@ const createMatchWithReservation = async (matchData) => {
             },
             {
               association: 'user'
-            },
-            {
-              association: 'slot'
             }
+            // ⭐ Slot removido - usar matchDateTime directamente
           ]
         },
         {
@@ -211,6 +209,7 @@ const createMatchWithReservation = async (matchData) => {
 };
 
 // Obtener todos los matches con información detallada
+// ⭐ Optimizado: Eliminado include de slot, ordenado por matchDateTime
 const getAllMatchesDetailed = async () => {
   return await Match.findAll({
     include: [
@@ -227,10 +226,8 @@ const getAllMatchesDetailed = async () => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -246,11 +243,12 @@ const getAllMatchesDetailed = async () => {
         association: 'team2Player2'
       }
     ],
-    order: [['createdAt', 'DESC']]
+    order: [['matchDateTime', 'ASC']] // ⭐ Ordenar por fecha del partido
   });
 };
 
 // Obtener un match por ID con información detallada
+// ⭐ Optimizado: Eliminado include de slot
 const getMatchByIdDetailed = async (id) => {
   const match = await Match.findByPk(id, {
     include: [
@@ -267,10 +265,8 @@ const getMatchByIdDetailed = async (id) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -296,6 +292,7 @@ const getMatchByIdDetailed = async (id) => {
 };
 
 // Obtener disponibilidad de equipos de un match
+// ⭐ Optimizado: Eliminado include de slot
 const getMatchTeamAvailability = async (matchId) => {
   const match = await Match.findByPk(matchId, {
     include: [
@@ -321,10 +318,8 @@ const getMatchTeamAvailability = async (matchId) => {
                 association: 'club'
               }
             ]
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - no necesario para disponibilidad
         ]
       }
     ]
@@ -450,10 +445,8 @@ const joinMatch = async (matchId, userId, desiredTeam = null) => {
             },
             {
               association: 'user'
-            },
-            {
-              association: 'slot'
             }
+            // ⭐ Slot removido - usar matchDateTime directamente
           ]
         },
         {
@@ -577,10 +570,8 @@ const leaveMatch = async (matchId, userId) => {
             },
             {
               association: 'user'
-            },
-            {
-              association: 'slot'
             }
+            // ⭐ Slot removido - usar matchDateTime directamente
           ]
         },
         {
@@ -648,10 +639,8 @@ const startMatch = async (matchId, userId) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -707,10 +696,8 @@ const finishMatch = async (matchId, userId) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -774,10 +761,8 @@ const confirmMatch = async (matchId, userId) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -837,10 +822,8 @@ const cancelMatch = async (matchId, userId) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -860,8 +843,16 @@ const cancelMatch = async (matchId, userId) => {
 };
 
 // Obtener todos los partidos en los que participa un usuario
-const getUserMatches = async (userId, status = null) => {
-  // Construir condiciones del where
+// ⭐ Optimizado: Agregados filtros opcionales, eliminado include de slot, ordenado por matchDateTime
+const getUserMatches = async (userId, filters = {}) => {
+  // Si filters es un string (compatibilidad con código antiguo), convertirlo a objeto
+  if (typeof filters === 'string') {
+    filters = { status: filters };
+  }
+  
+  const { status, upcoming, past } = filters;
+  const now = new Date();
+  
   const whereConditions = {
     [Op.or]: [
       { team1Player1Id: userId },
@@ -880,6 +871,19 @@ const getUserMatches = async (userId, status = null) => {
     whereConditions.status = status;
   }
 
+  // ⭐ Nuevo: Filtrar por fecha usando matchDateTime
+  if (upcoming) {
+    whereConditions.matchDateTime = {
+      [Op.gte]: now,
+      [Op.not]: null
+    };
+  } else if (past) {
+    whereConditions.matchDateTime = {
+      [Op.lt]: now,
+      [Op.not]: null
+    };
+  }
+
   return await Match.findAll({
     where: whereConditions,
     include: [
@@ -896,10 +900,8 @@ const getUserMatches = async (userId, status = null) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -915,17 +917,24 @@ const getUserMatches = async (userId, status = null) => {
         association: 'team2Player2'
       }
     ],
-    order: [['createdAt', 'DESC']]
+    order: [['matchDateTime', 'ASC']] // ⭐ Ordenar por fecha del partido (próximos primero)
   });
 };
 
 // Obtener partidos disponibles para unirse
+// ⭐ Optimizado: Usa matchDateTime directamente (campo denormalizado)
 const getAvailableMatches = async (userId = null, filters = {}) => {
   const { dateFilter, availableSpaces } = filters;
+  
+  const now = new Date();
   
   // Construir condiciones: partidos scheduled que no estén completos
   const whereConditions = {
     status: Match.MATCH_STATUS.SCHEDULED,
+    matchDateTime: { 
+      [Op.gte]: now, // Solo partidos futuros
+      [Op.not]: null
+    },
     [Op.or]: [
       { team1Player2Id: null },
       { team2Player1Id: null },
@@ -933,37 +942,44 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
     ]
   };
 
-  // Construir condiciones para el filtro de fecha
-  const reservationWhereConditions = {};
+  // ⭐ Optimizado: Filtrar por matchDateTime directamente (sin join con reservation)
   if (dateFilter) {
-    // Obtener fecha actual en formato YYYY-MM-DD (sin problemas de zona horaria)
-    const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayStr = today.toISOString().split('T')[0];
+    const startOfToday = new Date(today);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
     
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    const startOfTomorrow = new Date(tomorrow);
+    const endOfTomorrow = new Date(tomorrow);
+    endOfTomorrow.setHours(23, 59, 59, 999);
     
     const nextWeek = new Date(today);
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const nextWeekStr = nextWeek.toISOString().split('T')[0];
+    const endOfWeek = new Date(nextWeek);
+    endOfWeek.setHours(23, 59, 59, 999);
 
     switch (dateFilter) {
       case 'today':
-        reservationWhereConditions.scheduledDate = {
-          [Op.eq]: todayStr // Formato YYYY-MM-DD
+        whereConditions.matchDateTime = {
+          [Op.gte]: startOfToday,
+          [Op.lte]: endOfToday,
+          [Op.not]: null
         };
         break;
       case 'tomorrow':
-        reservationWhereConditions.scheduledDate = {
-          [Op.eq]: tomorrowStr // Formato YYYY-MM-DD
+        whereConditions.matchDateTime = {
+          [Op.gte]: startOfTomorrow,
+          [Op.lte]: endOfTomorrow,
+          [Op.not]: null
         };
         break;
       case 'thisWeek':
-        reservationWhereConditions.scheduledDate = {
-          [Op.gte]: todayStr,
-          [Op.lte]: nextWeekStr
+        whereConditions.matchDateTime = {
+          [Op.gte]: startOfToday,
+          [Op.lte]: endOfWeek,
+          [Op.not]: null
         };
         break;
     }
@@ -974,7 +990,6 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
     include: [
       {
         association: 'reservation',
-        where: Object.keys(reservationWhereConditions).length > 0 ? reservationWhereConditions : undefined,
         required: true,
         include: [
           {
@@ -987,10 +1002,8 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
           },
           {
             association: 'user'
-          },
-          {
-            association: 'slot'
           }
+          // ⭐ Slot removido - usar matchDateTime directamente
         ]
       },
       {
@@ -1007,7 +1020,7 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
       }
     ],
     order: [
-      ['createdAt', 'DESC']
+      ['matchDateTime', 'ASC'] // ⭐ Ordenar por fecha del partido (próximos primero)
     ]
   });
 
