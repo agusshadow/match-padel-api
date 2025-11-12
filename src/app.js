@@ -8,6 +8,9 @@ import routes from './routes/index.js';
 // Importar y configurar asociaciones entre modelos
 import './models/associations.js';
 
+// Importar job de actualización de estados de partidos
+import { startMatchStatusJob } from './jobs/matchStatusJob.js';
+
 dotenv.config();
 
 const app = express();
@@ -50,6 +53,9 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 Servidor en puerto ${PORT}`);
     });
+
+    // Iniciar job de actualización de estados de partidos
+    startMatchStatusJob();
   } catch (error) {
     console.error('❌ Error conectando a la base de datos:', error.message);
     console.error('Detalles:', error);
