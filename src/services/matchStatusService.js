@@ -1,50 +1,35 @@
 import Match from '../models/Match.js';
 import { Op } from 'sequelize';
-
-/**
- * Helper para verificar si un partido tiene los 4 slots llenos
- */
-const isMatchFull = (match) => {
-  return match.team1Player1Id !== null &&
-         match.team1Player2Id !== null &&
-         match.team2Player1Id !== null &&
-         match.team2Player2Id !== null;
-};
+import { sequelize } from '../config/connection.js';
 
 /**
  * Cancelar partidos que ya pasaron la fecha y no tienen los 4 slots llenos
- * ⭐ Optimizado: Usa campo denormalizado matchDateTime
+ * ⭐ Simplificado: Usa campos denormalizados y actualización masiva
  */
 const cancelExpiredIncompleteMatches = async () => {
   try {
     const now = new Date();
     
-    // Buscar partidos scheduled que:
-    // 1. La fecha/hora del partido ya pasó (usando campo denormalizado)
-    // 2. No tienen los 4 slots llenos
-    const matches = await Match.findAll({
-      where: {
-        status: Match.MATCH_STATUS.SCHEDULED,
-        matchDateTime: { [Op.lt]: now }, // ⭐ Usa campo denormalizado
-        [Op.or]: [
-          { team1Player2Id: null },
-          { team2Player1Id: null },
-          { team2Player2Id: null }
-        ]
-      }
+    // Actualizar directamente con bulkUpdate (más eficiente)
+    // Usamos una subquery SQL para actualizar cancelledBy = createdBy
+    const [cancelledCount] = await sequelize.query(`
+      UPDATE matches 
+      SET 
+        status = 'cancelled',
+        "cancelledAt" = :now,
+        "cancelledBy" = "createdBy"
+      WHERE status = 'scheduled'
+        AND "matchDateTime" < :now
+        AND "matchDateTime" IS NOT NULL
+        AND (
+          "team1Player2Id" IS NULL 
+          OR "team2Player1Id" IS NULL 
+          OR "team2Player2Id" IS NULL
+        )
+    `, {
+      replacements: { now },
+      type: sequelize.QueryTypes.UPDATE
     });
-
-    let cancelledCount = 0;
-
-    for (const match of matches) {
-      await match.update({ 
-        status: Match.MATCH_STATUS.CANCELLED,
-        cancelledAt: new Date(),
-        cancelledBy: match.createdBy // El creador cancela automáticamente
-      });
-      cancelledCount++;
-      console.log(`✅ Partido ${match.id} cancelado (fecha/hora pasada sin completar slots)`);
-    }
 
     return { cancelledCount, message: `${cancelledCount} partidos cancelados` };
   } catch (error) {
@@ -55,36 +40,33 @@ const cancelExpiredIncompleteMatches = async () => {
 
 /**
  * Iniciar partidos automáticamente cuando llegue la fecha y hora del partido
- * ⭐ Optimizado: Usa campo denormalizado matchDateTime
+ * ⭐ Simplificado: Usa campos denormalizados y actualización masiva
  */
 const startScheduledMatches = async () => {
   try {
     const now = new Date();
     
-    // Buscar partidos scheduled que:
-    // 1. Tienen los 4 slots llenos
-    // 2. La fecha/hora del partido ya llegó o pasó (usando campo denormalizado)
-    const matches = await Match.findAll({
-      where: {
-        status: Match.MATCH_STATUS.SCHEDULED,
-        matchDateTime: { [Op.lte]: now }, // ⭐ Usa campo denormalizado
-        team1Player1Id: { [Op.ne]: null },
-        team1Player2Id: { [Op.ne]: null },
-        team2Player1Id: { [Op.ne]: null },
-        team2Player2Id: { [Op.ne]: null }
-      }
-    });
-
-    let startedCount = 0;
-
-    for (const match of matches) {
-      await match.update({ 
+    // Actualizar directamente con bulkUpdate (más eficiente)
+    const [startedCount] = await Match.update(
+      {
         status: Match.MATCH_STATUS.IN_PROGRESS,
-        startedAt: new Date()
-      });
-      startedCount++;
-      console.log(`✅ Partido ${match.id} iniciado automáticamente`);
-    }
+        startedAt: now
+      },
+      {
+        where: {
+          status: Match.MATCH_STATUS.SCHEDULED,
+          matchDateTime: { 
+            [Op.lte]: now,
+            [Op.not]: null
+          },
+          // Partido completo: todos los jugadores deben estar asignados
+          team1Player1Id: { [Op.ne]: null },
+          team1Player2Id: { [Op.ne]: null },
+          team2Player1Id: { [Op.ne]: null },
+          team2Player2Id: { [Op.ne]: null }
+        }
+      }
+    );
 
     return { startedCount, message: `${startedCount} partidos iniciados` };
   } catch (error) {
@@ -95,30 +77,28 @@ const startScheduledMatches = async () => {
 
 /**
  * Finalizar partidos automáticamente cuando termine la duración del partido
- * ⭐ Optimizado: Usa campo denormalizado matchEndDateTime
+ * ⭐ Simplificado: Usa campo denormalizado matchEndDateTime y actualización masiva
  */
 const finishInProgressMatches = async () => {
   try {
     const now = new Date();
     
-    // Buscar partidos in_progress cuya fecha/hora de finalización ya pasó
-    const matches = await Match.findAll({
-      where: {
-        status: Match.MATCH_STATUS.IN_PROGRESS,
-        matchEndDateTime: { [Op.lt]: now } // ⭐ Usa campo denormalizado
-      }
-    });
-
-    let finishedCount = 0;
-
-    for (const match of matches) {
-      await match.update({ 
+    // Actualizar directamente con bulkUpdate (más eficiente)
+    const [finishedCount] = await Match.update(
+      {
         status: Match.MATCH_STATUS.PENDING_CONFIRMATION,
-        finishedAt: new Date()
-      });
-      finishedCount++;
-      console.log(`✅ Partido ${match.id} finalizado automáticamente`);
-    }
+        finishedAt: now
+      },
+      {
+        where: {
+          status: Match.MATCH_STATUS.IN_PROGRESS,
+          matchEndDateTime: { 
+            [Op.lt]: now,
+            [Op.not]: null
+          }
+        }
+      }
+    );
 
     return { finishedCount, message: `${finishedCount} partidos finalizados` };
   } catch (error) {
