@@ -54,9 +54,38 @@ module.exports = {
       reservationId: res.reservationId || res.reservationid,
       userId: res.userId || res.userid,
       slotId: res.slotId || res.slotid,
+      startTime: res.startTime || res.starttime,
+      endTime: res.endTime || res.endtime,
       courtName: res.courtName || res.courtname,
       clubName: res.clubName || res.clubname
     }));
+    
+    // Obtener reservas completas con scheduledDate para calcular fechas
+    const reservationDetails = await queryInterface.sequelize.query(
+      dialect === 'postgres'
+        ? `SELECT cr.id, cr."scheduledDate", cr."scheduledDateTime", cr."endDateTime"
+           FROM court_reservations cr
+           WHERE cr.status = 'confirmed'
+           ORDER BY cr.id
+           LIMIT 30`
+        : `SELECT cr.id, cr.scheduledDate, cr.scheduledDateTime, cr.endDateTime
+           FROM court_reservations cr
+           WHERE cr.status = 'confirmed'
+           ORDER BY cr.id
+           LIMIT 30`,
+      { type: queryInterface.sequelize.QueryTypes.SELECT }
+    );
+    
+    // Crear mapa de reservationId -> fechas
+    const reservationDatesMap = {};
+    reservationDetails.forEach(res => {
+      const id = res.id;
+      reservationDatesMap[id] = {
+        scheduledDate: res.scheduledDate || res.scheduleddate,
+        scheduledDateTime: res.scheduledDateTime || res.scheduleddatetime,
+        endDateTime: res.endDateTime || res.enddatetime
+      };
+    });
     
     // Seleccionar jugadores de forma distribuida
     const shuffledUsers = [...users].sort(() => 0.5 - Math.random());
@@ -107,6 +136,30 @@ module.exports = {
         if (!reservation) break;
         
         const players = getPlayersWithAvailability(config.availableSpots);
+        const reservationDates = reservationDatesMap[reservation.reservationId] || {};
+        
+        // Calcular matchDateTime y matchEndDateTime
+        let matchDateTime = null;
+        let matchEndDateTime = null;
+        
+        if (reservationDates.scheduledDateTime) {
+          matchDateTime = new Date(reservationDates.scheduledDateTime);
+        } else if (reservationDates.scheduledDate && reservation.startTime) {
+          // Fallback: calcular desde scheduledDate + startTime
+          const [hours, minutes] = reservation.startTime.split(':').map(Number);
+          matchDateTime = new Date(reservationDates.scheduledDate);
+          matchDateTime.setHours(hours, minutes, 0, 0);
+        }
+        
+        if (reservationDates.endDateTime) {
+          matchEndDateTime = new Date(reservationDates.endDateTime);
+        } else if (matchDateTime && reservation.endTime) {
+          // Fallback: calcular desde matchDateTime + 90 minutos
+          const [hours, minutes] = reservation.endTime.split(':').map(Number);
+          matchEndDateTime = new Date(reservationDates.scheduledDate || matchDateTime);
+          matchEndDateTime.setHours(hours, minutes, 0, 0);
+        }
+        
         matches.push({
           reservationId: reservation.reservationId,
           team1Player1Id: players.team1Player1.id,
@@ -114,6 +167,8 @@ module.exports = {
           team2Player1Id: players.team2Player1?.id || null,
           team2Player2Id: players.team2Player2?.id || null,
           createdBy: players.team1Player1.id, // El creador siempre es team1Player1
+          matchDateTime: matchDateTime,      // ⭐ Campo denormalizado
+          matchEndDateTime: matchEndDateTime, // ⭐ Campo denormalizado
           status: 'scheduled',
           notes: `Partido programado en ${reservation.clubName} - ${reservation.courtName}`,
           createdAt: new Date(),
@@ -128,14 +183,29 @@ module.exports = {
       if (!reservation) break;
       
       const players = getPlayersWithAvailability(0); // Partidos completos
+      const reservationDates = reservationDatesMap[reservation.reservationId] || {};
+      
+      let matchDateTime = null;
+      let matchEndDateTime = null;
+      
+      if (reservationDates.scheduledDateTime) {
+        matchDateTime = new Date(reservationDates.scheduledDateTime);
+      }
+      if (reservationDates.endDateTime) {
+        matchEndDateTime = new Date(reservationDates.endDateTime);
+      }
+      
       matches.push({
         reservationId: reservation.reservationId,
         team1Player1Id: players.team1Player1.id,
         team1Player2Id: players.team1Player2?.id || null,
         team2Player1Id: players.team2Player1?.id || null,
         team2Player2Id: players.team2Player2?.id || null,
-        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
+        createdBy: players.team1Player1.id,
+        matchDateTime: matchDateTime,
+        matchEndDateTime: matchEndDateTime,
         status: 'in_progress',
+        startedAt: new Date(), // ⭐ Campo de auditoría
         notes: `Partido en curso en ${reservation.clubName} - ${reservation.courtName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -148,14 +218,29 @@ module.exports = {
       if (!reservation) break;
       
       const players = getPlayersWithAvailability(0); // Partidos completos
+      const reservationDates = reservationDatesMap[reservation.reservationId] || {};
+      
+      let matchDateTime = null;
+      let matchEndDateTime = null;
+      
+      if (reservationDates.scheduledDateTime) {
+        matchDateTime = new Date(reservationDates.scheduledDateTime);
+      }
+      if (reservationDates.endDateTime) {
+        matchEndDateTime = new Date(reservationDates.endDateTime);
+      }
+      
       matches.push({
         reservationId: reservation.reservationId,
         team1Player1Id: players.team1Player1.id,
         team1Player2Id: players.team1Player2?.id || null,
         team2Player1Id: players.team2Player1?.id || null,
         team2Player2Id: players.team2Player2?.id || null,
-        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
+        createdBy: players.team1Player1.id,
+        matchDateTime: matchDateTime,
+        matchEndDateTime: matchEndDateTime,
         status: 'pending_confirmation',
+        finishedAt: new Date(), // ⭐ Campo de auditoría
         notes: `Partido finalizado, esperando confirmación - ${reservation.clubName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -168,14 +253,29 @@ module.exports = {
       if (!reservation) break;
       
       const players = getPlayersWithAvailability(0); // Partidos completos
+      const reservationDates = reservationDatesMap[reservation.reservationId] || {};
+      
+      let matchDateTime = null;
+      let matchEndDateTime = null;
+      
+      if (reservationDates.scheduledDateTime) {
+        matchDateTime = new Date(reservationDates.scheduledDateTime);
+      }
+      if (reservationDates.endDateTime) {
+        matchEndDateTime = new Date(reservationDates.endDateTime);
+      }
+      
       matches.push({
         reservationId: reservation.reservationId,
         team1Player1Id: players.team1Player1.id,
         team1Player2Id: players.team1Player2?.id || null,
         team2Player1Id: players.team2Player1?.id || null,
         team2Player2Id: players.team2Player2?.id || null,
-        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
+        createdBy: players.team1Player1.id,
+        matchDateTime: matchDateTime,
+        matchEndDateTime: matchEndDateTime,
         status: 'completed',
+        finishedAt: new Date(),
         notes: `Partido completado en ${reservation.clubName} - ${reservation.courtName}`,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -188,14 +288,30 @@ module.exports = {
       if (!reservation) break;
       
       const players = getPlayersWithAvailability(1); // Puede estar incompleto al cancelar
+      const reservationDates = reservationDatesMap[reservation.reservationId] || {};
+      
+      let matchDateTime = null;
+      let matchEndDateTime = null;
+      
+      if (reservationDates.scheduledDateTime) {
+        matchDateTime = new Date(reservationDates.scheduledDateTime);
+      }
+      if (reservationDates.endDateTime) {
+        matchEndDateTime = new Date(reservationDates.endDateTime);
+      }
+      
       matches.push({
         reservationId: reservation.reservationId,
         team1Player1Id: players.team1Player1.id,
         team1Player2Id: players.team1Player2?.id || null,
         team2Player1Id: players.team2Player1?.id || null,
         team2Player2Id: players.team2Player2?.id || null,
-        createdBy: players.team1Player1.id, // El creador siempre es team1Player1
+        createdBy: players.team1Player1.id,
+        matchDateTime: matchDateTime,
+        matchEndDateTime: matchEndDateTime,
         status: 'cancelled',
+        cancelledAt: new Date(), // ⭐ Campo de auditoría
+        cancelledBy: players.team1Player1.id, // ⭐ Campo de auditoría
         notes: `Partido cancelado - ${reservation.clubName}`,
         createdAt: new Date(),
         updatedAt: new Date()

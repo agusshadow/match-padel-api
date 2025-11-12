@@ -55,12 +55,32 @@ module.exports = {
       // Crear fechas futuras para las reservas
       const scheduledDate = new Date(today);
       scheduledDate.setDate(today.getDate() + Math.floor(Math.random() * 30) + 1);
+      const scheduledDateStr = scheduledDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Parsear hora de inicio y fin del slot
+      const startTime = slot.startTime || slot.starttime;
+      const endTime = slot.endTime || slot.endtime;
+      const price = slot.price;
+      
+      // Calcular scheduledDateTime y endDateTime
+      // Formato de startTime/endTime: "HH:mm:ss" o "HH:mm"
+      const [startHours, startMinutes] = startTime.split(':').map(Number);
+      const [endHours, endMinutes] = endTime.split(':').map(Number);
+      
+      const scheduledDateTime = new Date(scheduledDate);
+      scheduledDateTime.setHours(startHours, startMinutes, 0, 0);
+      
+      const endDateTime = new Date(scheduledDate);
+      endDateTime.setHours(endHours, endMinutes, 0, 0);
       
       reservations.push({
         courtId: courtId,
         userId: userId,
-        scheduledDate: scheduledDate.toISOString().split('T')[0], // YYYY-MM-DD
+        scheduledDate: scheduledDateStr,
         slotId: slotId,
+        scheduledDateTime: scheduledDateTime, // ⭐ Campo denormalizado
+        endDateTime: endDateTime,              // ⭐ Campo denormalizado
+        price: price,                         // ⭐ Precio al momento de reserva
         status: 'confirmed', // Todas confirmadas para poder crear matches
         createdAt: new Date(),
         updatedAt: new Date()

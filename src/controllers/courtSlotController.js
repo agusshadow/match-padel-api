@@ -70,7 +70,7 @@ const deleteSlot = async (req, res) => {
   }
 };
 
-// Obtener slots disponibles por cancha y día
+// Obtener slots disponibles por cancha y día de semana (método antiguo - mantener por compatibilidad)
 const getAvailableSlotsByCourtAndDay = async (req, res) => {
   try {
     const { courtId, dayOfWeek } = req.query;
@@ -87,6 +87,33 @@ const getAvailableSlotsByCourtAndDay = async (req, res) => {
   }
 };
 
+// ⭐ NUEVO: Obtener slots disponibles por cancha y fecha específica
+const getAvailableSlotsByCourtAndDate = async (req, res) => {
+  try {
+    const { courtId, date } = req.query;
+    if (!courtId || !date) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'courtId y date son requeridos como query parameters. Formato de date: YYYY-MM-DD' 
+      });
+    }
+
+    // Validar formato de fecha
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Formato de fecha inválido. Use YYYY-MM-DD' 
+      });
+    }
+
+    const slots = await courtSlotService.getAvailableSlotsByCourtAndDate(courtId, date);
+    res.json({ success: true, data: slots });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export {
   getAllSlots,
   getSlotsByCourt,
@@ -94,5 +121,6 @@ export {
   createSlot,
   updateSlot,
   deleteSlot,
-  getAvailableSlotsByCourtAndDay
+  getAvailableSlotsByCourtAndDay,
+  getAvailableSlotsByCourtAndDate
 };

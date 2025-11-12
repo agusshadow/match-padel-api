@@ -93,6 +93,7 @@ const deleteMatch = async (id) => {
 
 // Crear un partido con reserva de cancha
 const createMatchWithReservation = async (matchData) => {
+  const { combineDateAndTime, validateMatchCreation } = await import('../utils/matchValidations.js');
   const transaction = await sequelize.transaction();
   
   try {
@@ -101,20 +102,13 @@ const createMatchWithReservation = async (matchData) => {
       slotId,
       userId,
       scheduledDate,
-      team1Player1Id,
-      team1Player2Id,
-      team2Player1Id,
-      team2Player2Id,
       notes
     } = matchData;
 
-    // Validar que el usuario que crea el partido sea el mismo que team1Player1Id
-    if (userId && team1Player1Id && userId !== team1Player1Id) {
-      throw new Error('El usuario que crea el partido debe ser team1Player1Id');
+    // Validar que se proporcionen los datos necesarios
+    if (!slotId || !scheduledDate) {
+      throw new Error('slotId y scheduledDate son requeridos');
     }
-    
-    // Si no se especifica team1Player1Id, usar userId
-    const finalTeam1Player1Id = team1Player1Id || userId;
 
     // Obtener información del slot
     const slot = await CourtSlot.findByPk(slotId, {
@@ -130,31 +124,41 @@ const createMatchWithReservation = async (matchData) => {
       throw new Error('Slot no encontrado');
     }
 
-    // Verificar que el slot esté disponible
-    if (!slot.isAvailable) {
-      throw new Error('El slot seleccionado no está disponible');
+    // Validar creación del partido (fecha, día de semana, disponibilidad, etc.)
+    const validation = await validateMatchCreation(scheduledDate, slot, slotId);
+    if (!validation.isValid) {
+      throw new Error(validation.errors.join(', '));
     }
 
-    // Crear la reserva de cancha usando el slotId
+    // Calcular fechas/horas denormalizadas
+    const scheduledDateTime = combineDateAndTime(scheduledDate, slot.startTime);
+    const endDateTime = combineDateAndTime(scheduledDate, slot.endTime);
+
+    // Crear la reserva de cancha con campos denormalizados
     const reservation = await CourtReservation.create({
       courtId: slot.courtId,
       userId,
       scheduledDate,
       slotId: slot.id,
+      scheduledDateTime,  // ⭐ Campo denormalizado
+      endDateTime,         // ⭐ Campo denormalizado
+      price: slot.price,  // ⭐ Precio al momento de reserva
       status: 'confirmed' // La reserva se confirma automáticamente al crear el partido
     }, { transaction });
 
-    // Marcar el slot como no disponible
-    await slot.update({ isAvailable: false }, { transaction });
+    // NO marcar el slot como no disponible (isAvailable es para admin, no para reservas)
+    // El slot puede tener múltiples reservas en diferentes fechas
 
-    // Crear el partido
+    // Crear el partido con campos denormalizados
     const match = await Match.create({
       reservationId: reservation.id,
-      team1Player1Id: finalTeam1Player1Id,
-      team1Player2Id: team1Player2Id || null,
-      team2Player1Id: team2Player1Id || null,
-      team2Player2Id: team2Player2Id || null,
-      createdBy: userId, // El usuario que crea el partido
+      team1Player1Id: userId, // El creador siempre es team1Player1
+      team1Player2Id: null,
+      team2Player1Id: null,
+      team2Player2Id: null,
+      createdBy: userId,
+      matchDateTime: scheduledDateTime,      // ⭐ Campo denormalizado
+      matchEndDateTime: endDateTime,         // ⭐ Campo denormalizado
       status: Match.MATCH_STATUS.SCHEDULED,
       notes
     }, { transaction });

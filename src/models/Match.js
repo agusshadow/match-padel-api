@@ -40,7 +40,7 @@ const Match = sequelize.define('Match', {
   },
   team1Player1Id: {
     type: DataTypes.INTEGER,
-    allowNull: true,
+    allowNull: true, // Se cambiará a NOT NULL después de backfill
     references: {
       model: 'users',
       key: 'id'
@@ -78,6 +78,15 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'SET NULL'
   },
+  // Campos denormalizados para mejor performance
+  matchDateTime: {
+    type: DataTypes.DATE,
+    allowNull: true // Permitir null para datos existentes
+  },
+  matchEndDateTime: {
+    type: DataTypes.DATE,
+    allowNull: true // Permitir null para datos existentes
+  },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
     defaultValue: MATCH_STATUS.SCHEDULED,
@@ -85,6 +94,29 @@ const Match = sequelize.define('Match', {
     validate: {
       isIn: [MATCH_STATUS_VALUES]
     }
+  },
+  // Campos de auditoría
+  startedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  finishedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  cancelledAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  cancelledBy: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL'
   },
   notes: {
     type: DataTypes.TEXT,

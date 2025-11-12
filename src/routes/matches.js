@@ -19,7 +19,9 @@ router.get('/:id/team-availability', authenticateToken, matchController.getMatch
 // Rutas públicas (continuación)
 router.get('/:id', matchController.getMatchById);
 router.get('/:id/detailed', matchController.getMatchByIdDetailed);
-router.post('/', authenticateToken, matchController.createMatch);
+// ⭐ UNIFICADO: Crear partido (siempre con reserva)
+router.post('/', authenticateToken, matchController.createMatchWithReservation);
+// Endpoint antiguo mantenido por compatibilidad (redirige al nuevo)
 router.post('/with-reservation', authenticateToken, matchController.createMatchWithReservation);
 router.post('/:id/join', authenticateToken, matchController.joinMatch);
 router.post('/:id/leave', authenticateToken, matchController.leaveMatch);

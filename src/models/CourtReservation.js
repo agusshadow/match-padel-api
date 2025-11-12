@@ -46,13 +46,26 @@ const CourtReservation = sequelize.define('CourtReservation', {
   },
   slotId: {
     type: DataTypes.INTEGER,
-    allowNull: true, // Permitir null para datos existentes
+    allowNull: true, // Permitir null para datos existentes (se cambiará a NOT NULL después)
     references: {
       model: 'court_slots',
       key: 'id'
     },
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
+  },
+  // Campos denormalizados para mejor performance
+  scheduledDateTime: {
+    type: DataTypes.DATE,
+    allowNull: true // Permitir null para datos existentes
+  },
+  endDateTime: {
+    type: DataTypes.DATE,
+    allowNull: true // Permitir null para datos existentes
+  },
+  price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true // Permitir null para datos existentes
   },
   status: {
     type: DataTypes.ENUM(...RESERVATION_STATUS_VALUES),

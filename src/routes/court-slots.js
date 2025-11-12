@@ -6,7 +6,10 @@ import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 // Rutas públicas
 router.get('/', courtSlotController.getAllSlots);
 router.get('/by-court', courtSlotController.getSlotsByCourt);
-router.get('/available', courtSlotController.getAvailableSlotsByCourtAndDay);
+// ⭐ NUEVO: Slots disponibles por fecha específica (recomendado)
+router.get('/available', courtSlotController.getAvailableSlotsByCourtAndDate);
+// Método antiguo: por día de semana (mantener por compatibilidad)
+router.get('/available-by-day', courtSlotController.getAvailableSlotsByCourtAndDay);
 router.get('/:id', courtSlotController.getSlotById);
 
 // Rutas protegidas para administradores
