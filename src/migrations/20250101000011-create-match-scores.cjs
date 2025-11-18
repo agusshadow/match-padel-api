@@ -3,29 +3,33 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const tableExists = await queryInterface.tableExists('match_scores');
+    if (tableExists) {
+      console.log('Tabla match_scores ya existe, omitiendo creación');
+      return;
+    }
+
     await queryInterface.createTable('match_scores', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        allowNull: false
       },
       matchId: {
         type: Sequelize.INTEGER,
         allowNull: false,
+        unique: true,
         references: {
           model: 'matches',
           key: 'id'
         },
         onUpdate: 'CASCADE',
-        onDelete: 'CASCADE',
-        unique: true
+        onDelete: 'CASCADE'
       },
       winnerTeam: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          isIn: [[1, 2]]
-        }
+        allowNull: false
       },
       status: {
         type: Sequelize.ENUM('pending_confirmation', 'confirmed', 'rejected'),
@@ -60,6 +64,14 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
+      confirmedAt: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      rejectedAt: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -69,14 +81,6 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
-      },
-      confirmedAt: {
-        type: Sequelize.DATE,
-        allowNull: true
-      },
-      rejectedAt: {
-        type: Sequelize.DATE,
-        allowNull: true
       }
     });
 

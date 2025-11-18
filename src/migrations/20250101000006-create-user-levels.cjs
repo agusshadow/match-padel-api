@@ -3,49 +3,39 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.createTable('court_slots', {
+    const tableExists = await queryInterface.tableExists('user_levels');
+    if (tableExists) {
+      console.log('Tabla user_levels ya existe, omitiendo creación');
+      return;
+    }
+
+    await queryInterface.createTable('user_levels', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      courtId: {
+      userId: {
         type: Sequelize.INTEGER,
         allowNull: false,
+        unique: true,
         references: {
-          model: 'courts',
+          model: 'users',
           key: 'id'
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      dayOfWeek: {
+      experience: {
         type: Sequelize.INTEGER,
         allowNull: false,
-        validate: {
-          min: 0,
-          max: 6
-        }
+        defaultValue: 0
       },
-      startTime: {
-        type: Sequelize.TIME,
-        allowNull: false
-      },
-      endTime: {
-        type: Sequelize.TIME,
-        allowNull: false
-      },
-      isAvailable: {
-        type: Sequelize.BOOLEAN,
-        defaultValue: true
-      },
-      price: {
-        type: Sequelize.DECIMAL(10, 2),
+      level: {
+        type: Sequelize.INTEGER,
         allowNull: false,
-        validate: {
-          min: 0
-        }
+        defaultValue: 1
       },
       createdAt: {
         allowNull: false,
@@ -59,18 +49,14 @@ module.exports = {
       }
     });
 
-    await queryInterface.addIndex('court_slots', ['courtId'], {
-      name: 'idx_court_slots_court_id'
-    });
-
-    await queryInterface.addIndex('court_slots', ['courtId', 'dayOfWeek', 'startTime'], {
+    await queryInterface.addIndex('user_levels', ['userId'], {
       unique: true,
-      name: 'idx_court_slots_unique'
+      name: 'user_levels_userId_unique'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.dropTable('court_slots');
+    await queryInterface.dropTable('user_levels');
   }
 };
 

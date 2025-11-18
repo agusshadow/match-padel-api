@@ -3,6 +3,12 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const tableExists = await queryInterface.tableExists('clubs');
+    if (tableExists) {
+      console.log('Tabla clubs ya existe, omitiendo creación');
+      return;
+    }
+
     await queryInterface.createTable('clubs', {
       id: {
         allowNull: false,

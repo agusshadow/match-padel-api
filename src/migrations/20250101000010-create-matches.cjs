@@ -3,6 +3,12 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const tableExists = await queryInterface.tableExists('matches');
+    if (tableExists) {
+      console.log('Tabla matches ya existe, omitiendo creación');
+      return;
+    }
+
     await queryInterface.createTable('matches', {
       id: {
         allowNull: false,
@@ -75,6 +81,36 @@ module.exports = {
         defaultValue: 'scheduled',
         allowNull: false
       },
+      matchDateTime: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      matchEndDateTime: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      startedAt: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      finishedAt: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      cancelledAt: {
+        type: Sequelize.DATE,
+        allowNull: true
+      },
+      cancelledBy: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'users',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+      },
       notes: {
         type: Sequelize.TEXT,
         allowNull: true
@@ -92,7 +128,8 @@ module.exports = {
     });
 
     await queryInterface.addIndex('matches', ['reservationId'], {
-      name: 'idx_matches_reservation_id'
+      unique: true,
+      name: 'idx_matches_reservation_unique'
     });
 
     await queryInterface.addIndex('matches', ['createdBy'], {
@@ -113,6 +150,18 @@ module.exports = {
 
     await queryInterface.addIndex('matches', ['team2Player2Id'], {
       name: 'idx_matches_team2_player2'
+    });
+
+    await queryInterface.addIndex('matches', ['matchDateTime'], {
+      name: 'idx_matches_match_datetime'
+    });
+
+    await queryInterface.addIndex('matches', ['matchEndDateTime'], {
+      name: 'idx_matches_match_end_datetime'
+    });
+
+    await queryInterface.addIndex('matches', ['status', 'matchDateTime'], {
+      name: 'idx_matches_status_datetime'
     });
   },
 

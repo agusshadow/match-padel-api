@@ -3,7 +3,13 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.createTable('notifications', {
+    const tableExists = await queryInterface.tableExists('user_experience');
+    if (tableExists) {
+      console.log('Tabla user_experience ya existe, omitiendo creación');
+      return;
+    }
+
+    await queryInterface.createTable('user_experience', {
       id: {
         allowNull: false,
         autoIncrement: true,
@@ -20,22 +26,16 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      type: {
-        type: Sequelize.ENUM('LEVEL_UP', 'ACHIEVEMENT', 'MATCH_COMPLETED'),
+      action: {
+        type: Sequelize.STRING,
         allowNull: false
       },
-      data: {
+      xpAmount: {
+        type: Sequelize.INTEGER,
+        allowNull: false
+      },
+      metadata: {
         type: Sequelize.JSON,
-        allowNull: true,
-        comment: 'Additional data for the notification (e.g., levelUp info)'
-      },
-      read: {
-        type: Sequelize.BOOLEAN,
-        allowNull: false,
-        defaultValue: false
-      },
-      readAt: {
-        type: Sequelize.DATE,
         allowNull: true
       },
       createdAt: {
@@ -50,22 +50,21 @@ module.exports = {
       }
     });
 
-    // Crear índices para mejorar performance
-    await queryInterface.addIndex('notifications', ['userId'], {
-      name: 'notifications_userId_idx'
+    await queryInterface.addIndex('user_experience', ['userId'], {
+      name: 'user_experience_userId_idx'
     });
 
-    await queryInterface.addIndex('notifications', ['read'], {
-      name: 'notifications_read_idx'
+    await queryInterface.addIndex('user_experience', ['action'], {
+      name: 'user_experience_action_idx'
     });
 
-    await queryInterface.addIndex('notifications', ['userId', 'read'], {
-      name: 'notifications_userId_read_idx'
+    await queryInterface.addIndex('user_experience', ['userId', 'action'], {
+      name: 'user_experience_userId_action_idx'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.dropTable('notifications');
+    await queryInterface.dropTable('user_experience');
   }
 };
 

@@ -3,6 +3,12 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const tableExists = await queryInterface.tableExists('user_profiles');
+    if (tableExists) {
+      console.log('Tabla user_profiles ya existe, omitiendo creación');
+      return;
+    }
+
     await queryInterface.createTable('user_profiles', {
       id: {
         allowNull: false,
@@ -39,51 +45,31 @@ module.exports = {
       },
       skillServe: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
       },
       skillVolley: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
       },
       skillForehand: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
       },
       skillWall: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
       },
       skillSmash: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
       },
       skillAgility: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        validate: {
-          min: 1,
-          max: 10
-        }
+        allowNull: true
+      },
+      picture: {
+        type: Sequelize.STRING(500),
+        allowNull: true
       },
       createdAt: {
         allowNull: false,

@@ -3,11 +3,18 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    const tableExists = await queryInterface.tableExists('match_score_sets');
+    if (tableExists) {
+      console.log('Tabla match_score_sets ya existe, omitiendo creación');
+      return;
+    }
+
     await queryInterface.createTable('match_score_sets', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        allowNull: false
       },
       matchScoreId: {
         type: Sequelize.INTEGER,
@@ -21,25 +28,15 @@ module.exports = {
       },
       setNumber: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 1,
-          max: 5
-        }
+        allowNull: false
       },
       team1Score: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 0
-        }
+        allowNull: false
       },
       team2Score: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 0
-        }
+        allowNull: false
       },
       createdAt: {
         type: Sequelize.DATE,

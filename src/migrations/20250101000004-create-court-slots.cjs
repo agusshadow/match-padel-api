@@ -3,44 +3,48 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    const tableExists = await queryInterface.tableExists('courts');
+    const tableExists = await queryInterface.tableExists('court_slots');
     if (tableExists) {
-      console.log('Tabla courts ya existe, omitiendo creación');
+      console.log('Tabla court_slots ya existe, omitiendo creación');
       return;
     }
 
-    await queryInterface.createTable('courts', {
+    await queryInterface.createTable('court_slots', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      clubId: {
+      courtId: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: {
-          model: 'clubs',
+          model: 'courts',
           key: 'id'
         },
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      name: {
-        type: Sequelize.STRING,
+      dayOfWeek: {
+        type: Sequelize.INTEGER,
         allowNull: false
       },
-      type: {
-        type: Sequelize.ENUM('indoor', 'outdoor', 'covered'),
+      startTime: {
+        type: Sequelize.TIME,
         allowNull: false
       },
-      surface: {
-        type: Sequelize.ENUM('synthetic', 'cement', 'grass'),
+      endTime: {
+        type: Sequelize.TIME,
         allowNull: false
       },
-      isActive: {
+      isAvailable: {
         type: Sequelize.BOOLEAN,
         defaultValue: true
+      },
+      price: {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: false
       },
       createdAt: {
         allowNull: false,
@@ -54,13 +58,18 @@ module.exports = {
       }
     });
 
-    await queryInterface.addIndex('courts', ['clubId'], {
-      name: 'idx_courts_club_id'
+    await queryInterface.addIndex('court_slots', ['courtId'], {
+      name: 'idx_court_slots_court_id'
+    });
+
+    await queryInterface.addIndex('court_slots', ['courtId', 'dayOfWeek', 'startTime'], {
+      unique: true,
+      name: 'idx_court_slots_unique'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.dropTable('courts');
+    await queryInterface.dropTable('court_slots');
   }
 };
 

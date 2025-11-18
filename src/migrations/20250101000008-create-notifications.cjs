@@ -3,7 +3,13 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    await queryInterface.createTable('user_experience', {
+    const tableExists = await queryInterface.tableExists('notifications');
+    if (tableExists) {
+      console.log('Tabla notifications ya existe, omitiendo creación');
+      return;
+    }
+
+    await queryInterface.createTable('notifications', {
       id: {
         allowNull: false,
         autoIncrement: true,
@@ -20,21 +26,22 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      action: {
-        type: Sequelize.STRING,
+      type: {
+        type: Sequelize.ENUM('LEVEL_UP', 'ACHIEVEMENT', 'MATCH_COMPLETED'),
         allowNull: false
       },
-      xpAmount: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 0
-        }
-      },
-      metadata: {
+      data: {
         type: Sequelize.JSON,
-        allowNull: true,
-        comment: 'Additional context for the action (e.g., matchId)'
+        allowNull: true
+      },
+      read: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+      },
+      readAt: {
+        type: Sequelize.DATE,
+        allowNull: true
       },
       createdAt: {
         allowNull: false,
@@ -48,22 +55,21 @@ module.exports = {
       }
     });
 
-    // Crear índices para mejorar performance
-    await queryInterface.addIndex('user_experience', ['userId'], {
-      name: 'user_experience_userId_idx'
+    await queryInterface.addIndex('notifications', ['userId'], {
+      name: 'notifications_userId_idx'
     });
 
-    await queryInterface.addIndex('user_experience', ['action'], {
-      name: 'user_experience_action_idx'
+    await queryInterface.addIndex('notifications', ['read'], {
+      name: 'notifications_read_idx'
     });
 
-    await queryInterface.addIndex('user_experience', ['userId', 'action'], {
-      name: 'user_experience_userId_action_idx'
+    await queryInterface.addIndex('notifications', ['userId', 'read'], {
+      name: 'notifications_userId_read_idx'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.dropTable('user_experience');
+    await queryInterface.dropTable('notifications');
   }
 };
 
