@@ -1,0 +1,108 @@
+import { DataTypes } from 'sequelize';
+import { sequelize } from '../config/connection.js';
+
+// Constantes para tipos de cosméticos
+const COSMETIC_TYPE = {
+  PALETTE: 'palette'
+  // Extensible para futuros tipos: 'skin', 'avatar_frame', etc.
+};
+
+const COSMETIC_TYPE_VALUES = Object.values(COSMETIC_TYPE);
+
+// Constantes para métodos de adquisición
+const ACQUISITION_METHOD = {
+  FREE: 'free',
+  CHALLENGE: 'challenge',
+  PURCHASE: 'purchase'
+};
+
+const ACQUISITION_METHOD_VALUES = Object.values(ACQUISITION_METHOD);
+
+const Cosmetic = sequelize.define('Cosmetic', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  name: {
+    type: DataTypes.STRING(255),
+    allowNull: false,
+    comment: 'Nombre del cosmético'
+  },
+  description: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    comment: 'Descripción del cosmético'
+  },
+  type: {
+    type: DataTypes.ENUM(...COSMETIC_TYPE_VALUES),
+    allowNull: false,
+    defaultValue: COSMETIC_TYPE.PALETTE,
+    validate: {
+      isIn: [COSMETIC_TYPE_VALUES]
+    },
+    comment: 'Tipo de cosmético'
+  },
+  imageUrl: {
+    type: DataTypes.STRING(500),
+    allowNull: false,
+    comment: 'URL completa de la imagen en el bucket público'
+  },
+  acquisitionMethod: {
+    type: DataTypes.ENUM(...ACQUISITION_METHOD_VALUES),
+    allowNull: false,
+    validate: {
+      isIn: [ACQUISITION_METHOD_VALUES]
+    },
+    comment: 'Método de adquisición: free, challenge, purchase'
+  },
+  price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    validate: {
+      min: 0
+    },
+    comment: 'Precio si es comprable (NULL si no es comprable)'
+  },
+  challengeId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'challenges',
+      key: 'id'
+    },
+    comment: 'ID del desafío si se obtiene por desafío'
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    comment: 'Si el cosmético está activo y disponible'
+  }
+}, {
+  tableName: 'cosmetics',
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['acquisitionMethod']
+    },
+    {
+      fields: ['challengeId']
+    },
+    {
+      fields: ['isActive']
+    },
+    {
+      fields: ['type']
+    }
+  ]
+});
+
+// Exportar constantes
+Cosmetic.COSMETIC_TYPE = COSMETIC_TYPE;
+Cosmetic.COSMETIC_TYPE_VALUES = COSMETIC_TYPE_VALUES;
+Cosmetic.ACQUISITION_METHOD = ACQUISITION_METHOD;
+Cosmetic.ACQUISITION_METHOD_VALUES = ACQUISITION_METHOD_VALUES;
+
+export default Cosmetic;
+export { COSMETIC_TYPE, COSMETIC_TYPE_VALUES, ACQUISITION_METHOD, ACQUISITION_METHOD_VALUES };
+

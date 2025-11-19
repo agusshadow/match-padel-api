@@ -129,6 +129,17 @@ const UserProfile = sequelize.define('UserProfile', {
     type: DataTypes.STRING(500),
     allowNull: true,
     comment: 'URL de la foto de perfil'
+  },
+  equippedPaletteId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'cosmetics',
+      key: 'id'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',
+    comment: 'ID de la paleta equipada'
   }
 }, {
   tableName: 'user_profiles',

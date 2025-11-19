@@ -273,6 +273,43 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
     // Otorgar experiencia a los jugadores
     const levelUps = await awardMatchExperience(match, matchScore, transaction);
 
+    // Actualizar progreso de desafíos para todos los jugadores
+    // Esto se hace después de commit porque no necesita estar en la misma transacción
+    // y queremos que sea asíncrono para no bloquear la confirmación del partido
+    const { updateChallengeProgress } = await import('./challengeService.js');
+    
+    // Obtener todos los jugadores
+    const players = [
+      match.team1Player1Id,
+      match.team1Player2Id,
+      match.team2Player1Id,
+      match.team2Player2Id
+    ].filter(id => id !== null);
+
+    // Identificar equipo ganador
+    const winnerTeam = matchScore.winnerTeam;
+    const winningPlayers = winnerTeam === 1
+      ? [match.team1Player1Id, match.team1Player2Id].filter(id => id !== null)
+      : [match.team2Player1Id, match.team2Player2Id].filter(id => id !== null);
+
+    // Actualizar desafíos para todos los jugadores (jugar partido)
+    for (const playerId of players) {
+      try {
+        await updateChallengeProgress(playerId, 'PLAY_MATCH', { matchId: match.id });
+      } catch (error) {
+        console.error(`Error actualizando desafío PLAY_MATCH para usuario ${playerId}:`, error);
+      }
+    }
+
+    // Actualizar desafíos para los ganadores (ganar partido)
+    for (const winnerId of winningPlayers) {
+      try {
+        await updateChallengeProgress(winnerId, 'WIN_MATCH', { matchId: match.id });
+      } catch (error) {
+        console.error(`Error actualizando desafío WIN_MATCH para usuario ${winnerId}:`, error);
+      }
+    }
+
     // Confirmar la transacción
     await transaction.commit();
 

@@ -10,6 +10,8 @@ import './models/associations.js';
 
 // Importar job de actualización de estados de partidos
 import { startMatchStatusJob } from './jobs/matchStatusJob.js';
+// Importar jobs de desafíos
+import { startChallengeJobs } from './jobs/challengeAssignmentJob.js';
 
 dotenv.config();
 
@@ -56,6 +58,9 @@ const startServer = async () => {
 
     // Iniciar job de actualización de estados de partidos
     startMatchStatusJob();
+    
+    // Iniciar jobs de asignación de desafíos
+    startChallengeJobs();
   } catch (error) {
     console.error('❌ Error conectando a la base de datos:', error.message);
     console.error('Detalles:', error);

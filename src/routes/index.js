@@ -13,6 +13,8 @@ import matchScoreRoutes from './match-scores.js';
 import userProfileRoutes from './user-profiles.js';
 import experienceRoutes from './experience.js';
 import notificationRoutes from './notifications.js';
+import challengeRoutes from './challenges.js';
+import cosmeticRoutes from './cosmetics.js';
 
 // Rutas principales
 router.use('/auth', authRoutes);
@@ -26,6 +28,8 @@ router.use('/match-scores', matchScoreRoutes);
 router.use('/user-profiles', userProfileRoutes);
 router.use('/experience', experienceRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/challenges', challengeRoutes);
+router.use('/cosmetics', cosmeticRoutes);
 
 // Ruta de salud
 router.get('/health', (req, res) => {
@@ -53,6 +57,8 @@ router.get('/', (req, res) => {
       'user-profiles': '/api/user-profiles',
       experience: '/api/experience',
       notifications: '/api/notifications',
+      challenges: '/api/challenges',
+      cosmetics: '/api/cosmetics',
       health: '/api/health'
     }
   });

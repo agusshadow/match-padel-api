@@ -10,6 +10,11 @@ import CourtReservation from './CourtReservation.js';
 import Match from './Match.js';
 import MatchScore from './MatchScore.js';
 import MatchScoreSet from './MatchScoreSet.js';
+import Challenge from './Challenge.js';
+import UserChallenge from './UserChallenge.js';
+import Cosmetic from './Cosmetic.js';
+import UserCosmetic from './UserCosmetic.js';
+import Purchase from './Purchase.js';
 
 // Asociaciones entre modelos
 
@@ -215,6 +220,98 @@ Notification.belongsTo(User, {
   as: 'user'
 });
 
+// Challenge associations
+Challenge.hasMany(UserChallenge, {
+  foreignKey: 'challengeId',
+  as: 'userChallenges'
+});
+
+Challenge.belongsTo(Cosmetic, {
+  foreignKey: 'rewardCosmeticId',
+  as: 'rewardCosmetic'
+});
+
+// UserChallenge associations
+UserChallenge.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+UserChallenge.belongsTo(Challenge, {
+  foreignKey: 'challengeId',
+  as: 'challenge'
+});
+
+// Cosmetic associations
+Cosmetic.hasMany(UserCosmetic, {
+  foreignKey: 'cosmeticId',
+  as: 'userCosmetics'
+});
+
+Cosmetic.hasMany(Purchase, {
+  foreignKey: 'cosmeticId',
+  as: 'purchases'
+});
+
+Cosmetic.belongsTo(Challenge, {
+  foreignKey: 'challengeId',
+  as: 'challenge'
+});
+
+// UserCosmetic associations
+UserCosmetic.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+UserCosmetic.belongsTo(Cosmetic, {
+  foreignKey: 'cosmeticId',
+  as: 'cosmetic'
+});
+
+UserCosmetic.belongsTo(Purchase, {
+  foreignKey: 'purchaseId',
+  as: 'purchase'
+});
+
+UserCosmetic.belongsTo(Challenge, {
+  foreignKey: 'challengeId',
+  as: 'challenge'
+});
+
+// Purchase associations
+Purchase.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user'
+});
+
+Purchase.belongsTo(Cosmetic, {
+  foreignKey: 'cosmeticId',
+  as: 'cosmetic'
+});
+
+// User associations adicionales
+User.hasMany(UserChallenge, {
+  foreignKey: 'userId',
+  as: 'challenges'
+});
+
+User.hasMany(UserCosmetic, {
+  foreignKey: 'userId',
+  as: 'cosmetics'
+});
+
+User.hasMany(Purchase, {
+  foreignKey: 'userId',
+  as: 'purchases'
+});
+
+// UserProfile associations adicionales
+UserProfile.belongsTo(Cosmetic, {
+  foreignKey: 'equippedPaletteId',
+  as: 'equippedPalette'
+});
+
 export {
   User,
   UserProfile,
@@ -227,5 +324,10 @@ export {
   CourtReservation,
   Match,
   MatchScore,
-  MatchScoreSet
+  MatchScoreSet,
+  Challenge,
+  UserChallenge,
+  Cosmetic,
+  UserCosmetic,
+  Purchase
 };
