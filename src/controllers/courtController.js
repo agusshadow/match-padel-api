@@ -1,12 +1,13 @@
 import * as courtService from '../services/courtService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todas las canchas
 const getAllCourts = async (req, res) => {
   try {
     const courts = await courtService.getAllCourts();
-    res.json({ success: true, data: courts });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, courts);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -15,15 +16,12 @@ const getCourtsByClub = async (req, res) => {
   try {
     const { clubId } = req.query;
     if (!clubId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'clubId es requerido como query parameter' 
-      });
+      return error(res, 'clubId es requerido como query parameter', 400, 'VALIDATION_ERROR');
     }
     const courts = await courtService.getCourtsByClub(clubId);
-    res.json({ success: true, data: courts });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, courts);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -32,9 +30,9 @@ const getCourtById = async (req, res) => {
   try {
     const { id } = req.params;
     const court = await courtService.getCourtById(id);
-    res.json({ success: true, data: court });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, court);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -42,9 +40,9 @@ const getCourtById = async (req, res) => {
 const createCourt = async (req, res) => {
   try {
     const court = await courtService.createCourt(req.body);
-    res.status(201).json({ success: true, data: court });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, court, 201, 'Cancha creada exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -53,9 +51,9 @@ const updateCourt = async (req, res) => {
   try {
     const { id } = req.params;
     const court = await courtService.updateCourt(id, req.body);
-    res.json({ success: true, data: court });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, court, 200, 'Cancha actualizada exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -64,9 +62,9 @@ const deleteCourt = async (req, res) => {
   try {
     const { id } = req.params;
     await courtService.deleteCourt(id);
-    res.json({ success: true, message: 'Cancha eliminada' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, null, 200, 'Cancha eliminada');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 

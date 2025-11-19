@@ -1,12 +1,13 @@
 import * as userService from '../services/userService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todos los usuarios
 const getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers();
-    res.json({ success: true, data: users });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, users);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -15,9 +16,9 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await userService.getUserById(id);
-    res.json({ success: true, data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, user);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -25,9 +26,9 @@ const getUserById = async (req, res) => {
 const createUser = async (req, res) => {
   try {
     const user = await userService.createUser(req.body);
-    res.status(201).json({ success: true, data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, user, 201, 'Usuario creado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -36,9 +37,9 @@ const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await userService.updateUser(id, req.body);
-    res.json({ success: true, data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, user, 200, 'Usuario actualizado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -47,9 +48,9 @@ const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
     await userService.deleteUser(id);
-    res.json({ success: true, message: 'Usuario eliminado' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, null, 200, 'Usuario eliminado');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 

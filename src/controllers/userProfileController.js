@@ -1,19 +1,14 @@
 import * as userProfileService from '../services/userProfileService.js';
 import { uploadProfilePicture as uploadStorage } from '../services/storageService.js';
+import { successObject, error } from '../utils/responseHelper.js';
 
 // Obtener mi perfil
 const getMyProfile = async (req, res) => {
   try {
     const profile = await userProfileService.getUserProfile(req.user.id);
-    res.json({
-      success: true,
-      data: profile
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, profile);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -24,16 +19,9 @@ const updateMyProfile = async (req, res) => {
       req.user.id,
       req.body
     );
-    res.json({
-      success: true,
-      data: profile,
-      message: 'Perfil actualizado correctamente'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, profile, 200, 'Perfil actualizado correctamente');
+  } catch (err) {
+    return error(res, err.message, 400, 'VALIDATION_ERROR');
   }
 };
 
@@ -41,10 +29,7 @@ const updateMyProfile = async (req, res) => {
 const uploadProfilePicture = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No se proporcionó ninguna imagen'
-      });
+      return error(res, 'No se proporcionó ninguna imagen', 400, 'VALIDATION_ERROR');
     }
 
     const imageUrl = await uploadStorage(req.user.id, req.file);
@@ -54,16 +39,9 @@ const uploadProfilePicture = async (req, res) => {
       { picture: imageUrl }
     );
 
-    res.json({
-      success: true,
-      data: profile,
-      message: 'Foto de perfil actualizada correctamente'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, profile, 200, 'Foto de perfil actualizada correctamente');
+  } catch (err) {
+    return error(res, err.message, 400, 'VALIDATION_ERROR');
   }
 };
 

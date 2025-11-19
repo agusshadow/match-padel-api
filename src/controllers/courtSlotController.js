@@ -1,12 +1,13 @@
 import * as courtSlotService from '../services/courtSlotService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todos los slots
 const getAllSlots = async (req, res) => {
   try {
     const slots = await courtSlotService.getAllSlots();
-    res.json({ success: true, data: slots });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, slots);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -15,15 +16,12 @@ const getSlotsByCourt = async (req, res) => {
   try {
     const { courtId } = req.query;
     if (!courtId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'courtId es requerido como query parameter' 
-      });
+      return error(res, 'courtId es requerido como query parameter', 400, 'VALIDATION_ERROR');
     }
     const slots = await courtSlotService.getSlotsByCourt(courtId);
-    res.json({ success: true, data: slots });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, slots);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -32,9 +30,9 @@ const getSlotById = async (req, res) => {
   try {
     const { id } = req.params;
     const slot = await courtSlotService.getSlotById(id);
-    res.json({ success: true, data: slot });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, slot);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -42,9 +40,9 @@ const getSlotById = async (req, res) => {
 const createSlot = async (req, res) => {
   try {
     const slot = await courtSlotService.createSlot(req.body);
-    res.status(201).json({ success: true, data: slot });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, slot, 201, 'Slot creado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -53,9 +51,9 @@ const updateSlot = async (req, res) => {
   try {
     const { id } = req.params;
     const slot = await courtSlotService.updateSlot(id, req.body);
-    res.json({ success: true, data: slot });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, slot, 200, 'Slot actualizado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -64,9 +62,9 @@ const deleteSlot = async (req, res) => {
   try {
     const { id } = req.params;
     await courtSlotService.deleteSlot(id);
-    res.json({ success: true, message: 'Slot eliminado' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, null, 200, 'Slot eliminado');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -75,15 +73,12 @@ const getAvailableSlotsByCourtAndDay = async (req, res) => {
   try {
     const { courtId, dayOfWeek } = req.query;
     if (!courtId || dayOfWeek === undefined) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'courtId y dayOfWeek son requeridos como query parameters' 
-      });
+      return error(res, 'courtId y dayOfWeek son requeridos como query parameters', 400, 'VALIDATION_ERROR');
     }
     const slots = await courtSlotService.getAvailableSlotsByCourtAndDay(courtId, dayOfWeek);
-    res.json({ success: true, data: slots });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, slots);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -92,25 +87,19 @@ const getAvailableSlotsByCourtAndDate = async (req, res) => {
   try {
     const { courtId, date } = req.query;
     if (!courtId || !date) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'courtId y date son requeridos como query parameters. Formato de date: YYYY-MM-DD' 
-      });
+      return error(res, 'courtId y date son requeridos como query parameters. Formato de date: YYYY-MM-DD', 400, 'VALIDATION_ERROR');
     }
 
     // Validar formato de fecha
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Formato de fecha inválido. Use YYYY-MM-DD' 
-      });
+      return error(res, 'Formato de fecha inválido. Use YYYY-MM-DD', 400, 'VALIDATION_ERROR');
     }
 
     const slots = await courtSlotService.getAvailableSlotsByCourtAndDate(courtId, date);
-    res.json({ success: true, data: slots });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, slots);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 

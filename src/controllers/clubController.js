@@ -1,12 +1,13 @@
 import * as clubService from '../services/clubService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todos los clubes
 const getAllClubs = async (req, res) => {
   try {
     const clubs = await clubService.getAllClubs();
-    res.json({ success: true, data: clubs });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, clubs);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -15,9 +16,9 @@ const getClubById = async (req, res) => {
   try {
     const { id } = req.params;
     const club = await clubService.getClubById(id);
-    res.json({ success: true, data: club });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, club);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -25,9 +26,9 @@ const getClubById = async (req, res) => {
 const createClub = async (req, res) => {
   try {
     const club = await clubService.createClub(req.body);
-    res.status(201).json({ success: true, data: club });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, club, 201, 'Club creado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -36,9 +37,9 @@ const updateClub = async (req, res) => {
   try {
     const { id } = req.params;
     const club = await clubService.updateClub(id, req.body);
-    res.json({ success: true, data: club });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, club, 200, 'Club actualizado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -47,9 +48,9 @@ const deleteClub = async (req, res) => {
   try {
     const { id } = req.params;
     await clubService.deleteClub(id);
-    res.json({ success: true, message: 'Club eliminado' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, null, 200, 'Club eliminado');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 

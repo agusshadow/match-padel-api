@@ -1,5 +1,6 @@
 import * as challengeService from '../services/challengeService.js';
 import Challenge from '../models/Challenge.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 /**
  * Obtener todos los desafíos disponibles (admin) o activos (usuario)
@@ -25,9 +26,9 @@ const getAllChallenges = async (req, res) => {
       order: [['type', 'ASC'], ['createdAt', 'ASC']]
     });
 
-    res.json({ success: true, data: challenges });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, challenges);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -48,10 +49,7 @@ const getMyChallenges = async (req, res) => {
     if (type) {
       const validTypes = ['daily', 'weekly', 'monthly'];
       if (!validTypes.includes(type.toLowerCase())) {
-        return res.status(400).json({
-          success: false,
-          message: `Tipo inválido. Valores permitidos: ${validTypes.join(', ')}`
-        });
+        return error(res, `Tipo inválido. Valores permitidos: ${validTypes.join(', ')}`, 400, 'VALIDATION_ERROR');
       }
       filters.type = type.toLowerCase();
     }
@@ -60,10 +58,7 @@ const getMyChallenges = async (req, res) => {
     if (status) {
       const validStatuses = ['pending', 'completed', 'claimed', 'expired'];
       if (!validStatuses.includes(status.toLowerCase())) {
-        return res.status(400).json({
-          success: false,
-          message: `Estado inválido. Valores permitidos: ${validStatuses.join(', ')}`
-        });
+        return error(res, `Estado inválido. Valores permitidos: ${validStatuses.join(', ')}`, 400, 'VALIDATION_ERROR');
       }
       filters.status = status.toLowerCase();
     }
@@ -84,15 +79,12 @@ const getMyChallenges = async (req, res) => {
       }
     });
 
-    res.json({
-      success: true,
-      data: {
-        challenges: userChallenges,
-        stats
-      }
+    return successObject(res, {
+      challenges: userChallenges,
+      stats
     });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -108,15 +100,12 @@ const getMyChallengeById = async (req, res) => {
     const userChallenge = userChallenges.find(uc => uc.id === parseInt(id));
 
     if (!userChallenge) {
-      return res.status(404).json({
-        success: false,
-        message: 'Desafío no encontrado'
-      });
+      return error(res, 'Desafío no encontrado', 404, 'NOT_FOUND');
     }
 
-    res.json({ success: true, data: userChallenge });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, userChallenge);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -153,21 +142,18 @@ const claimChallengeReward = async (req, res) => {
       );
     }
 
-    res.json({
-      success: true,
-      data: {
-        challenge: result.challenge,
-        userChallenge: result.userChallenge,
-        rewards: {
-          xp: result.rewards.xp,
-          cosmetic: result.rewards.cosmetic
-        },
-        xpResult,
-        cosmeticResult
-      }
-    });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    return successObject(res, {
+      challenge: result.challenge,
+      userChallenge: result.userChallenge,
+      rewards: {
+        xp: result.rewards.xp,
+        cosmetic: result.rewards.cosmetic
+      },
+      xpResult,
+      cosmeticResult
+    }, 200, 'Recompensa reclamada exitosamente');
+  } catch (err) {
+    return error(res, err.message, 400, 'VALIDATION_ERROR');
   }
 };
 

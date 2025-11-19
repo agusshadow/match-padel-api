@@ -1,4 +1,5 @@
 import * as matchScoreService from '../services/matchScoreService.js';
+import { successObject, error } from '../utils/responseHelper.js';
 
 // Crear un score para un match (solo el creador)
 const createMatchScore = async (req, res) => {
@@ -8,28 +9,22 @@ const createMatchScore = async (req, res) => {
     const { winnerTeam, sets } = req.body;
 
     if (!winnerTeam || !sets) {
-      return res.status(400).json({
-        success: false,
-        message: 'Debe proporcionar winnerTeam y sets'
-      });
+      return error(res, 'Debe proporcionar winnerTeam y sets', 400, 'VALIDATION_ERROR');
     }
 
     const matchScore = await matchScoreService.createMatchScore(matchId, userId, { winnerTeam, sets });
 
-    res.status(201).json({
-      success: true,
-      data: matchScore,
-      message: 'Resultado cargado exitosamente, pendiente de confirmación'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrado') ||
-                      error.message.includes('puede cargar') ||
-                      error.message.includes('estado') ||
-                      error.message.includes('Ya existe') ||
-                      error.message.includes('Debe proporcionar') ||
-                      error.message.includes('coincide') ||
-                      error.message.includes('empate') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successObject(res, matchScore, 201, 'Resultado cargado exitosamente, pendiente de confirmación');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrado') ||
+                      err.message.includes('puede cargar') ||
+                      err.message.includes('estado') ||
+                      err.message.includes('Ya existe') ||
+                      err.message.includes('Debe proporcionar') ||
+                      err.message.includes('coincide') ||
+                      err.message.includes('empate') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
@@ -40,18 +35,12 @@ const getMatchScore = async (req, res) => {
     const matchScore = await matchScoreService.getMatchScore(matchId);
 
     if (!matchScore) {
-      return res.status(404).json({
-        success: false,
-        message: 'No existe un resultado cargado para este partido'
-      });
+      return error(res, 'No existe un resultado cargado para este partido', 404, 'NOT_FOUND');
     }
 
-    res.json({
-      success: true,
-      data: matchScore
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, matchScore);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -64,17 +53,14 @@ const confirmMatchScore = async (req, res) => {
 
     const matchScore = await matchScoreService.confirmMatchScore(matchId, userId, comment);
 
-    res.json({
-      success: true,
-      data: matchScore,
-      message: 'Resultado confirmado exitosamente. El partido ha sido completado.'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrado') ||
-                      error.message.includes('puede confirmar') ||
-                      error.message.includes('No existe') ||
-                      error.message.includes('ya fue') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successObject(res, matchScore, 200, 'Resultado confirmado exitosamente. El partido ha sido completado.');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrado') ||
+                      err.message.includes('puede confirmar') ||
+                      err.message.includes('No existe') ||
+                      err.message.includes('ya fue') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
@@ -86,26 +72,20 @@ const rejectMatchScore = async (req, res) => {
     const { comment } = req.body;
 
     if (!comment || comment.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Debe proporcionar un comentario al rechazar el resultado'
-      });
+      return error(res, 'Debe proporcionar un comentario al rechazar el resultado', 400, 'VALIDATION_ERROR');
     }
 
     const matchScore = await matchScoreService.rejectMatchScore(matchId, userId, comment);
 
-    res.json({
-      success: true,
-      data: matchScore,
-      message: 'Resultado rechazado. El creador puede actualizar el resultado.'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrado') ||
-                      error.message.includes('puede rechazar') ||
-                      error.message.includes('Debe proporcionar') ||
-                      error.message.includes('No existe') ||
-                      error.message.includes('ya fue') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successObject(res, matchScore, 200, 'Resultado rechazado. El creador puede actualizar el resultado.');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrado') ||
+                      err.message.includes('puede rechazar') ||
+                      err.message.includes('Debe proporcionar') ||
+                      err.message.includes('No existe') ||
+                      err.message.includes('ya fue') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
@@ -117,28 +97,22 @@ const updateMatchScore = async (req, res) => {
     const { winnerTeam, sets } = req.body;
 
     if (!winnerTeam || !sets) {
-      return res.status(400).json({
-        success: false,
-        message: 'Debe proporcionar winnerTeam y sets'
-      });
+      return error(res, 'Debe proporcionar winnerTeam y sets', 400, 'VALIDATION_ERROR');
     }
 
     const matchScore = await matchScoreService.updateMatchScore(matchId, userId, { winnerTeam, sets });
 
-    res.json({
-      success: true,
-      data: matchScore,
-      message: 'Resultado actualizado exitosamente, pendiente de confirmación'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrado') ||
-                      error.message.includes('puede actualizar') ||
-                      error.message.includes('Solo se puede actualizar') ||
-                      error.message.includes('No existe') ||
-                      error.message.includes('Debe proporcionar') ||
-                      error.message.includes('coincide') ||
-                      error.message.includes('empate') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successObject(res, matchScore, 200, 'Resultado actualizado exitosamente, pendiente de confirmación');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrado') ||
+                      err.message.includes('puede actualizar') ||
+                      err.message.includes('Solo se puede actualizar') ||
+                      err.message.includes('No existe') ||
+                      err.message.includes('Debe proporcionar') ||
+                      err.message.includes('coincide') ||
+                      err.message.includes('empate') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 

@@ -1,4 +1,5 @@
 import * as notificationService from '../services/notificationService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todas las notificaciones del usuario
 const getMyNotifications = async (req, res) => {
@@ -10,15 +11,9 @@ const getMyNotifications = async (req, res) => {
       read: read !== undefined ? read === 'true' : null
     });
 
-    res.json({
-      success: true,
-      data: notifications
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    return successList(res, notifications);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -29,16 +24,10 @@ const getUnreadNotifications = async (req, res) => {
     const notifications = await notificationService.getUnreadNotifications(req.user.id, limit);
     const unreadCount = await notificationService.countUnreadNotifications(req.user.id);
 
-    res.json({
-      success: true,
-      data: notifications,
-      unreadCount
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    // Incluir unreadCount dentro de data como objeto
+    return successObject(res, { notifications, unreadCount });
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -46,15 +35,9 @@ const getUnreadNotifications = async (req, res) => {
 const getUnreadCount = async (req, res) => {
   try {
     const count = await notificationService.countUnreadNotifications(req.user.id);
-    res.json({
-      success: true,
-      data: { unreadCount: count }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, { unreadCount: count });
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -64,17 +47,11 @@ const markAsRead = async (req, res) => {
     const { id } = req.params;
     const notification = await notificationService.markAsRead(id, req.user.id);
 
-    res.json({
-      success: true,
-      data: notification,
-      message: 'Notificación marcada como leída'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrada') ? 404 : 500;
-    res.status(statusCode).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, notification, 200, 'Notificación marcada como leída');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrada') ? 404 : 500;
+    const errorCode = statusCode === 404 ? 'NOT_FOUND' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
@@ -83,16 +60,9 @@ const markAllAsRead = async (req, res) => {
   try {
     const updatedCount = await notificationService.markAllAsRead(req.user.id);
 
-    res.json({
-      success: true,
-      data: { updatedCount },
-      message: `${updatedCount} notificaciones marcadas como leídas`
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, { updatedCount }, 200, `${updatedCount} notificaciones marcadas como leídas`);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -102,16 +72,11 @@ const deleteNotification = async (req, res) => {
     const { id } = req.params;
     await notificationService.deleteNotification(id, req.user.id);
 
-    res.json({
-      success: true,
-      message: 'Notificación eliminada'
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrada') ? 404 : 500;
-    res.status(statusCode).json({
-      success: false,
-      message: error.message
-    });
+    return successObject(res, null, 200, 'Notificación eliminada');
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrada') ? 404 : 500;
+    const errorCode = statusCode === 404 ? 'NOT_FOUND' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 

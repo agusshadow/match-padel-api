@@ -1,12 +1,13 @@
 import * as matchService from '../services/matchService.js';
+import { successList, successObject, error } from '../utils/responseHelper.js';
 
 // Obtener todos los matches
 const getAllMatches = async (req, res) => {
   try {
     const matches = await matchService.getAllMatches();
-    res.json({ success: true, data: matches });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, matches);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -15,9 +16,9 @@ const getMatchById = async (req, res) => {
   try {
     const { id } = req.params;
     const match = await matchService.getMatchById(id);
-    res.json({ success: true, data: match });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -26,9 +27,9 @@ const getMatchByIdDetailed = async (req, res) => {
   try {
     const { id } = req.params;
     const match = await matchService.getMatchByIdDetailed(id);
-    res.json({ success: true, data: match });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -48,16 +49,13 @@ const createMatch = async (req, res) => {
     
     // Si el body intenta establecer un team1Player1Id diferente, rechazarlo
     if (req.body.team1Player1Id && req.body.team1Player1Id !== userId) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Solo puedes crear partidos como team1Player1 (anfitrión). No puedes establecer un team1Player1Id diferente' 
-      });
+      return error(res, 'Solo puedes crear partidos como team1Player1 (anfitrión). No puedes establecer un team1Player1Id diferente', 403, 'FORBIDDEN');
     }
     
     const match = await matchService.createMatch(matchData);
-    res.status(201).json({ success: true, data: match });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 201, 'Partido creado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -76,13 +74,9 @@ const createMatchWithReservation = async (req, res) => {
     };
 
     const match = await matchService.createMatchWithReservation(matchData);
-    res.status(201).json({ 
-      success: true, 
-      data: match,
-      message: 'Partido creado exitosamente con reserva de cancha'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 201, 'Partido creado exitosamente con reserva de cancha');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -91,9 +85,9 @@ const updateMatch = async (req, res) => {
   try {
     const { id } = req.params;
     const match = await matchService.updateMatch(id, req.body);
-    res.json({ success: true, data: match });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 200, 'Partido actualizado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -102,9 +96,9 @@ const deleteMatch = async (req, res) => {
   try {
     const { id } = req.params;
     await matchService.deleteMatch(id);
-    res.json({ success: true, message: 'Match eliminado' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, null, 200, 'Partido eliminado');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -112,51 +106,54 @@ const deleteMatch = async (req, res) => {
 const getAllMatchesDetailed = async (req, res) => {
   try {
     const matches = await matchService.getAllMatchesDetailed();
-    res.json({ success: true, data: matches });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, matches);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
 // Unirse a un partido
 const joinMatch = async (req, res) => {
   try {
-    const { id: matchId } = req.params; // Obtener el ID del match de la URL
-    const userId = req.user.id; // Obtener el ID del usuario autenticado
-    const { team } = req.body; // Equipo deseado (opcional): 1 o 2
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
+    const { team } = req.body;
 
     const result = await matchService.joinMatch(matchId, userId, team);
     
-    res.json({ 
-      success: true, 
-      data: result.match,
-      position: result.position,
-      message: result.message 
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('debe ser') || 
-                      error.message.includes('completo') ||
-                      error.message.includes('participando') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    // Incluir position dentro del objeto match en data
+    const matchWithPosition = {
+      ...result.match,
+      userPosition: result.position
+    };
+    
+    return successObject(res, matchWithPosition, 200, result.message);
+  } catch (err) {
+    const statusCode = err.message.includes('debe ser') || 
+                      err.message.includes('completo') ||
+                      err.message.includes('participando') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
 // Abandonar un partido
 const leaveMatch = async (req, res) => {
   try {
-    const { id: matchId } = req.params; // Obtener el ID del match de la URL
-    const userId = req.user.id; // Obtener el ID del usuario autenticado
+    const { id: matchId } = req.params;
+    const userId = req.user.id;
 
     const result = await matchService.leaveMatch(matchId, userId);
     
-    res.json({ 
-      success: true, 
-      data: result.match,
-      position: result.position,
-      message: result.message 
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // Incluir position dentro del objeto match en data
+    const matchWithPosition = {
+      ...result.match,
+      userPosition: result.position
+    };
+    
+    return successObject(res, matchWithPosition, 200, result.message);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -167,14 +164,9 @@ const startMatch = async (req, res) => {
     const userId = req.user.id;
 
     const match = await matchService.startMatch(matchId, userId);
-    
-    res.json({ 
-      success: true, 
-      data: match,
-      message: 'Partido iniciado exitosamente' 
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 200, 'Partido iniciado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -185,14 +177,9 @@ const finishMatch = async (req, res) => {
     const userId = req.user.id;
 
     const match = await matchService.finishMatch(matchId, userId);
-    
-    res.json({ 
-      success: true, 
-      data: match,
-      message: 'Partido finalizado, pendiente de confirmación' 
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 200, 'Partido finalizado, pendiente de confirmación');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -203,14 +190,9 @@ const confirmMatch = async (req, res) => {
     const userId = req.user.id;
 
     const match = await matchService.confirmMatch(matchId, userId);
-    
-    res.json({ 
-      success: true, 
-      data: match,
-      message: 'Partido confirmado y completado' 
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 200, 'Partido confirmado y completado');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -221,14 +203,9 @@ const cancelMatch = async (req, res) => {
     const userId = req.user.id;
 
     const match = await matchService.cancelMatch(matchId, userId);
-    
-    res.json({ 
-      success: true, 
-      data: match,
-      message: 'Partido cancelado exitosamente' 
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successObject(res, match, 200, 'Partido cancelado exitosamente');
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -236,32 +213,29 @@ const cancelMatch = async (req, res) => {
 const getUserMatches = async (req, res) => {
   try {
     const userId = req.user.id;
-    // ⭐ Nuevo: Soporta filtros opcionales (status, upcoming, past)
     const filters = {
       status: req.query.status || null,
       upcoming: req.query.upcoming === 'true',
       past: req.query.past === 'true'
     };
     const matches = await matchService.getUserMatches(userId, filters);
-    res.json({ success: true, data: matches });
-  } catch (error) {
-    // Si es error de validación, devolver 400, sino 500
-    const statusCode = error.message.includes('Status inválido') ? 400 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successList(res, matches);
+  } catch (err) {
+    const statusCode = err.message.includes('Status inválido') ? 400 : 500;
+    const errorCode = statusCode === 400 ? 'VALIDATION_ERROR' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
 // Obtener partidos disponibles para unirse
 const getAvailableMatches = async (req, res) => {
   try {
-    // El usuario está autenticado (la ruta está protegida)
-    // Usar su ID para excluir partidos donde ya está participando
     const userId = req.user.id;
     const { dateFilter, availableSpaces } = req.query;
     const matches = await matchService.getAvailableMatches(userId, { dateFilter, availableSpaces });
-    res.json({ success: true, data: matches });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return successList(res, matches);
+  } catch (err) {
+    return error(res, err.message, 500, 'SERVER_ERROR');
   }
 };
 
@@ -270,14 +244,11 @@ const getMatchTeamAvailability = async (req, res) => {
   try {
     const { id: matchId } = req.params;
     const result = await matchService.getMatchTeamAvailability(matchId);
-    res.json({ 
-      success: true, 
-      data: result,
-      message: `Equipo 1 disponible: ${result.teams.team1.hasSpace}, Equipo 2 disponible: ${result.teams.team2.hasSpace}` 
-    });
-  } catch (error) {
-    const statusCode = error.message.includes('no encontrado') ? 404 : 500;
-    res.status(statusCode).json({ success: false, message: error.message });
+    return successObject(res, result);
+  } catch (err) {
+    const statusCode = err.message.includes('no encontrado') ? 404 : 500;
+    const errorCode = statusCode === 404 ? 'NOT_FOUND' : 'SERVER_ERROR';
+    return error(res, err.message, statusCode, errorCode);
   }
 };
 
