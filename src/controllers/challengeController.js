@@ -131,15 +131,14 @@ const claimChallengeReward = async (req, res) => {
       );
     }
 
-    // Si hay cosmético, otorgarlo
+    // Nota: La lógica de otorgar cosméticos por desafíos está deshabilitada en v1
+    // Si hay cosmético, solo se retorna el ID pero no se otorga automáticamente
     let cosmeticResult = null;
     if (result.rewards.cosmetic) {
-      const { grantChallengeCosmetic } = await import('../services/cosmeticService.js');
-      cosmeticResult = await grantChallengeCosmetic(
-        userId,
-        result.rewards.cosmetic,
-        result.challenge.id
-      );
+      cosmeticResult = {
+        cosmeticId: result.rewards.cosmetic,
+        message: 'El cosmético debe ser equipado manualmente desde el endpoint de cosméticos'
+      };
     }
 
     return successObject(res, {

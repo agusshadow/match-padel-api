@@ -14,7 +14,6 @@ import Challenge from './Challenge.js';
 import UserChallenge from './UserChallenge.js';
 import Cosmetic from './Cosmetic.js';
 import UserCosmetic from './UserCosmetic.js';
-import Purchase from './Purchase.js';
 
 // Asociaciones entre modelos
 
@@ -248,10 +247,6 @@ Cosmetic.hasMany(UserCosmetic, {
   as: 'userCosmetics'
 });
 
-Cosmetic.hasMany(Purchase, {
-  foreignKey: 'cosmeticId',
-  as: 'purchases'
-});
 
 Cosmetic.belongsTo(Challenge, {
   foreignKey: 'challengeId',
@@ -269,25 +264,10 @@ UserCosmetic.belongsTo(Cosmetic, {
   as: 'cosmetic'
 });
 
-UserCosmetic.belongsTo(Purchase, {
-  foreignKey: 'purchaseId',
-  as: 'purchase'
-});
 
 UserCosmetic.belongsTo(Challenge, {
   foreignKey: 'challengeId',
   as: 'challenge'
-});
-
-// Purchase associations
-Purchase.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user'
-});
-
-Purchase.belongsTo(Cosmetic, {
-  foreignKey: 'cosmeticId',
-  as: 'cosmetic'
 });
 
 // User associations adicionales
@@ -301,10 +281,6 @@ User.hasMany(UserCosmetic, {
   as: 'cosmetics'
 });
 
-User.hasMany(Purchase, {
-  foreignKey: 'userId',
-  as: 'purchases'
-});
 
 // UserProfile associations adicionales
 UserProfile.belongsTo(Cosmetic, {
@@ -328,6 +304,5 @@ export {
   Challenge,
   UserChallenge,
   Cosmetic,
-  UserCosmetic,
-  Purchase
+  UserCosmetic
 };

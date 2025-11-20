@@ -1,15 +1,59 @@
 import UserProfile from '../models/UserProfile.js';
 
-// Obtener perfil del usuario
+// Obtener perfil del usuario con estructura organizada
 const getUserProfile = async (userId) => {
-  let profile = await UserProfile.findOne({ where: { userId } });
+  let profile = await UserProfile.findOne({ 
+    where: { userId },
+    include: [
+      {
+        association: 'equippedPalette',
+        required: false
+      }
+    ]
+  });
   
   // Si no existe, crear uno vacío
   if (!profile) {
     profile = await UserProfile.create({ userId });
+    // Recargar con la relación incluida
+    profile = await UserProfile.findOne({ 
+      where: { userId },
+      include: [
+        {
+          association: 'equippedPalette',
+          required: false
+        }
+      ]
+    });
   }
   
-  return profile;
+  // Organizar la respuesta en objetos agrupados
+  const profileData = profile.toJSON();
+  
+  return {
+    id: profileData.id,
+    userId: profileData.userId,
+    personalInformation: {
+      location: profileData.location,
+      picture: profileData.picture,
+      createdAt: profileData.createdAt,
+      updatedAt: profileData.updatedAt
+    },
+    gamePreferences: {
+      favoritePosition: profileData.favoritePosition,
+      gameStyle: profileData.gameStyle,
+      dominantHand: profileData.dominantHand
+    },
+    gameSkills: {
+      skillServe: profileData.skillServe,
+      skillVolley: profileData.skillVolley,
+      skillForehand: profileData.skillForehand,
+      skillWall: profileData.skillWall,
+      skillSmash: profileData.skillSmash,
+      skillAgility: profileData.skillAgility
+    },
+    equippedPalette: profileData.equippedPalette || null
+  };
 };
 
 // Crear o actualizar perfil del usuario

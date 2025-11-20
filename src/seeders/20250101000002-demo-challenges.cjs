@@ -14,13 +14,6 @@ module.exports = {
       return;
     }
 
-    // Obtener el ID de la paleta "Paleta Campeona" (challenge reward)
-    const [cosmetics] = await queryInterface.sequelize.query(
-      "SELECT id FROM cosmetics WHERE name = 'Paleta Campeona' LIMIT 1",
-      { type: Sequelize.QueryTypes.SELECT }
-    );
-
-    const championPaletteId = cosmetics ? cosmetics.id : null;
 
     await queryInterface.bulkInsert('challenges', [
       // DESAFÍOS DIARIOS
@@ -106,7 +99,7 @@ module.exports = {
         targetValue: 3,
         rewardType: 'both',
         rewardXp: 150,
-        rewardCosmeticId: championPaletteId, // Paleta Campeona como recompensa
+        rewardCosmeticId: null,
         isActive: true,
         metadata: JSON.stringify({
           consecutive: true,
@@ -176,21 +169,6 @@ module.exports = {
         updatedAt: new Date()
       }
     ], {});
-
-    // Actualizar el challengeId de la paleta "Paleta Campeona" si existe
-    if (championPaletteId) {
-      const [challenge] = await queryInterface.sequelize.query(
-        "SELECT id FROM challenges WHERE title = 'Racha de 3 victorias' AND type = 'weekly' LIMIT 1",
-        { type: Sequelize.QueryTypes.SELECT }
-      );
-
-      if (challenge) {
-        await queryInterface.sequelize.query(
-          `UPDATE cosmetics SET "challengeId" = ${challenge.id} WHERE id = ${championPaletteId}`,
-          { type: Sequelize.QueryTypes.UPDATE }
-        );
-      }
-    }
   },
 
   async down (queryInterface, Sequelize) {
