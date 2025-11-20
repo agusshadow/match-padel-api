@@ -33,10 +33,10 @@ const getAllChallenges = async (req, res) => {
 };
 
 /**
- * Obtener mis desafíos activos
+ * Obtener mis desafíos activos (por defecto excluye expirados)
  * Query params opcionales:
  * - type: 'daily' | 'weekly' | 'monthly' - Filtrar por tipo de desafío
- * - status: 'pending' | 'completed' | 'claimed' | 'expired' - Filtrar por estado
+ * - status: 'pending' | 'completed' | 'claimed' | 'expired' - Filtrar por estado (si no se especifica, excluye expirados)
  */
 const getMyChallenges = async (req, res) => {
   try {

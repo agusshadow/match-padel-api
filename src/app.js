@@ -59,8 +59,8 @@ const startServer = async () => {
     // Iniciar job de actualización de estados de partidos
     startMatchStatusJob();
     
-    // Iniciar jobs de asignación de desafíos
-    startChallengeJobs();
+    // Iniciar jobs de asignación de desafíos (con asignación inicial)
+    await startChallengeJobs();
   } catch (error) {
     console.error('❌ Error conectando a la base de datos:', error.message);
     console.error('Detalles:', error);

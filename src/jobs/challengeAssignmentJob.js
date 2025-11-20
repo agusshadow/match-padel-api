@@ -150,9 +150,58 @@ const startCleanupJob = () => {
 };
 
 /**
+ * Ejecutar asignación inicial de desafíos al iniciar el servidor
+ * Esto asegura que los usuarios tengan desafíos activos incluso si el servidor
+ * se reinició después de las 00:00
+ */
+const runInitialChallengeAssignment = async () => {
+  try {
+    console.log('🔄 Ejecutando asignación inicial de desafíos...');
+    
+    // Primero limpiar desafíos expirados
+    const cleaned = await cleanupExpiredChallenges();
+    if (cleaned > 0) {
+      console.log(`🧹 ${cleaned} desafíos expirados limpiados`);
+    }
+    
+    // Obtener todos los usuarios activos
+    const users = await User.findAll();
+    
+    let dailyAssigned = 0;
+    let weeklyAssigned = 0;
+    let monthlyAssigned = 0;
+    
+    for (const user of users) {
+      // Asignar desafíos diarios si no tiene activos del día actual
+      const daily = await assignDailyChallenges(user.id);
+      dailyAssigned += daily.length;
+      
+      // Asignar desafíos semanales si no tiene activos de la semana actual
+      const weekly = await assignWeeklyChallenges(user.id);
+      weeklyAssigned += weekly.length;
+      
+      // Asignar desafíos mensuales si no tiene activos del mes actual
+      const monthly = await assignMonthlyChallenges(user.id);
+      monthlyAssigned += monthly.length;
+    }
+    
+    console.log(`✅ Asignación inicial completada:`);
+    console.log(`   - Desafíos diarios: ${dailyAssigned} asignados a ${users.length} usuarios`);
+    console.log(`   - Desafíos semanales: ${weeklyAssigned} asignados a ${users.length} usuarios`);
+    console.log(`   - Desafíos mensuales: ${monthlyAssigned} asignados a ${users.length} usuarios`);
+  } catch (error) {
+    console.error('❌ Error en asignación inicial de desafíos:', error);
+  }
+};
+
+/**
  * Iniciar todos los jobs de desafíos
  */
-const startChallengeJobs = () => {
+const startChallengeJobs = async () => {
+  // Ejecutar asignación inicial inmediatamente
+  await runInitialChallengeAssignment();
+  
+  // Iniciar jobs programados
   startDailyChallengesJob();
   startWeeklyChallengesJob();
   startMonthlyChallengesJob();

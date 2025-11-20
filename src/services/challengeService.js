@@ -150,14 +150,26 @@ const updateChallengeProgress = async (userId, actionType, metadata = {}) => {
 
 /**
  * Obtener desafíos del usuario con filtros opcionales
+ * Por defecto, solo retorna desafíos activos (no expirados)
  */
 const getUserChallenges = async (userId, filters = {}) => {
+  const now = new Date();
   const where = {
     userId
   };
 
+  // Si se especifica un estado, usarlo; si no, excluir expirados por defecto
   if (filters.status) {
     where.status = filters.status;
+  } else {
+    // Por defecto, excluir desafíos expirados
+    where.status = {
+      [Op.ne]: USER_CHALLENGE_STATUS.EXPIRED
+    };
+    // También excluir desafíos que ya expiraron por fecha (aunque no estén marcados como expired)
+    where.expiresAt = {
+      [Op.gte]: now
+    };
   }
 
   // Construir el where del include para el Challenge
