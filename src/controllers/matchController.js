@@ -121,9 +121,10 @@ const joinMatch = async (req, res) => {
 
     const result = await matchService.joinMatch(matchId, userId, team);
     
-    // Incluir position dentro del objeto match en data
+    // Convertir el objeto Sequelize a JSON y agregar userPosition
+    const matchData = result.match.toJSON ? result.match.toJSON() : result.match;
     const matchWithPosition = {
-      ...result.match,
+      ...matchData,
       userPosition: result.position
     };
     
@@ -145,9 +146,10 @@ const leaveMatch = async (req, res) => {
 
     const result = await matchService.leaveMatch(matchId, userId);
     
-    // Incluir position dentro del objeto match en data
+    // Convertir el objeto Sequelize a JSON y agregar userPosition
+    const matchData = result.match.toJSON ? result.match.toJSON() : result.match;
     const matchWithPosition = {
-      ...result.match,
+      ...matchData,
       userPosition: result.position
     };
     
