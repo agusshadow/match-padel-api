@@ -231,16 +231,36 @@ const getAllMatchesDetailed = async () => {
         ]
       },
       {
-        association: 'team1Player1'
+        association: 'team1Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team1Player2'
+        association: 'team1Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player1'
+        association: 'team2Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player2'
+        association: 'team2Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       }
     ],
     order: [['matchDateTime', 'ASC']] // ⭐ Ordenar por fecha del partido
@@ -270,16 +290,36 @@ const getMatchByIdDetailed = async (id) => {
         ]
       },
       {
-        association: 'team1Player1'
+        association: 'team1Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team1Player2'
+        association: 'team1Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player1'
+        association: 'team2Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player2'
+        association: 'team2Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       }
     ]
   });
@@ -905,16 +945,36 @@ const getUserMatches = async (userId, filters = {}) => {
         ]
       },
       {
-        association: 'team1Player1'
+        association: 'team1Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team1Player2'
+        association: 'team1Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player1'
+        association: 'team2Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player2'
+        association: 'team2Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       }
     ],
     order: [['matchDateTime', 'ASC']] // ⭐ Ordenar por fecha del partido (próximos primero)
@@ -1007,16 +1067,36 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
         ]
       },
       {
-        association: 'team1Player1'
+        association: 'team1Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team1Player2'
+        association: 'team1Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player1'
+        association: 'team2Player1',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       },
       {
-        association: 'team2Player2'
+        association: 'team2Player2',
+        include: [
+          {
+            association: 'profile'
+          }
+        ]
       }
     ],
     order: [
