@@ -44,7 +44,7 @@ module.exports = {
         name: 'Paleta MatchPadel',
         description: 'Paleta de padel oficial de MatchPadel',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-matchpadel.svg',
+        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-matchpadel-2.svg',
         acquisitionMethod: 'free',
         price: null,
         challengeId: null,

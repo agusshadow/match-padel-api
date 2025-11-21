@@ -1,7 +1,6 @@
 import * as matchService from '../services/matchService.js';
 import { successList, successObject, error } from '../utils/responseHelper.js';
 
-// Obtener todos los matches
 const getAllMatches = async (req, res) => {
   try {
     const matches = await matchService.getAllMatches();
@@ -11,7 +10,6 @@ const getAllMatches = async (req, res) => {
   }
 };
 
-// Obtener un match por ID
 const getMatchById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -22,7 +20,6 @@ const getMatchById = async (req, res) => {
   }
 };
 
-// Obtener un match por ID con información detallada
 const getMatchByIdDetailed = async (req, res) => {
   try {
     const { id } = req.params;
@@ -33,21 +30,16 @@ const getMatchByIdDetailed = async (req, res) => {
   }
 };
 
-// Crear un nuevo match
 const createMatch = async (req, res) => {
   try {
-    // Obtener el ID del usuario autenticado
     const userId = req.user.id;
     
-    // Establecer team1Player1Id y createdBy desde el usuario autenticado
-    // El usuario autenticado es siempre team1Player1 y el creador
     const matchData = {
       ...req.body,
-      team1Player1Id: userId, // El usuario autenticado es siempre team1Player1
-      createdBy: userId // El usuario autenticado es el creador
+      team1Player1Id: userId,
+      createdBy: userId
     };
     
-    // Si el body intenta establecer un team1Player1Id diferente, rechazarlo
     if (req.body.team1Player1Id && req.body.team1Player1Id !== userId) {
       return error(res, 'Solo puedes crear partidos como team1Player1 (anfitrión). No puedes establecer un team1Player1Id diferente', 403, 'FORBIDDEN');
     }
@@ -59,18 +51,15 @@ const createMatch = async (req, res) => {
   }
 };
 
-// Crear un nuevo match con reserva de cancha
 const createMatchWithReservation = async (req, res) => {
   try {
-    // Obtener el ID del usuario autenticado
     const userId = req.user.id;
     
-    // Combinar los datos del body con el userId
     const matchData = {
       ...req.body,
       userId,
-      team1Player1Id: userId, // El usuario autenticado es siempre team1Player1
-      createdBy: userId // El usuario autenticado es el creador
+      team1Player1Id: userId,
+      createdBy: userId
     };
 
     const match = await matchService.createMatchWithReservation(matchData);
@@ -80,7 +69,6 @@ const createMatchWithReservation = async (req, res) => {
   }
 };
 
-// Actualizar un match
 const updateMatch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -91,7 +79,6 @@ const updateMatch = async (req, res) => {
   }
 };
 
-// Eliminar un match
 const deleteMatch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -102,7 +89,6 @@ const deleteMatch = async (req, res) => {
   }
 };
 
-// Obtener todos los matches con información detallada
 const getAllMatchesDetailed = async (req, res) => {
   try {
     const matches = await matchService.getAllMatchesDetailed();
@@ -112,7 +98,6 @@ const getAllMatchesDetailed = async (req, res) => {
   }
 };
 
-// Unirse a un partido
 const joinMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -121,7 +106,6 @@ const joinMatch = async (req, res) => {
 
     const result = await matchService.joinMatch(matchId, userId, team);
     
-    // Convertir el objeto Sequelize a JSON y agregar userPosition
     const matchData = result.match.toJSON ? result.match.toJSON() : result.match;
     const matchWithPosition = {
       ...matchData,
@@ -138,7 +122,6 @@ const joinMatch = async (req, res) => {
   }
 };
 
-// Abandonar un partido
 const leaveMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -146,7 +129,6 @@ const leaveMatch = async (req, res) => {
 
     const result = await matchService.leaveMatch(matchId, userId);
     
-    // Convertir el objeto Sequelize a JSON y agregar userPosition
     const matchData = result.match.toJSON ? result.match.toJSON() : result.match;
     const matchWithPosition = {
       ...matchData,
@@ -159,7 +141,6 @@ const leaveMatch = async (req, res) => {
   }
 };
 
-// Iniciar un partido (scheduled -> in_progress)
 const startMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -172,7 +153,6 @@ const startMatch = async (req, res) => {
   }
 };
 
-// Finalizar un partido (in_progress -> pending_confirmation)
 const finishMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -185,7 +165,6 @@ const finishMatch = async (req, res) => {
   }
 };
 
-// Confirmar un partido (pending_confirmation -> completed)
 const confirmMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -198,7 +177,6 @@ const confirmMatch = async (req, res) => {
   }
 };
 
-// Cancelar un partido (cualquier estado -> cancelled)
 const cancelMatch = async (req, res) => {
   try {
     const { id: matchId } = req.params;
@@ -211,7 +189,6 @@ const cancelMatch = async (req, res) => {
   }
 };
 
-// Obtener todos los partidos en los que participa el usuario autenticado
 const getUserMatches = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -229,7 +206,6 @@ const getUserMatches = async (req, res) => {
   }
 };
 
-// Obtener partidos disponibles para unirse
 const getAvailableMatches = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -241,7 +217,6 @@ const getAvailableMatches = async (req, res) => {
   }
 };
 
-// Obtener disponibilidad de equipos de un match
 const getMatchTeamAvailability = async (req, res) => {
   try {
     const { id: matchId } = req.params;

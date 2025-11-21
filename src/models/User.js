@@ -31,19 +31,16 @@ const User = sequelize.define('User', {
   timestamps: true
 });
 
-// Hook para encriptar contraseña antes de guardar
 User.beforeCreate(async (user) => {
   if (user.password) {
     user.password = await bcrypt.hash(user.password, 10);
   }
 });
 
-// Método para comparar contraseñas
 User.prototype.comparePassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-// Método para no devolver la contraseña en JSON
 User.prototype.toJSON = function() {
   const values = Object.assign({}, this.get());
   delete values.password;

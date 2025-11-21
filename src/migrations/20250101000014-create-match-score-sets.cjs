@@ -3,12 +3,6 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    const tableExists = await queryInterface.tableExists('match_score_sets');
-    if (tableExists) {
-      console.log('Tabla match_score_sets ya existe, omitiendo creación');
-      return;
-    }
-
     await queryInterface.createTable('match_score_sets', {
       id: {
         type: Sequelize.INTEGER,

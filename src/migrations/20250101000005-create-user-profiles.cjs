@@ -3,12 +3,6 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    const tableExists = await queryInterface.tableExists('user_profiles');
-    if (tableExists) {
-      console.log('Tabla user_profiles ya existe, omitiendo creación');
-      return;
-    }
-
     await queryInterface.createTable('user_profiles', {
       id: {
         allowNull: false,
@@ -71,6 +65,11 @@ module.exports = {
         type: Sequelize.STRING(500),
         allowNull: true
       },
+      equippedPaletteId: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        comment: 'ID de la paleta equipada (foreign key se agregará después de crear cosmetics)'
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE,
@@ -93,4 +92,3 @@ module.exports = {
     await queryInterface.dropTable('user_profiles');
   }
 };
-

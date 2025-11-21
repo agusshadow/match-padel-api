@@ -5,11 +5,9 @@ async function resetDatabase() {
   try {
     console.log('🔄 Limpiando tabla de migraciones...');
     
-    // Limpiar la tabla SequelizeMeta
     await sequelize.query('DELETE FROM "SequelizeMeta"');
     console.log('✅ Tabla de migraciones limpiada');
     
-    // Cerrar la conexión antes de ejecutar migraciones
     await sequelize.close();
     
     console.log('🔄 Ejecutando todas las migraciones...');

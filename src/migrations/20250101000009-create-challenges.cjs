@@ -3,12 +3,6 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    const tableExists = await queryInterface.tableExists('challenges');
-    if (tableExists) {
-      console.log('Tabla challenges ya existe, omitiendo creación');
-      return;
-    }
-
     await queryInterface.createTable('challenges', {
       id: {
         allowNull: false,
@@ -48,7 +42,6 @@ module.exports = {
       rewardCosmeticId: {
         type: Sequelize.INTEGER,
         allowNull: true
-        // La foreign key se agregará después de crear la tabla cosmetics en migración 20250101000019
       },
       isActive: {
         type: Sequelize.BOOLEAN,

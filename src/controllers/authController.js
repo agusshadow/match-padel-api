@@ -1,7 +1,6 @@
 import authService from '../services/authService.js';
 import { successObject, error } from '../utils/responseHelper.js';
 
-// Registro
 const register = async (req, res) => {
   try {
     const result = await authService.register(req.body);
@@ -11,7 +10,6 @@ const register = async (req, res) => {
   }
 };
 
-// Login
 const login = async (req, res) => {
   try {
     const result = await authService.login(req.body);
@@ -21,7 +19,6 @@ const login = async (req, res) => {
   }
 };
 
-// Perfil del usuario
 const getProfile = async (req, res) => {
   try {
     const result = await authService.getProfile(req.user.id);

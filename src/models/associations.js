@@ -13,7 +13,6 @@ import MatchScoreSet from './MatchScoreSet.js';
 import Challenge from './Challenge.js';
 import UserChallenge from './UserChallenge.js';
 import Cosmetic from './Cosmetic.js';
-import UserCosmetic from './UserCosmetic.js';
 
 // Asociaciones entre modelos
 
@@ -242,30 +241,7 @@ UserChallenge.belongsTo(Challenge, {
 });
 
 // Cosmetic associations
-Cosmetic.hasMany(UserCosmetic, {
-  foreignKey: 'cosmeticId',
-  as: 'userCosmetics'
-});
-
-
 Cosmetic.belongsTo(Challenge, {
-  foreignKey: 'challengeId',
-  as: 'challenge'
-});
-
-// UserCosmetic associations
-UserCosmetic.belongsTo(User, {
-  foreignKey: 'userId',
-  as: 'user'
-});
-
-UserCosmetic.belongsTo(Cosmetic, {
-  foreignKey: 'cosmeticId',
-  as: 'cosmetic'
-});
-
-
-UserCosmetic.belongsTo(Challenge, {
   foreignKey: 'challengeId',
   as: 'challenge'
 });
@@ -274,11 +250,6 @@ UserCosmetic.belongsTo(Challenge, {
 User.hasMany(UserChallenge, {
   foreignKey: 'userId',
   as: 'challenges'
-});
-
-User.hasMany(UserCosmetic, {
-  foreignKey: 'userId',
-  as: 'cosmetics'
 });
 
 
@@ -303,6 +274,5 @@ export {
   MatchScoreSet,
   Challenge,
   UserChallenge,
-  Cosmetic,
-  UserCosmetic
+  Cosmetic
 };

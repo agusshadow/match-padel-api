@@ -1,15 +1,12 @@
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/connection.js';
 
-// Constantes para tipos de cosméticos
 const COSMETIC_TYPE = {
   PALETTE: 'palette'
-  // Extensible para futuros tipos: 'skin', 'avatar_frame', etc.
 };
 
 const COSMETIC_TYPE_VALUES = Object.values(COSMETIC_TYPE);
 
-// Constantes para métodos de adquisición
 const ACQUISITION_METHOD = {
   FREE: 'free',
   CHALLENGE: 'challenge',
@@ -97,7 +94,6 @@ const Cosmetic = sequelize.define('Cosmetic', {
   ]
 });
 
-// Exportar constantes
 Cosmetic.COSMETIC_TYPE = COSMETIC_TYPE;
 Cosmetic.COSMETIC_TYPE_VALUES = COSMETIC_TYPE_VALUES;
 Cosmetic.ACQUISITION_METHOD = ACQUISITION_METHOD;

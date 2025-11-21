@@ -1,6 +1,5 @@
 import authService from '../services/authService.js';
 
-// Middleware simple para verificar JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -24,7 +23,6 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Middleware para verificar que el usuario es admin
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({

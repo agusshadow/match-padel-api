@@ -3,9 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Función para parsear DATABASE_URL y crear configuración de conexión
 function getDatabaseConfig() {
-  // Si hay DATABASE_URL, parsearla y extraer componentes
   if (process.env.DATABASE_URL) {
     try {
       const url = new URL(process.env.DATABASE_URL);
@@ -32,7 +30,6 @@ function getDatabaseConfig() {
     }
   }
   
-  // Si no hay DATABASE_URL, usar variables individuales
   const isSupabase = process.env.DB_HOST?.includes('supabase.co') || process.env.DB_HOST?.includes('pooler.supabase.com');
   return {
     database: process.env.DB_NAME || 'match_padel',
@@ -51,7 +48,6 @@ function getDatabaseConfig() {
   };
 }
 
-// Crear instancia de Sequelize con configuración parseada
 const dbConfig = getDatabaseConfig();
 const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
   host: dbConfig.host,

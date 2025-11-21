@@ -3,12 +3,6 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
-    const tableExists = await queryInterface.tableExists('user_levels');
-    if (tableExists) {
-      console.log('Tabla user_levels ya existe, omitiendo creación');
-      return;
-    }
-
     await queryInterface.createTable('user_levels', {
       id: {
         allowNull: false,
@@ -59,4 +53,3 @@ module.exports = {
     await queryInterface.dropTable('user_levels');
   }
 };
-

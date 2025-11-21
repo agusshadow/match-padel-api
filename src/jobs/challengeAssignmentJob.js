@@ -12,22 +12,16 @@ let weeklyJob = null;
 let monthlyJob = null;
 let cleanupJob = null;
 
-/**
- * Iniciar job de asignación de desafíos diarios
- * Se ejecuta cada día a las 00:00
- */
 const startDailyChallengesJob = () => {
   if (dailyJob) {
     console.log('⚠️ El job de desafíos diarios ya está corriendo');
     return;
   }
 
-  // Ejecutar cada día a las 00:00
   dailyJob = cron.schedule('0 0 * * *', async () => {
     try {
       console.log('🔄 Iniciando asignación de desafíos diarios...');
       
-      // Obtener todos los usuarios activos
       const users = await User.findAll();
       
       let assignedCount = 0;
@@ -48,22 +42,16 @@ const startDailyChallengesJob = () => {
   console.log('✅ Job de desafíos diarios iniciado (cada día a las 00:00)');
 };
 
-/**
- * Iniciar job de asignación de desafíos semanales
- * Se ejecuta cada lunes a las 00:00
- */
 const startWeeklyChallengesJob = () => {
   if (weeklyJob) {
     console.log('⚠️ El job de desafíos semanales ya está corriendo');
     return;
   }
 
-  // Ejecutar cada lunes a las 00:00
   weeklyJob = cron.schedule('0 0 * * 1', async () => {
     try {
       console.log('🔄 Iniciando asignación de desafíos semanales...');
       
-      // Obtener todos los usuarios activos
       const users = await User.findAll();
       
       let assignedCount = 0;
@@ -84,22 +72,16 @@ const startWeeklyChallengesJob = () => {
   console.log('✅ Job de desafíos semanales iniciado (cada lunes a las 00:00)');
 };
 
-/**
- * Iniciar job de asignación de desafíos mensuales
- * Se ejecuta el día 1 de cada mes a las 00:00
- */
 const startMonthlyChallengesJob = () => {
   if (monthlyJob) {
     console.log('⚠️ El job de desafíos mensuales ya está corriendo');
     return;
   }
 
-  // Ejecutar el día 1 de cada mes a las 00:00
   monthlyJob = cron.schedule('0 0 1 * *', async () => {
     try {
       console.log('🔄 Iniciando asignación de desafíos mensuales...');
       
-      // Obtener todos los usuarios activos
       const users = await User.findAll();
       
       let assignedCount = 0;
@@ -120,17 +102,12 @@ const startMonthlyChallengesJob = () => {
   console.log('✅ Job de desafíos mensuales iniciado (día 1 de cada mes a las 00:00)');
 };
 
-/**
- * Iniciar job de limpieza de desafíos expirados
- * Se ejecuta cada hora
- */
 const startCleanupJob = () => {
   if (cleanupJob) {
     console.log('⚠️ El job de limpieza de desafíos ya está corriendo');
     return;
   }
 
-  // Ejecutar cada hora
   cleanupJob = cron.schedule('0 * * * *', async () => {
     try {
       console.log('🔄 Limpiando desafíos expirados...');
@@ -149,16 +126,10 @@ const startCleanupJob = () => {
   console.log('✅ Job de limpieza de desafíos iniciado (cada hora)');
 };
 
-/**
- * Ejecutar asignación inicial de desafíos al iniciar el servidor
- * Esto asegura que los usuarios tengan desafíos activos incluso si el servidor
- * se reinició después de las 00:00
- */
 const runInitialChallengeAssignment = async () => {
   try {
     console.log('🔄 Ejecutando asignación inicial de desafíos...');
     
-    // Primero limpiar desafíos expirados
     const cleaned = await cleanupExpiredChallenges();
     if (cleaned > 0) {
       console.log(`🧹 ${cleaned} desafíos expirados limpiados`);
@@ -194,23 +165,15 @@ const runInitialChallengeAssignment = async () => {
   }
 };
 
-/**
- * Iniciar todos los jobs de desafíos
- */
 const startChallengeJobs = async () => {
-  // Ejecutar asignación inicial inmediatamente
   await runInitialChallengeAssignment();
   
-  // Iniciar jobs programados
   startDailyChallengesJob();
   startWeeklyChallengesJob();
   startMonthlyChallengesJob();
   startCleanupJob();
 };
 
-/**
- * Detener todos los jobs de desafíos
- */
 const stopChallengeJobs = () => {
   if (dailyJob) {
     dailyJob.stop();
@@ -237,15 +200,10 @@ const stopChallengeJobs = () => {
   }
 };
 
-/**
- * Ejecutar asignación de desafíos manualmente
- * Esta función puede ser llamada desde un script para ejecutar la asignación de desafíos
- */
 const runChallengeAssignment = async () => {
   try {
     console.log('🔄 Ejecutando asignación de desafíos (trigger externo)...');
     
-    // Primero limpiar desafíos expirados
     const cleaned = await cleanupExpiredChallenges();
     if (cleaned > 0) {
       console.log(`🧹 ${cleaned} desafíos expirados limpiados`);

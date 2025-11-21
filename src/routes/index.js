@@ -1,7 +1,6 @@
 import express from 'express';
 const router = express.Router();
 
-// Importar rutas
 import authRoutes from './auth.js';
 import userRoutes from './users.js';
 import clubRoutes from './clubs.js';
@@ -16,7 +15,6 @@ import notificationRoutes from './notifications.js';
 import challengeRoutes from './challenges.js';
 import cosmeticRoutes from './cosmetics.js';
 
-// Rutas principales
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/clubs', clubRoutes);
@@ -31,7 +29,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/challenges', challengeRoutes);
 router.use('/cosmetics', cosmeticRoutes);
 
-// Ruta de salud
 router.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -40,7 +37,6 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Ruta raíz
 router.get('/', (req, res) => {
   res.json({
     success: true,
