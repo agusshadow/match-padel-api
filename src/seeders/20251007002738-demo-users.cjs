@@ -4,6 +4,9 @@ const bcrypt = require('bcryptjs');
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    // Limpiar usuarios existentes primero
+    await queryInterface.bulkDelete('users', null, {});
+    
     const hashedPassword = await bcrypt.hash('password123', 10);
     const adminPassword = await bcrypt.hash('admin123', 10);
     
