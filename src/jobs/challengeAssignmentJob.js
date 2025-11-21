@@ -237,12 +237,66 @@ const stopChallengeJobs = () => {
   }
 };
 
+/**
+ * Ejecutar asignación de desafíos manualmente
+ * Esta función puede ser llamada desde un script para ejecutar la asignación de desafíos
+ */
+const runChallengeAssignment = async () => {
+  try {
+    console.log('🔄 Ejecutando asignación de desafíos (trigger externo)...');
+    
+    // Primero limpiar desafíos expirados
+    const cleaned = await cleanupExpiredChallenges();
+    if (cleaned > 0) {
+      console.log(`🧹 ${cleaned} desafíos expirados limpiados`);
+    }
+    
+    // Obtener todos los usuarios activos
+    const users = await User.findAll();
+    
+    let dailyAssigned = 0;
+    let weeklyAssigned = 0;
+    let monthlyAssigned = 0;
+    
+    for (const user of users) {
+      // Asignar desafíos diarios si no tiene activos del día actual
+      const daily = await assignDailyChallenges(user.id);
+      dailyAssigned += daily.length;
+      
+      // Asignar desafíos semanales si no tiene activos de la semana actual
+      const weekly = await assignWeeklyChallenges(user.id);
+      weeklyAssigned += weekly.length;
+      
+      // Asignar desafíos mensuales si no tiene activos del mes actual
+      const monthly = await assignMonthlyChallenges(user.id);
+      monthlyAssigned += monthly.length;
+    }
+    
+    const result = {
+      success: true,
+      cleaned,
+      users: users.length,
+      dailyAssigned,
+      weeklyAssigned,
+      monthlyAssigned,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`✅ Asignación de desafíos completada:`, result);
+    return result;
+  } catch (error) {
+    console.error('❌ Error en asignación de desafíos:', error);
+    throw error;
+  }
+};
+
 export {
   startChallengeJobs,
   stopChallengeJobs,
   startDailyChallengesJob,
   startWeeklyChallengesJob,
   startMonthlyChallengesJob,
-  startCleanupJob
+  startCleanupJob,
+  runChallengeAssignment
 };
 
