@@ -33,7 +33,7 @@ const UserProfile = sequelize.define('UserProfile', {
     primaryKey: true,
     autoIncrement: true
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     unique: true,
@@ -47,7 +47,7 @@ const UserProfile = sequelize.define('UserProfile', {
     allowNull: true,
     comment: 'Ubicación del usuario (ciudad, país)'
   },
-  favoritePosition: {
+  favorite_position: {
     type: DataTypes.ENUM(...FAVORITE_POSITION_VALUES),
     allowNull: true,
     comment: 'Posición favorita en la cancha',
@@ -55,7 +55,7 @@ const UserProfile = sequelize.define('UserProfile', {
       isIn: [FAVORITE_POSITION_VALUES]
     }
   },
-  gameStyle: {
+  game_style: {
     type: DataTypes.ENUM(...GAME_STYLE_VALUES),
     allowNull: true,
     comment: 'Estilo de juego preferido',
@@ -63,7 +63,7 @@ const UserProfile = sequelize.define('UserProfile', {
       isIn: [GAME_STYLE_VALUES]
     }
   },
-  dominantHand: {
+  dominant_hand: {
     type: DataTypes.ENUM(...DOMINANT_HAND_VALUES),
     allowNull: true,
     comment: 'Mano hábil del usuario',
@@ -71,7 +71,7 @@ const UserProfile = sequelize.define('UserProfile', {
       isIn: [DOMINANT_HAND_VALUES]
     }
   },
-  skillServe: {
+  skill_serve: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -80,7 +80,7 @@ const UserProfile = sequelize.define('UserProfile', {
     },
     comment: 'Nivel de saque (1-10)'
   },
-  skillVolley: {
+  skill_volley: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -89,7 +89,7 @@ const UserProfile = sequelize.define('UserProfile', {
     },
     comment: 'Nivel de volea (1-10)'
   },
-  skillForehand: {
+  skill_forehand: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -98,7 +98,7 @@ const UserProfile = sequelize.define('UserProfile', {
     },
     comment: 'Nivel de derecha (1-10)'
   },
-  skillWall: {
+  skill_wall: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -107,7 +107,7 @@ const UserProfile = sequelize.define('UserProfile', {
     },
     comment: 'Nivel de pared (1-10)'
   },
-  skillSmash: {
+  skill_smash: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -116,7 +116,7 @@ const UserProfile = sequelize.define('UserProfile', {
     },
     comment: 'Nivel de remate (1-10)'
   },
-  skillAgility: {
+  skill_agility: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -130,7 +130,7 @@ const UserProfile = sequelize.define('UserProfile', {
     allowNull: true,
     comment: 'URL de la foto de perfil'
   },
-  equippedPaletteId: {
+  equipped_palette_id: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {

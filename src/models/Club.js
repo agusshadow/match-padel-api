@@ -58,7 +58,7 @@ const Club = sequelize.define('Club', {
       max: 180
     }
   },
-  isActive: {
+  is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
@@ -66,7 +66,9 @@ const Club = sequelize.define('Club', {
   tableName: 'clubs',
   timestamps: true,
   underscored: true,
-  paranoid: false
+  paranoid: false,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 export default Club;

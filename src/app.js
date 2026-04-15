@@ -57,6 +57,10 @@ const startServer = async () => {
   }
 };
 
-startServer();
+const isTest = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+
+if (!isTest) {
+  startServer();
+}
 
 export default app;

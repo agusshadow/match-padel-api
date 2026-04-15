@@ -16,7 +16,7 @@ const Notification = sequelize.define('Notification', {
     primaryKey: true,
     autoIncrement: true
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -43,7 +43,7 @@ const Notification = sequelize.define('Notification', {
     allowNull: false,
     defaultValue: false
   },
-  readAt: {
+  read_at: {
     type: DataTypes.DATE,
     allowNull: true
   }

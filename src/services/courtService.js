@@ -8,7 +8,7 @@ const getAllCourts = async () => {
 // Obtener canchas por club
 const getCourtsByClub = async (clubId) => {
   return await Court.findAll({
-    where: { clubId },
+    where: { club_id: clubId },
     include: [
       {
         association: 'club'

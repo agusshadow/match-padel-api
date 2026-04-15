@@ -5,7 +5,7 @@ import { Op } from 'sequelize';
 const getUserNotifications = async (userId, options = {}) => {
   const { limit = 50, offset = 0, read = null } = options;
 
-  const where = { userId };
+  const where = { user_id: userId };
 
   // Filtrar por estado de lectura si se especifica
   if (read !== null) {
@@ -14,7 +14,7 @@ const getUserNotifications = async (userId, options = {}) => {
 
   const notifications = await Notification.findAll({
     where,
-    order: [['createdAt', 'DESC']],
+    order: [['created_at', 'DESC']],
     limit: parseInt(limit),
     offset: parseInt(offset)
   });
@@ -26,10 +26,10 @@ const getUserNotifications = async (userId, options = {}) => {
 const getUnreadNotifications = async (userId, limit = 50) => {
   const notifications = await Notification.findAll({
     where: {
-      userId,
+      user_id: userId,
       read: false
     },
-    order: [['createdAt', 'DESC']],
+    order: [['created_at', 'DESC']],
     limit: parseInt(limit)
   });
 
@@ -40,7 +40,7 @@ const getUnreadNotifications = async (userId, limit = 50) => {
 const countUnreadNotifications = async (userId) => {
   const count = await Notification.count({
     where: {
-      userId,
+      user_id: userId,
       read: false
     }
   });
@@ -53,7 +53,7 @@ const markAsRead = async (notificationId, userId) => {
   const notification = await Notification.findOne({
     where: {
       id: notificationId,
-      userId // Verificar que la notificación pertenece al usuario
+      user_id: userId // Verificar que la notificación pertenece al usuario
     }
   });
 
@@ -67,7 +67,7 @@ const markAsRead = async (notificationId, userId) => {
 
   await notification.update({
     read: true,
-    readAt: new Date()
+    read_at: new Date()
   });
 
   return notification;
@@ -78,11 +78,11 @@ const markAllAsRead = async (userId) => {
   const result = await Notification.update(
     {
       read: true,
-      readAt: new Date()
+      read_at: new Date()
     },
     {
       where: {
-        userId,
+        user_id: userId,
         read: false
       }
     }
@@ -96,7 +96,7 @@ const deleteNotification = async (notificationId, userId) => {
   const notification = await Notification.findOne({
     where: {
       id: notificationId,
-      userId // Verificar que la notificación pertenece al usuario
+      user_id: userId // Verificar que la notificación pertenece al usuario
     }
   });
 

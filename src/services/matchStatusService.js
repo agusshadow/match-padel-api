@@ -1,35 +1,50 @@
 import Match from '../models/Match.js';
+import MatchParticipant from '../models/MatchParticipant.js';
 import { Op } from 'sequelize';
 import { sequelize } from '../config/connection.js';
 
 /**
- * Cancelar partidos que ya pasaron la fecha y no tienen los 4 slots llenos
- * ⭐ Simplificado: Usa campos denormalizados y actualización masiva
+ * Cancelar partidos que ya pasaron la fecha y no tienen los 4 jugadores llenos
  */
 const cancelExpiredIncompleteMatches = async () => {
   try {
     const now = new Date();
     
-    // Actualizar directamente con bulkUpdate (más eficiente)
-    // Usamos una subquery SQL para actualizar cancelledBy = createdBy
-    const [cancelledCount] = await sequelize.query(`
-      UPDATE matches 
-      SET 
-        status = 'cancelled',
-        "cancelledAt" = :now,
-        "cancelledBy" = "createdBy"
-      WHERE status = 'scheduled'
-        AND "matchDateTime" < :now
-        AND "matchDateTime" IS NOT NULL
-        AND (
-          "team1Player2Id" IS NULL 
-          OR "team2Player1Id" IS NULL 
-          OR "team2Player2Id" IS NULL
-        )
-    `, {
-      replacements: { now },
-      type: sequelize.QueryTypes.UPDATE
+    // Encontrar IDs de partidos que ya pasaron y no están llenos
+    // Un partido está lleno si tiene 4 participantes
+    const incompleteMatchIds = await Match.findAll({
+      attributes: ['id'],
+      where: {
+        status: Match.MATCH_STATUS.SCHEDULED,
+        match_date_time: { [Op.lt]: now }
+      },
+      include: [{
+        model: MatchParticipant,
+        as: 'participants',
+        attributes: []
+      }],
+      group: ['Match.id'],
+      having: sequelize.where(sequelize.fn('COUNT', sequelize.col('participants.id')), { [Op.lt]: 4 }),
+      raw: true
     });
+
+    const ids = incompleteMatchIds.map(m => m.id);
+
+    if (ids.length === 0) {
+      return { cancelledCount: 0, message: '0 partidos cancelados' };
+    }
+
+    const [cancelledCount] = await Match.update(
+      {
+        status: Match.MATCH_STATUS.CANCELLED,
+        cancelled_at: now
+      },
+      {
+        where: {
+          id: { [Op.in]: ids }
+        }
+      }
+    );
 
     return { cancelledCount, message: `${cancelledCount} partidos cancelados` };
   } catch (error) {
@@ -40,30 +55,42 @@ const cancelExpiredIncompleteMatches = async () => {
 
 /**
  * Iniciar partidos automáticamente cuando llegue la fecha y hora del partido
- * ⭐ Simplificado: Usa campos denormalizados y actualización masiva
  */
 const startScheduledMatches = async () => {
   try {
     const now = new Date();
     
-    // Actualizar directamente con bulkUpdate (más eficiente)
+    // Encontrar IDs de partidos que deben iniciar (están llenos y es la hora)
+    const readyMatchIds = await Match.findAll({
+      attributes: ['id'],
+      where: {
+        status: Match.MATCH_STATUS.SCHEDULED,
+        match_date_time: { [Op.lte]: now }
+      },
+      include: [{
+        model: MatchParticipant,
+        as: 'participants',
+        attributes: []
+      }],
+      group: ['Match.id'],
+      having: sequelize.where(sequelize.fn('COUNT', sequelize.col('participants.id')), 4),
+      raw: true
+    });
+
+    const ids = readyMatchIds.map(m => m.id);
+
+    if (ids.length === 0) {
+      return { startedCount: 0, message: '0 partidos iniciados' };
+    }
+
     const [startedCount] = await Match.update(
       {
         status: Match.MATCH_STATUS.IN_PROGRESS,
-        startedAt: now
+        started_at: now
       },
       {
         where: {
-          status: Match.MATCH_STATUS.SCHEDULED,
-          matchDateTime: { 
-            [Op.lte]: now,
-            [Op.not]: null
-          },
-          // Partido completo: todos los jugadores deben estar asignados
-          team1Player1Id: { [Op.ne]: null },
-          team1Player2Id: { [Op.ne]: null },
-          team2Player1Id: { [Op.ne]: null },
-          team2Player2Id: { [Op.ne]: null }
+          id: { [Op.in]: ids }
         }
       }
     );
@@ -77,22 +104,20 @@ const startScheduledMatches = async () => {
 
 /**
  * Finalizar partidos automáticamente cuando termine la duración del partido
- * ⭐ Simplificado: Usa campo denormalizado matchEndDateTime y actualización masiva
  */
 const finishInProgressMatches = async () => {
   try {
     const now = new Date();
     
-    // Actualizar directamente con bulkUpdate (más eficiente)
     const [finishedCount] = await Match.update(
       {
         status: Match.MATCH_STATUS.PENDING_CONFIRMATION,
-        finishedAt: now
+        finished_at: now
       },
       {
         where: {
           status: Match.MATCH_STATUS.IN_PROGRESS,
-          matchEndDateTime: { 
+          match_end_date_time: { 
             [Op.lt]: now,
             [Op.not]: null
           }
@@ -134,4 +159,3 @@ export {
   finishInProgressMatches,
   updateMatchStatuses
 };
-

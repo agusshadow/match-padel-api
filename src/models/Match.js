@@ -18,7 +18,7 @@ const Match = sequelize.define('Match', {
     primaryKey: true,
     autoIncrement: true
   },
-  reservationId: {
+  reservation_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -28,7 +28,7 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  createdBy: {
+  created_by: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -37,6 +37,14 @@ const Match = sequelize.define('Match', {
     },
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
+  },
+  match_date_time: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  match_end_date_time: {
+    type: DataTypes.DATE,
+    allowNull: true
   },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
@@ -77,7 +85,9 @@ const Match = sequelize.define('Match', {
   tableName: 'matches',
   timestamps: true,
   underscored: true,
-  paranoid: false
+  paranoid: false,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 // Exportar constantes para uso en otros archivos

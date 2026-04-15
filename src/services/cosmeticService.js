@@ -5,9 +5,9 @@ import { sequelize } from '../config/connection.js';
 const getAvailableCosmetics = async () => {
   const cosmetics = await Cosmetic.findAll({
     where: {
-      isActive: true
+      is_active: true
     },
-    order: [['createdAt', 'ASC']]
+    order: [['created_at', 'ASC']]
   });
 
   return cosmetics;
@@ -21,7 +21,7 @@ const equipCosmetic = async (userId, cosmeticId) => {
     if (!cosmetic) {
       throw new Error('Cosmético no encontrado');
     }
-    if (!cosmetic.isActive) {
+    if (!cosmetic.is_active) {
       throw new Error('Cosmético no está disponible');
     }
 
@@ -30,15 +30,15 @@ const equipCosmetic = async (userId, cosmeticId) => {
     }
 
     await UserProfile.update(
-      { equippedPaletteId: cosmeticId },
+      { equipped_palette_id: cosmeticId },
       {
-        where: { userId },
+        where: { user_id: userId },
         transaction
       }
     );
 
     const userProfile = await UserProfile.findOne({
-      where: { userId },
+      where: { user_id: userId },
       include: [
         {
           model: Cosmetic,
@@ -52,10 +52,10 @@ const equipCosmetic = async (userId, cosmeticId) => {
     await transaction.commit();
 
     return {
-      userId,
-      cosmeticId,
+      user_id: userId,
+      cosmetic_id: cosmeticId,
       cosmetic,
-      equippedPalette: userProfile?.equippedPalette || null
+      equipped_palette: userProfile?.equippedPalette || null
     };
   } catch (error) {
     await transaction.rollback();

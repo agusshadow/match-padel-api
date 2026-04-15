@@ -15,7 +15,7 @@ const MatchScore = sequelize.define('MatchScore', {
     primaryKey: true,
     autoIncrement: true
   },
-  matchId: {
+  match_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -26,7 +26,7 @@ const MatchScore = sequelize.define('MatchScore', {
     onDelete: 'CASCADE',
     unique: true
   },
-  winnerTeam: {
+  winner_team: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
@@ -41,7 +41,7 @@ const MatchScore = sequelize.define('MatchScore', {
       isIn: [SCORE_STATUS_VALUES]
     }
   },
-  confirmedBy: {
+  confirmed_by: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {
@@ -51,7 +51,7 @@ const MatchScore = sequelize.define('MatchScore', {
     onUpdate: 'CASCADE',
     onDelete: 'SET NULL'
   },
-  rejectedBy: {
+  rejected_by: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {
@@ -61,19 +61,19 @@ const MatchScore = sequelize.define('MatchScore', {
     onUpdate: 'CASCADE',
     onDelete: 'SET NULL'
   },
-  confirmationComment: {
+  confirmation_comment: {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  rejectionComment: {
+  rejection_comment: {
     type: DataTypes.TEXT,
     allowNull: true
   },
-  confirmedAt: {
+  confirmed_at: {
     type: DataTypes.DATE,
     allowNull: true
   },
-  rejectedAt: {
+  rejected_at: {
     type: DataTypes.DATE,
     allowNull: true
   }
@@ -84,16 +84,16 @@ const MatchScore = sequelize.define('MatchScore', {
   paranoid: false,
   hooks: {
     beforeUpdate: async (matchScore, options) => {
-      // Si se confirma, establecer confirmedAt
+      // Si se confirma, establecer confirmed_at
       if (matchScore.changed('status') && matchScore.status === SCORE_STATUS.CONFIRMED) {
-        if (!matchScore.confirmedAt) {
-          matchScore.confirmedAt = new Date();
+        if (!matchScore.confirmed_at) {
+          matchScore.confirmed_at = new Date();
         }
       }
-      // Si se rechaza, establecer rejectedAt
+      // Si se rechaza, establecer rejected_at
       if (matchScore.changed('status') && matchScore.status === SCORE_STATUS.REJECTED) {
-        if (!matchScore.rejectedAt) {
-          matchScore.rejectedAt = new Date();
+        if (!matchScore.rejected_at) {
+          matchScore.rejected_at = new Date();
         }
       }
     }

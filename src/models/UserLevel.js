@@ -7,7 +7,7 @@ const UserLevel = sequelize.define('UserLevel', {
     primaryKey: true,
     autoIncrement: true
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     unique: true,

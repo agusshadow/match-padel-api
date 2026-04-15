@@ -7,7 +7,7 @@ const CourtSlot = sequelize.define('CourtSlot', {
     primaryKey: true,
     autoIncrement: true
   },
-  courtId: {
+  court_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -17,7 +17,7 @@ const CourtSlot = sequelize.define('CourtSlot', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  dayOfWeek: {
+  day_of_week: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
@@ -25,15 +25,15 @@ const CourtSlot = sequelize.define('CourtSlot', {
       max: 6
     }
   },
-  startTime: {
+  start_time: {
     type: DataTypes.TIME,
     allowNull: false
   },
-  endTime: {
+  end_time: {
     type: DataTypes.TIME,
     allowNull: false
   },
-  isAvailable: {
+  is_available: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
@@ -49,6 +49,8 @@ const CourtSlot = sequelize.define('CourtSlot', {
   timestamps: true,
   underscored: true,
   paranoid: false,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
   indexes: [
     {
       unique: true,

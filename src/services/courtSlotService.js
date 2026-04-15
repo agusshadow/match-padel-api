@@ -8,7 +8,7 @@ const getAllSlots = async () => {
 // Obtener slots por cancha
 const getSlotsByCourt = async (courtId) => {
   return await CourtSlot.findAll({
-    where: { courtId },
+    where: { court_id: courtId },
     include: [
       {
         association: 'court',
@@ -50,9 +50,9 @@ const deleteSlot = async (id) => {
 const getAvailableSlotsByCourtAndDay = async (courtId, dayOfWeek) => {
   return await CourtSlot.findAll({
     where: { 
-      courtId,
-      dayOfWeek,
-      isAvailable: true
+      court_id: courtId,
+      day_of_week: dayOfWeek,
+      is_available: true
     },
     include: [
       {
@@ -64,7 +64,7 @@ const getAvailableSlotsByCourtAndDay = async (courtId, dayOfWeek) => {
         ]
       }
     ],
-    order: [['startTime', 'ASC']]
+    order: [['start_time', 'ASC']]
   });
 };
 
@@ -83,9 +83,9 @@ const getAvailableSlotsByCourtAndDate = async (courtId, date) => {
   // 2. Obtener slots de la cancha para ese día de semana que estén disponibles
   const slots = await CourtSlot.findAll({
     where: { 
-      courtId,
-      dayOfWeek,
-      isAvailable: true // Filtro de admin
+      court_id: courtId,
+      day_of_week: dayOfWeek,
+      is_available: true // Filtro de admin
     },
     include: [
       {
@@ -97,20 +97,20 @@ const getAvailableSlotsByCourtAndDate = async (courtId, date) => {
         ]
       }
     ],
-    order: [['startTime', 'ASC']]
+    order: [['start_time', 'ASC']]
   });
 
   // 3. Obtener reservas activas para esa fecha
   const reservations = await CourtReservation.findAll({
     where: {
-      scheduledDate: date,
+      scheduled_date: date,
       status: {
         [Op.notIn]: ['cancelled', 'completed']
       }
     }
   });
 
-  const reservedSlotIds = new Set(reservations.map(r => r.slotId).filter(Boolean));
+  const reservedSlotIds = new Set(reservations.map(r => r.slot_id).filter(Boolean));
 
   // 4. Filtrar slots: excluir reservados y verificar que la hora no haya pasado
   const now = new Date();
@@ -123,7 +123,7 @@ const getAvailableSlotsByCourtAndDate = async (courtId, date) => {
     }
 
     // Combinar fecha y hora para verificar si ya pasó
-    const slotDateTime = combineDateAndTime(date, slot.startTime);
+    const slotDateTime = combineDateAndTime(date, slot.start_time);
     
     // Excluir si la hora ya pasó
     if (slotDateTime < now) {
@@ -133,7 +133,7 @@ const getAvailableSlotsByCourtAndDate = async (courtId, date) => {
     // Agregar información adicional
     const slotData = slot.toJSON();
     slotData.availableDateTime = slotDateTime.toISOString();
-    slotData.isAvailable = true;
+    slotData.is_available = true;
     
     availableSlots.push(slotData);
   }

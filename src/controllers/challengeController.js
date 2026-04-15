@@ -14,16 +14,16 @@ const getAllChallenges = async (req, res) => {
       where.type = type;
     }
 
-    // Si no es admin, solo mostrar activos
-    if (req.user.role !== 'admin') {
-      where.isActive = true;
+    // Si no es admin (o no está autenticado), solo mostrar activos
+    if (!req.user || req.user.role !== 'admin') {
+      where.is_active = true;
     } else if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
+      where.is_active = isActive === 'true';
     }
 
     const challenges = await Challenge.findAll({
       where,
-      order: [['type', 'ASC'], ['createdAt', 'ASC']]
+      order: [['type', 'ASC'], ['created_at', 'ASC']]
     });
 
     return successList(res, challenges);

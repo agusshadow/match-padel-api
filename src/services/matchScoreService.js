@@ -6,18 +6,20 @@ import { awardMatchExperience } from './experienceService.js';
 
 // Helper para determinar el equipo contrario al creador
 const getOpponentTeam = (match) => {
-  // El creador siempre es team1Player1, así que el equipo contrario es team 2
+  // El creador siempre es parte del equipo 1, el equipo contrario es el 2
   return 2;
 };
 
 // Helper para verificar si un usuario es del equipo contrario al creador
 const isUserInOpponentTeam = (match, userId) => {
-  return match.team2Player1Id === userId || match.team2Player2Id === userId;
+  if (!match.participants) return false;
+  // El equipo 2 es siempre el oponente del creador (que está en el equipo 1)
+  return match.participants.some(p => String(p.user_id) === String(userId) && p.team_number === 2);
 };
 
-// Helper para verificar si el usuario es el creador (team1Player1)
+// Helper para verificar si el usuario es el creador (created_by)
 const isUserCreator = (match, userId) => {
-  return match.team1Player1Id === userId;
+  return String(match.created_by) === String(userId);
 };
 
 // Crear un score para un match
@@ -29,16 +31,11 @@ const createMatchScore = async (matchId, userId, scoreData) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'team1Player1'
+          association: 'participants',
+          include: [{ association: 'user' }]
         },
         {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
+          association: 'creator'
         }
       ],
       transaction
@@ -48,7 +45,7 @@ const createMatchScore = async (matchId, userId, scoreData) => {
       throw new Error('Partido no encontrado');
     }
 
-    // Verificar que el usuario es el creador (team1Player1)
+    // Verificar que el usuario es el creador
     if (!isUserCreator(match, userId)) {
       throw new Error('Solo el creador del partido puede cargar el resultado');
     }
@@ -60,7 +57,7 @@ const createMatchScore = async (matchId, userId, scoreData) => {
 
     // Verificar que no existe un score ya cargado
     const existingScore = await MatchScore.findOne({
-      where: { matchId },
+      where: { match_id: matchId },
       transaction
     });
 
@@ -117,8 +114,8 @@ const createMatchScore = async (matchId, userId, scoreData) => {
 
     // Crear el MatchScore
     const matchScore = await MatchScore.create({
-      matchId,
-      winnerTeam,
+      match_id: matchId,
+      winner_team: winnerTeam,
       status: SCORE_STATUS.PENDING_CONFIRMATION
     }, { transaction });
 
@@ -126,10 +123,10 @@ const createMatchScore = async (matchId, userId, scoreData) => {
     for (let i = 0; i < sets.length; i++) {
       const set = sets[i];
       await MatchScoreSet.create({
-        matchScoreId: matchScore.id,
-        setNumber: i + 1,
-        team1Score: set.team1Score,
-        team2Score: set.team2Score
+        match_score_id: matchScore.id,
+        set_number: i + 1,
+        team_1_score: set.team1Score,
+        team_2_score: set.team2Score
       }, { transaction });
     }
 
@@ -141,22 +138,14 @@ const createMatchScore = async (matchId, userId, scoreData) => {
       include: [
         {
           association: 'sets',
-          order: [['setNumber', 'ASC']]
+          order: [['set_number', 'ASC']]
         },
         {
           association: 'match',
           include: [
             {
-              association: 'team1Player1'
-            },
-            {
-              association: 'team1Player2'
-            },
-            {
-              association: 'team2Player1'
-            },
-            {
-              association: 'team2Player2'
+              association: 'participants',
+              include: [{ association: 'user' }]
             }
           ]
         }
@@ -172,11 +161,11 @@ const createMatchScore = async (matchId, userId, scoreData) => {
 // Obtener el score de un match
 const getMatchScore = async (matchId) => {
   const matchScore = await MatchScore.findOne({
-    where: { matchId },
+    where: { match_id: matchId },
     include: [
       {
         association: 'sets',
-        order: [['setNumber', 'ASC']]
+        order: [['set_number', 'ASC']]
       },
       {
         association: 'confirmer',
@@ -190,16 +179,8 @@ const getMatchScore = async (matchId) => {
         association: 'match',
         include: [
           {
-            association: 'team1Player1'
-          },
-          {
-            association: 'team1Player2'
-          },
-          {
-            association: 'team2Player1'
-          },
-          {
-            association: 'team2Player2'
+            association: 'participants',
+            include: [{ association: 'user' }]
           }
         ]
       }
@@ -218,16 +199,7 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
+          association: 'participants'
         }
       ],
       transaction
@@ -244,7 +216,7 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
 
     // Obtener el score
     const matchScore = await MatchScore.findOne({
-      where: { matchId },
+      where: { match_id: matchId },
       transaction
     });
 
@@ -260,9 +232,9 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
     // Actualizar el score
     await matchScore.update({
       status: SCORE_STATUS.CONFIRMED,
-      confirmedBy: userId,
-      confirmationComment: comment,
-      confirmedAt: new Date()
+      confirmed_by: userId,
+      confirmation_comment: comment,
+      confirmed_at: new Date()
     }, { transaction });
 
     // Actualizar el estado del match a COMPLETED
@@ -274,28 +246,21 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
     const levelUps = await awardMatchExperience(match, matchScore, transaction);
 
     // Actualizar progreso de desafíos para todos los jugadores
-    // Esto se hace después de commit porque no necesita estar en la misma transacción
-    // y queremos que sea asíncrono para no bloquear la confirmación del partido
     const { updateChallengeProgress } = await import('./challengeService.js');
     
     // Obtener todos los jugadores
-    const players = [
-      match.team1Player1Id,
-      match.team1Player2Id,
-      match.team2Player1Id,
-      match.team2Player2Id
-    ].filter(id => id !== null);
+    const players = match.participants.map(p => p.user_id);
 
     // Identificar equipo ganador
-    const winnerTeam = matchScore.winnerTeam;
-    const winningPlayers = winnerTeam === 1
-      ? [match.team1Player1Id, match.team1Player2Id].filter(id => id !== null)
-      : [match.team2Player1Id, match.team2Player2Id].filter(id => id !== null);
+    const winnerTeam = matchScore.winner_team;
+    const winningPlayers = match.participants
+      .filter(p => p.team_number === winnerTeam)
+      .map(p => p.user_id);
 
     // Actualizar desafíos para todos los jugadores (jugar partido)
     for (const playerId of players) {
       try {
-        await updateChallengeProgress(playerId, 'PLAY_MATCH', { matchId: match.id });
+        await updateChallengeProgress(playerId, 'PLAY_MATCH', { match_id: match.id });
       } catch (error) {
         console.error(`Error actualizando desafío PLAY_MATCH para usuario ${playerId}:`, error);
       }
@@ -304,7 +269,7 @@ const confirmMatchScore = async (matchId, userId, comment = null) => {
     // Actualizar desafíos para los ganadores (ganar partido)
     for (const winnerId of winningPlayers) {
       try {
-        await updateChallengeProgress(winnerId, 'WIN_MATCH', { matchId: match.id });
+        await updateChallengeProgress(winnerId, 'WIN_MATCH', { match_id: match.id });
       } catch (error) {
         console.error(`Error actualizando desafío WIN_MATCH para usuario ${winnerId}:`, error);
       }
@@ -341,16 +306,7 @@ const rejectMatchScore = async (matchId, userId, comment) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
+          association: 'participants'
         }
       ],
       transaction
@@ -372,7 +328,7 @@ const rejectMatchScore = async (matchId, userId, comment) => {
 
     // Obtener el score
     const matchScore = await MatchScore.findOne({
-      where: { matchId },
+      where: { match_id: matchId },
       transaction
     });
 
@@ -388,9 +344,9 @@ const rejectMatchScore = async (matchId, userId, comment) => {
     // Actualizar el score
     await matchScore.update({
       status: SCORE_STATUS.REJECTED,
-      rejectedBy: userId,
-      rejectionComment: comment,
-      rejectedAt: new Date()
+      rejected_by: userId,
+      rejection_comment: comment,
+      rejected_at: new Date()
     }, { transaction });
 
     // Confirmar la transacción
@@ -414,16 +370,7 @@ const updateMatchScore = async (matchId, userId, scoreData) => {
     const match = await Match.findByPk(matchId, {
       include: [
         {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
+          association: 'participants'
         }
       ],
       transaction
@@ -440,7 +387,7 @@ const updateMatchScore = async (matchId, userId, scoreData) => {
 
     // Obtener el score
     const matchScore = await MatchScore.findOne({
-      where: { matchId },
+      where: { match_id: matchId },
       include: [{ association: 'sets' }],
       transaction
     });
@@ -501,16 +448,16 @@ const updateMatchScore = async (matchId, userId, scoreData) => {
 
     // Actualizar el MatchScore
     await matchScore.update({
-      winnerTeam,
+      winner_team: winnerTeam,
       status: SCORE_STATUS.PENDING_CONFIRMATION,
-      rejectedBy: null,
-      rejectionComment: null,
-      rejectedAt: null
+      rejected_by: null,
+      rejection_comment: null,
+      rejected_at: null
     }, { transaction });
 
     // Eliminar los sets existentes
     await MatchScoreSet.destroy({
-      where: { matchScoreId: matchScore.id },
+      where: { match_score_id: matchScore.id },
       transaction
     });
 
@@ -518,10 +465,10 @@ const updateMatchScore = async (matchId, userId, scoreData) => {
     for (let i = 0; i < sets.length; i++) {
       const set = sets[i];
       await MatchScoreSet.create({
-        matchScoreId: matchScore.id,
-        setNumber: i + 1,
-        team1Score: set.team1Score,
-        team2Score: set.team2Score
+        match_score_id: matchScore.id,
+        set_number: i + 1,
+        team_1_score: set.team1Score,
+        team_2_score: set.team2Score
       }, { transaction });
     }
 

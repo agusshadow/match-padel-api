@@ -43,12 +43,12 @@ const Challenge = sequelize.define('Challenge', {
       isIn: [CHALLENGE_TYPE_VALUES]
     }
   },
-  actionType: {
+  action_type: {
     type: DataTypes.TEXT,
     allowNull: false,
     comment: 'Tipo de acción que completa el desafío (PLAY_MATCH, WIN_MATCH, etc.)'
   },
-  targetValue: {
+  target_value: {
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 1,
@@ -57,7 +57,7 @@ const Challenge = sequelize.define('Challenge', {
     },
     comment: 'Valor objetivo a alcanzar'
   },
-  rewardType: {
+  reward_type: {
     type: DataTypes.ENUM(...REWARD_TYPE_VALUES),
     allowNull: false,
     comment: 'Tipo de recompensa',
@@ -65,7 +65,7 @@ const Challenge = sequelize.define('Challenge', {
       isIn: [REWARD_TYPE_VALUES]
     }
   },
-  rewardXp: {
+  reward_xp: {
     type: DataTypes.INTEGER,
     allowNull: true,
     validate: {
@@ -73,7 +73,7 @@ const Challenge = sequelize.define('Challenge', {
     },
     comment: 'Cantidad de XP como recompensa'
   },
-  rewardCosmeticId: {
+  reward_cosmetic_id: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {
@@ -82,7 +82,7 @@ const Challenge = sequelize.define('Challenge', {
     },
     comment: 'ID del cosmético como recompensa'
   },
-  isActive: {
+  is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     comment: 'Si el desafío está activo y disponible'
@@ -101,10 +101,10 @@ const Challenge = sequelize.define('Challenge', {
       fields: ['type']
     },
     {
-      fields: ['isActive']
+      fields: ['is_active']
     },
     {
-      fields: ['actionType']
+      fields: ['action_type']
     }
   ]
 });

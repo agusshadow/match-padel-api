@@ -17,7 +17,7 @@ const UserChallenge = sequelize.define('UserChallenge', {
     primaryKey: true,
     autoIncrement: true
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -28,7 +28,7 @@ const UserChallenge = sequelize.define('UserChallenge', {
     onDelete: 'CASCADE',
     comment: 'ID del usuario'
   },
-  challengeId: {
+  challenge_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -39,13 +39,13 @@ const UserChallenge = sequelize.define('UserChallenge', {
     onDelete: 'CASCADE',
     comment: 'ID del desafío'
   },
-  assignedAt: {
+  assigned_at: {
     type: DataTypes.DATE,
     allowNull: false,
     defaultValue: DataTypes.NOW,
     comment: 'Fecha de asignación del desafío'
   },
-  expiresAt: {
+  expires_at: {
     type: DataTypes.DATE,
     allowNull: false,
     comment: 'Fecha de expiración del desafío'
@@ -68,12 +68,12 @@ const UserChallenge = sequelize.define('UserChallenge', {
     },
     comment: 'Estado del desafío'
   },
-  completedAt: {
+  completed_at: {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Fecha de completado del desafío'
   },
-  claimedAt: {
+  claimed_at: {
     type: DataTypes.DATE,
     allowNull: true,
     comment: 'Fecha de reclamación de la recompensa'

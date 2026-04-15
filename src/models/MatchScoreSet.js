@@ -7,7 +7,7 @@ const MatchScoreSet = sequelize.define('MatchScoreSet', {
     primaryKey: true,
     autoIncrement: true
   },
-  matchScoreId: {
+  match_score_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -17,7 +17,7 @@ const MatchScoreSet = sequelize.define('MatchScoreSet', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  setNumber: {
+  set_number: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
@@ -25,14 +25,14 @@ const MatchScoreSet = sequelize.define('MatchScoreSet', {
       max: 5
     }
   },
-  team1Score: {
+  team_1_score: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
       min: 0
     }
   },
-  team2Score: {
+  team_2_score: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {

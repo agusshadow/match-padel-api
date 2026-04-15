@@ -21,13 +21,13 @@ const calculateLevel = (experience) => {
 // Obtener o crear UserLevel para un usuario
 const getOrCreateUserLevel = async (userId, transaction = null) => {
   let userLevel = await UserLevel.findOne({
-    where: { userId },
+    where: { user_id: userId },
     transaction
   });
 
   if (!userLevel) {
     userLevel = await UserLevel.create({
-      userId,
+      user_id: userId,
       experience: 0,
       level: 1
     }, { transaction });
@@ -46,9 +46,9 @@ const awardExperience = async (userId, action, xpAmount, metadata = null, transa
 
   // Guardar log de experiencia
   await UserExperience.create({
-    userId,
+    user_id: userId,
     action,
-    xpAmount,
+    xp_amount: xpAmount,
     metadata
   }, { transaction });
 
@@ -81,7 +81,7 @@ const checkLevelUp = async (userId, newExperience, transaction = null) => {
 
     // Crear notificación de level up
     await Notification.create({
-      userId,
+      user_id: userId,
       type: NOTIFICATION_TYPE.LEVEL_UP,
       data: {
         newLevel,
@@ -125,23 +125,19 @@ const calculateExperienceForNextLevel = (currentLevel, currentExperience) => {
 const awardMatchExperience = async (match, matchScore, transaction = null) => {
   const levelUps = [];
 
-  // Obtener todos los jugadores del partido
-  const players = [
-    match.team1Player1Id,
-    match.team1Player2Id,
-    match.team2Player1Id,
-    match.team2Player2Id
-  ].filter(id => id !== null);
+  // Obtener todos los jugadores del partido desde match.participants
+  const participants = match.participants || [];
+  const players = participants.map(p => p.user_id);
 
   // Identificar equipo ganador
-  const winnerTeam = matchScore.winnerTeam;
-  const winningPlayers = winnerTeam === 1
-    ? [match.team1Player1Id, match.team1Player2Id].filter(id => id !== null)
-    : [match.team2Player1Id, match.team2Player2Id].filter(id => id !== null);
+  const winnerTeam = matchScore.winner_team;
+  const winningPlayers = participants
+    .filter(p => p.team_number === winnerTeam)
+    .map(p => p.user_id);
 
-  // Metadata para el log (solo matchId)
+  // Metadata para el log (solo match_id)
   const metadata = {
-    matchId: match.id
+    match_id: match.id
   };
 
   // Otorgar XP a todos los jugadores por jugar
@@ -150,15 +146,15 @@ const awardMatchExperience = async (match, matchScore, transaction = null) => {
     // Buscar todas las experiencias del usuario con PLAY_MATCH y verificar metadata
     const existingExperiences = await UserExperience.findAll({
       where: {
-        userId: playerId,
+        user_id: playerId,
         action: EXPERIENCE_ACTION.PLAY_MATCH
       },
       transaction
     });
 
-    // Verificar si alguna tiene el mismo matchId en metadata
+    // Verificar si alguna tiene el mismo match_id en metadata
     const existingExperience = existingExperiences.find(exp => {
-      return exp.metadata && exp.metadata.matchId === match.id;
+      return exp.metadata && (exp.metadata.match_id === match.id || exp.metadata.matchId === match.id);
     });
 
     if (existingExperience) {
@@ -178,7 +174,7 @@ const awardMatchExperience = async (match, matchScore, transaction = null) => {
     // Si subió de nivel, guardar info
     if (playResult.levelUp) {
       levelUps.push({
-        userId: playerId,
+        user_id: playerId,
         ...playResult.levelUp
       });
     }
@@ -195,12 +191,12 @@ const awardMatchExperience = async (match, matchScore, transaction = null) => {
 
       // Si subió de nivel por ganar, actualizar info
       if (winResult.levelUp) {
-        const existingLevelUp = levelUps.find(lu => lu.userId === playerId);
+        const existingLevelUp = levelUps.find(lu => lu.user_id === playerId);
         if (existingLevelUp) {
           Object.assign(existingLevelUp, winResult.levelUp);
         } else {
           levelUps.push({
-            userId: playerId,
+            user_id: playerId,
             ...winResult.levelUp
           });
         }
@@ -230,8 +226,8 @@ const getUserExperience = async (userId) => {
 // Obtener historial de experiencia del usuario
 const getExperienceHistory = async (userId, limit = 50) => {
   const history = await UserExperience.findAll({
-    where: { userId },
-    order: [['createdAt', 'DESC']],
+    where: { user_id: userId },
+    order: [['created_at', 'DESC']],
     limit
   });
 

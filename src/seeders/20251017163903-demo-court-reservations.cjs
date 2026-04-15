@@ -7,22 +7,16 @@ module.exports = {
     const isPostgres = dialect === 'postgres';
     
     const slots = await queryInterface.sequelize.query(
-      isPostgres
-        ? `SELECT cs.id, cs.court_id, cs.start_time, cs.end_time, cs.price
-           FROM court_slots cs
-           WHERE cs.is_available = true
-           ORDER BY cs.court_id, cs.day_of_week, cs.start_time
-           LIMIT 30`
-        : `SELECT cs.id, cs.court_id, cs.start_time, cs.end_time, cs.price
-           FROM court_slots cs
-           WHERE cs.is_available = true
-           ORDER BY cs.court_id, cs.day_of_week, cs.start_time
-           LIMIT 30`,
+      `SELECT cs.id, cs.court_id, cs.day_of_week, cs.start_time, cs.end_time, cs.price
+       FROM court_slots cs
+       WHERE cs.is_available = true
+       ORDER BY cs.court_id, cs.day_of_week, cs.start_time
+       LIMIT 50`,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
     const users = await queryInterface.sequelize.query(
-      'SELECT id FROM users ORDER BY id LIMIT 5',
+      'SELECT id FROM users ORDER BY id LIMIT 10',
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -32,18 +26,43 @@ module.exports = {
 
     const reservations = [];
     const today = new Date();
+    const usedSlots = new Set(); // Track court_id + date + start_time to avoid collisions
 
-    for (let i = 0; i < Math.min(30, slots.length); i++) {
+    for (let i = 0; i < slots.length; i++) {
+      if (reservations.length >= 30) break;
+
       const slot = slots[i];
       const user = users[i % users.length];
       
       const slotId = slot.id;
       const courtId = slot.court_id || slot.courtId;
+      const dayOfWeek = slot.day_of_week !== undefined ? slot.day_of_week : slot.dayOfWeek;
       const startTime = slot.start_time || slot.startTime;
       const endTime = slot.end_time || slot.endTime;
       
-      const scheduledDate = new Date(today);
-      scheduledDate.setDate(today.getDate() + Math.floor(Math.random() * 30) + 1);
+      // Find a date in the next 3 weeks that matches the slot's day of week
+      let scheduledDate = new Date(today);
+      let foundDate = false;
+      
+      // Try to find a valid day in the next 30 days
+      for (let offset = 1; offset <= 30; offset++) {
+        const potentialDate = new Date(today);
+        potentialDate.setDate(today.getDate() + offset);
+        
+        if (potentialDate.getDay() === dayOfWeek) {
+          const dateStr = potentialDate.toISOString().split('T')[0];
+          const collisionKey = `${courtId}-${dateStr}-${startTime}`;
+          
+          if (!usedSlots.has(collisionKey)) {
+            scheduledDate = potentialDate;
+            usedSlots.add(collisionKey);
+            foundDate = true;
+            break;
+          }
+        }
+      }
+
+      if (!foundDate) continue;
       
       const [startH, startM] = startTime.split(':').map(Number);
       const [endH, endM] = endTime.split(':').map(Number);
@@ -68,12 +87,14 @@ module.exports = {
       });
     }
 
-    await queryInterface.bulkInsert('court_reservations', reservations);
-    
-    const slotIds = reservations.map(r => r.slot_id);
-    await queryInterface.sequelize.query(
-      `UPDATE court_slots SET is_available = false WHERE id IN (${slotIds.join(',')})`
-    );
+    if (reservations.length > 0) {
+      await queryInterface.bulkInsert('court_reservations', reservations);
+      
+      const slotIds = reservations.map(r => r.slot_id);
+      await queryInterface.sequelize.query(
+        `UPDATE court_slots SET is_available = false WHERE id IN (${slotIds.join(',')})`
+      );
+    }
     
     console.log(`✅ ${reservations.length} reservas creadas`);
   },

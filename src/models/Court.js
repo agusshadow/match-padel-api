@@ -25,7 +25,7 @@ const Court = sequelize.define('Court', {
     primaryKey: true,
     autoIncrement: true
   },
-  clubId: {
+  club_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -57,7 +57,7 @@ const Court = sequelize.define('Court', {
       isIn: [COURT_SURFACE_VALUES]
     }
   },
-  isActive: {
+  is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
@@ -65,7 +65,9 @@ const Court = sequelize.define('Court', {
   tableName: 'courts',
   timestamps: true,
   underscored: true,
-  paranoid: false
+  paranoid: false,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 // Exportar constantes para uso en otros archivos

@@ -40,12 +40,12 @@ const Cosmetic = sequelize.define('Cosmetic', {
     },
     comment: 'Tipo de cosmético'
   },
-  imageUrl: {
+  image_url: {
     type: DataTypes.TEXT,
     allowNull: false,
     comment: 'URL completa de la imagen en el bucket público'
   },
-  acquisitionMethod: {
+  acquisition_method: {
     type: DataTypes.ENUM(...ACQUISITION_METHOD_VALUES),
     allowNull: false,
     validate: {
@@ -61,7 +61,7 @@ const Cosmetic = sequelize.define('Cosmetic', {
     },
     comment: 'Precio si es comprable (NULL si no es comprable)'
   },
-  challengeId: {
+  challenge_id: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {
@@ -70,7 +70,7 @@ const Cosmetic = sequelize.define('Cosmetic', {
     },
     comment: 'ID del desafío si se obtiene por desafío'
   },
-  isActive: {
+  is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     comment: 'Si el cosmético está activo y disponible'

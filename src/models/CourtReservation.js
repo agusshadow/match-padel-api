@@ -20,7 +20,7 @@ const CourtReservation = sequelize.define('CourtReservation', {
     primaryKey: true,
     autoIncrement: true
   },
-  courtId: {
+  court_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -30,7 +30,7 @@ const CourtReservation = sequelize.define('CourtReservation', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -40,11 +40,11 @@ const CourtReservation = sequelize.define('CourtReservation', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  scheduledDate: {
+  scheduled_date: {
     type: DataTypes.DATEONLY,
     allowNull: false
   },
-  slotId: {
+  slot_id: {
     type: DataTypes.BIGINT,
     allowNull: true, // Permitir null para datos existentes (se cambiará a NOT NULL después)
     references: {
@@ -55,11 +55,11 @@ const CourtReservation = sequelize.define('CourtReservation', {
     onDelete: 'CASCADE'
   },
   // Campos denormalizados para mejor performance
-  scheduledDateTime: {
+  scheduled_date_time: {
     type: DataTypes.DATE,
     allowNull: true // Permitir null para datos existentes
   },
-  endDateTime: {
+  end_date_time: {
     type: DataTypes.DATE,
     allowNull: true // Permitir null para datos existentes
   },
@@ -79,7 +79,9 @@ const CourtReservation = sequelize.define('CourtReservation', {
   tableName: 'court_reservations',
   timestamps: true,
   underscored: true,
-  paranoid: false
+  paranoid: false,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
 // Exportar constantes para uso en otros archivos

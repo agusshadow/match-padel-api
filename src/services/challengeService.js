@@ -10,7 +10,7 @@ const assignChallengesToUser = async (userId, challengeType) => {
   const challenges = await Challenge.findAll({
     where: {
       type: challengeType,
-      isActive: true
+      is_active: true
     }
   });
 
@@ -49,12 +49,12 @@ const assignChallengesToUser = async (userId, challengeType) => {
     // Verificar si el usuario ya tiene este desafío activo
     const existingChallenge = await UserChallenge.findOne({
       where: {
-        userId,
-        challengeId: challenge.id,
+        user_id: userId,
+        challenge_id: challenge.id,
         status: {
           [Op.in]: [USER_CHALLENGE_STATUS.PENDING, USER_CHALLENGE_STATUS.COMPLETED]
         },
-        expiresAt: {
+        expires_at: {
           [Op.gt]: now
         }
       }
@@ -62,10 +62,10 @@ const assignChallengesToUser = async (userId, challengeType) => {
 
     if (!existingChallenge) {
       const userChallenge = await UserChallenge.create({
-        userId,
-        challengeId: challenge.id,
-        assignedAt: now,
-        expiresAt,
+        user_id: userId,
+        challenge_id: challenge.id,
+        assigned_at: now,
+        expires_at: expiresAt,
         progress: 0,
         status: USER_CHALLENGE_STATUS.PENDING
       });
@@ -107,9 +107,9 @@ const updateChallengeProgress = async (userId, actionType, metadata = {}) => {
   // Buscar desafíos activos del usuario que coincidan con la acción
   const userChallenges = await UserChallenge.findAll({
     where: {
-      userId,
+      user_id: userId,
       status: USER_CHALLENGE_STATUS.PENDING,
-      expiresAt: {
+      expires_at: {
         [Op.gt]: now
       }
     },
@@ -117,8 +117,8 @@ const updateChallengeProgress = async (userId, actionType, metadata = {}) => {
       model: Challenge,
       as: 'challenge',
       where: {
-        actionType,
-        isActive: true
+        action_type: actionType,
+        is_active: true
       }
     }]
   });
@@ -136,10 +136,10 @@ const updateChallengeProgress = async (userId, actionType, metadata = {}) => {
     });
 
     // Verificar si se completó
-    if (newProgress >= challenge.targetValue) {
+    if (newProgress >= challenge.target_value) {
       await userChallenge.update({
         status: USER_CHALLENGE_STATUS.COMPLETED,
-        completedAt: now
+        completed_at: now
       });
       completedChallenges.push(userChallenge);
     }
@@ -155,7 +155,7 @@ const updateChallengeProgress = async (userId, actionType, metadata = {}) => {
 const getUserChallenges = async (userId, filters = {}) => {
   const now = new Date();
   const where = {
-    userId
+    user_id: userId
   };
 
   // Si se especifica un estado, usarlo; si no, excluir expirados por defecto
@@ -167,7 +167,7 @@ const getUserChallenges = async (userId, filters = {}) => {
       [Op.ne]: USER_CHALLENGE_STATUS.EXPIRED
     };
     // También excluir desafíos que ya expiraron por fecha (aunque no estén marcados como expired)
-    where.expiresAt = {
+    where.expires_at = {
       [Op.gte]: now
     };
   }
@@ -185,7 +185,7 @@ const getUserChallenges = async (userId, filters = {}) => {
       as: 'challenge',
       where: Object.keys(challengeWhere).length > 0 ? challengeWhere : undefined
     }],
-    order: [['assignedAt', 'DESC']]
+    order: [['assigned_at', 'DESC']]
   });
 
   return userChallenges;
@@ -198,7 +198,7 @@ const canClaimChallenge = async (userId, userChallengeId) => {
   const userChallenge = await UserChallenge.findOne({
     where: {
       id: userChallengeId,
-      userId
+      user_id: userId
     },
     include: [{
       model: Challenge,
@@ -215,7 +215,7 @@ const canClaimChallenge = async (userId, userChallengeId) => {
   }
 
   const now = new Date();
-  if (userChallenge.expiresAt < now) {
+  if (userChallenge.expires_at < now) {
     return { canClaim: false, reason: 'El desafío ha expirado' };
   }
 
@@ -243,7 +243,7 @@ const claimChallengeReward = async (userId, userChallengeId) => {
   // Actualizar estado a reclamado
   await userChallenge.update({
     status: USER_CHALLENGE_STATUS.CLAIMED,
-    claimedAt: now
+    claimed_at: now
   });
 
   const rewards = {
@@ -252,12 +252,12 @@ const claimChallengeReward = async (userId, userChallengeId) => {
   };
 
   // Otorgar recompensas según el tipo
-  if (challenge.rewardType === 'xp' || challenge.rewardType === 'both') {
-    rewards.xp = challenge.rewardXp;
+  if (challenge.reward_type === 'xp' || challenge.reward_type === 'both') {
+    rewards.xp = challenge.reward_xp;
   }
 
-  if (challenge.rewardType === 'cosmetic' || challenge.rewardType === 'both') {
-    rewards.cosmetic = challenge.rewardCosmeticId;
+  if (challenge.reward_type === 'cosmetic' || challenge.reward_type === 'both') {
+    rewards.cosmetic = challenge.reward_cosmetic_id;
   }
 
   return {
@@ -282,7 +282,7 @@ const cleanupExpiredChallenges = async () => {
         status: {
           [Op.in]: [USER_CHALLENGE_STATUS.PENDING, USER_CHALLENGE_STATUS.COMPLETED]
         },
-        expiresAt: {
+        expires_at: {
           [Op.lt]: now
         }
       }

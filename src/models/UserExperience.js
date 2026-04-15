@@ -16,7 +16,7 @@ const UserExperience = sequelize.define('UserExperience', {
     primaryKey: true,
     autoIncrement: true
   },
-  userId: {
+  user_id: {
     type: DataTypes.BIGINT,
     allowNull: false,
     references: {
@@ -30,7 +30,7 @@ const UserExperience = sequelize.define('UserExperience', {
     type: DataTypes.TEXT,
     allowNull: false
   },
-  xpAmount: {
+  xp_amount: {
     type: DataTypes.INTEGER,
     allowNull: false,
     validate: {
