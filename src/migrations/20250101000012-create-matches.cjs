@@ -30,46 +30,6 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      team1_player1_id: {
-        type: Sequelize.BIGINT,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
-      },
-      team1_player2_id: {
-        type: Sequelize.BIGINT,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
-      },
-      team2_player1_id: {
-        type: Sequelize.BIGINT,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
-      },
-      team2_player2_id: {
-        type: Sequelize.BIGINT,
-        allowNull: true,
-        references: {
-          model: 'users',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
-      },
       status: {
         type: Sequelize.ENUM('scheduled', 'in_progress', 'pending_confirmation', 'completed', 'cancelled'),
         defaultValue: 'scheduled',
@@ -128,22 +88,6 @@ module.exports = {
 
     await queryInterface.addIndex('matches', ['created_by'], {
       name: 'idx_matches_created_by'
-    });
-
-    await queryInterface.addIndex('matches', ['team1_player1_id'], {
-      name: 'idx_matches_team1_player1'
-    });
-
-    await queryInterface.addIndex('matches', ['team1_player2_id'], {
-      name: 'idx_matches_team1_player2'
-    });
-
-    await queryInterface.addIndex('matches', ['team2_player1_id'], {
-      name: 'idx_matches_team2_player1'
-    });
-
-    await queryInterface.addIndex('matches', ['team2_player2_id'], {
-      name: 'idx_matches_team2_player2'
     });
 
     await queryInterface.addIndex('matches', ['match_date_time'], {

@@ -38,55 +38,6 @@ const Match = sequelize.define('Match', {
     onUpdate: 'CASCADE',
     onDelete: 'CASCADE'
   },
-  team1Player1Id: {
-    type: DataTypes.BIGINT,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL'
-  },
-  team1Player2Id: {
-    type: DataTypes.BIGINT,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL'
-  },
-  team2Player1Id: {
-    type: DataTypes.BIGINT,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL'
-  },
-  team2Player2Id: {
-    type: DataTypes.BIGINT,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onUpdate: 'CASCADE',
-    onDelete: 'SET NULL'
-  },
-  // Campos denormalizados para mejor performance
-  matchDateTime: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  matchEndDateTime: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
     defaultValue: MATCH_STATUS.SCHEDULED,
@@ -96,19 +47,19 @@ const Match = sequelize.define('Match', {
     }
   },
   // Campos de auditoría
-  startedAt: {
+  started_at: {
     type: DataTypes.DATE,
     allowNull: true
   },
-  finishedAt: {
+  finished_at: {
     type: DataTypes.DATE,
     allowNull: true
   },
-  cancelledAt: {
+  cancelled_at: {
     type: DataTypes.DATE,
     allowNull: true
   },
-  cancelledBy: {
+  cancelled_by: {
     type: DataTypes.BIGINT,
     allowNull: true,
     references: {
@@ -126,28 +77,7 @@ const Match = sequelize.define('Match', {
   tableName: 'matches',
   timestamps: true,
   underscored: true,
-  paranoid: false,
-  validate: {
-    validateTeams() {
-      // El creador debe estar en team1Player1Id
-      if (this.createdBy && this.team1Player1Id && this.createdBy !== this.team1Player1Id) {
-        throw new Error('El creador del partido debe ser team1Player1Id');
-      }
-      
-      // Validar que no haya jugadores duplicados entre equipos
-      const players = [
-        this.team1Player1Id,
-        this.team1Player2Id,
-        this.team2Player1Id,
-        this.team2Player2Id
-      ].filter(Boolean);
-      
-      const uniquePlayers = [...new Set(players)];
-      if (players.length !== uniquePlayers.length) {
-        throw new Error('Los jugadores deben ser únicos entre equipos');
-      }
-    }
-  }
+  paranoid: false
 });
 
 // Exportar constantes para uso en otros archivos

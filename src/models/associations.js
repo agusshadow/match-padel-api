@@ -8,6 +8,7 @@ import Court from './Court.js';
 import CourtSlot from './CourtSlot.js';
 import CourtReservation from './CourtReservation.js';
 import Match from './Match.js';
+import MatchParticipant from './MatchParticipant.js';
 import MatchScore from './MatchScore.js';
 import MatchScoreSet from './MatchScoreSet.js';
 import Challenge from './Challenge.js';
@@ -18,244 +19,225 @@ import Cosmetic from './Cosmetic.js';
 
 // User associations
 User.hasOne(UserProfile, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'profile'
 });
 
 User.hasMany(CourtReservation, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'reservations'
 });
 
 User.hasMany(Match, {
-  foreignKey: 'createdBy',
+  foreignKey: 'created_by',
   as: 'createdMatches'
 });
 
-User.hasMany(Match, {
-  foreignKey: 'team1Player1Id',
-  as: 'matchesAsTeam1Player1'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'team1Player2Id',
-  as: 'matchesAsTeam1Player2'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'team2Player1Id',
-  as: 'matchesAsTeam2Player1'
-});
-
-User.hasMany(Match, {
-  foreignKey: 'team2Player2Id',
-  as: 'matchesAsTeam2Player2'
+User.hasMany(MatchParticipant, {
+  foreignKey: 'user_id',
+  as: 'matchParticipations'
 });
 
 User.hasMany(MatchScore, {
-  foreignKey: 'confirmedBy',
+  foreignKey: 'confirmed_by',
   as: 'confirmedScores'
 });
 
 User.hasMany(MatchScore, {
-  foreignKey: 'rejectedBy',
+  foreignKey: 'rejected_by',
   as: 'rejectedScores'
 });
 
 User.hasOne(UserLevel, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'level'
 });
 
 User.hasMany(UserExperience, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'experienceLog'
 });
 
 User.hasMany(Notification, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'notifications'
 });
 
 // Club associations
 Club.hasMany(Court, {
-  foreignKey: 'clubId',
+  foreignKey: 'club_id',
   as: 'courts'
 });
 
 // Court associations
 Court.belongsTo(Club, {
-  foreignKey: 'clubId',
+  foreignKey: 'club_id',
   as: 'club'
 });
 
 Court.hasMany(CourtSlot, {
-  foreignKey: 'courtId',
+  foreignKey: 'court_id',
   as: 'slots'
 });
 
 Court.hasMany(CourtReservation, {
-  foreignKey: 'courtId',
+  foreignKey: 'court_id',
   as: 'reservations'
 });
 
 // CourtReservation associations
 CourtReservation.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 CourtReservation.belongsTo(Court, {
-  foreignKey: 'courtId',
+  foreignKey: 'court_id',
   as: 'court'
 });
 
 CourtReservation.belongsTo(CourtSlot, {
-  foreignKey: 'slotId',
+  foreignKey: 'slot_id',
   as: 'slot'
 });
 
 CourtReservation.hasOne(Match, {
-  foreignKey: 'reservationId',
+  foreignKey: 'reservation_id',
   as: 'match'
 });
 
 // Match associations
 Match.belongsTo(CourtReservation, {
-  foreignKey: 'reservationId',
+  foreignKey: 'reservation_id',
   as: 'reservation'
 });
 
 Match.belongsTo(User, {
-  foreignKey: 'createdBy',
+  foreignKey: 'created_by',
   as: 'creator'
 });
 
-Match.belongsTo(User, {
-  foreignKey: 'team1Player1Id',
-  as: 'team1Player1'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'team1Player2Id',
-  as: 'team1Player2'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'team2Player1Id',
-  as: 'team2Player1'
-});
-
-Match.belongsTo(User, {
-  foreignKey: 'team2Player2Id',
-  as: 'team2Player2'
+Match.hasMany(MatchParticipant, {
+  foreignKey: 'match_id',
+  as: 'participants'
 });
 
 Match.hasOne(MatchScore, {
-  foreignKey: 'matchId',
+  foreignKey: 'match_id',
   as: 'score'
+});
+
+// MatchParticipant associations
+MatchParticipant.belongsTo(Match, {
+  foreignKey: 'match_id',
+  as: 'match'
+});
+
+MatchParticipant.belongsTo(User, {
+  foreignKey: 'user_id',
+  as: 'user'
 });
 
 // MatchScore associations
 MatchScore.belongsTo(Match, {
-  foreignKey: 'matchId',
+  foreignKey: 'match_id',
   as: 'match'
 });
 
 MatchScore.belongsTo(User, {
-  foreignKey: 'confirmedBy',
+  foreignKey: 'confirmed_by',
   as: 'confirmer'
 });
 
 MatchScore.belongsTo(User, {
-  foreignKey: 'rejectedBy',
+  foreignKey: 'rejected_by',
   as: 'rejecter'
 });
 
 MatchScore.hasMany(MatchScoreSet, {
-  foreignKey: 'matchScoreId',
+  foreignKey: 'match_score_id',
   as: 'sets'
 });
 
 // MatchScoreSet associations
 MatchScoreSet.belongsTo(MatchScore, {
-  foreignKey: 'matchScoreId',
+  foreignKey: 'match_score_id',
   as: 'matchScore'
 });
 
 // UserProfile associations
 UserProfile.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 // CourtSlot associations
 CourtSlot.belongsTo(Court, {
-  foreignKey: 'courtId',
+  foreignKey: 'court_id',
   as: 'court'
 });
 
 CourtSlot.hasMany(CourtReservation, {
-  foreignKey: 'slotId',
+  foreignKey: 'slot_id',
   as: 'reservations'
 });
 
 // UserLevel associations
 UserLevel.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 // UserExperience associations
 UserExperience.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 // Notification associations
 Notification.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 // Challenge associations
 Challenge.hasMany(UserChallenge, {
-  foreignKey: 'challengeId',
+  foreignKey: 'challenge_id',
   as: 'userChallenges'
 });
 
 Challenge.belongsTo(Cosmetic, {
-  foreignKey: 'rewardCosmeticId',
+  foreignKey: 'reward_cosmetic_id',
   as: 'rewardCosmetic'
 });
 
 // UserChallenge associations
 UserChallenge.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user'
 });
 
 UserChallenge.belongsTo(Challenge, {
-  foreignKey: 'challengeId',
+  foreignKey: 'challenge_id',
   as: 'challenge'
 });
 
 // Cosmetic associations
 Cosmetic.belongsTo(Challenge, {
-  foreignKey: 'challengeId',
+  foreignKey: 'challenge_id',
   as: 'challenge'
 });
 
 // User associations adicionales
 User.hasMany(UserChallenge, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'challenges'
 });
 
 
 // UserProfile associations adicionales
 UserProfile.belongsTo(Cosmetic, {
-  foreignKey: 'equippedPaletteId',
+  foreignKey: 'equipped_palette_id',
   as: 'equippedPalette'
 });
 
@@ -270,6 +252,7 @@ export {
   CourtSlot,
   CourtReservation,
   Match,
+  MatchParticipant,
   MatchScore,
   MatchScoreSet,
   Challenge,

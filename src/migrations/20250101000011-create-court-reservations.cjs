@@ -3,6 +3,9 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up (queryInterface, Sequelize) {
+    // Asegurar que la extensión btree_gist esté disponible para exclusion constraints
+    await queryInterface.sequelize.query('CREATE EXTENSION IF NOT EXISTS btree_gist;');
+
     await queryInterface.createTable('court_reservations', {
       id: {
         allowNull: false,
@@ -96,6 +99,18 @@ module.exports = {
     await queryInterface.addIndex('court_reservations', ['slot_id', 'scheduled_date', 'status'], {
       name: 'idx_reservations_slot_date_status'
     });
+
+    // Restricción de exclusión para evitar solapamientos (Exclusion Constraint)
+    // Solo aplica para reservas que NO estén canceladas
+    await queryInterface.sequelize.query(`
+      ALTER TABLE court_reservations
+      ADD CONSTRAINT no_overlapping_reservations
+      EXCLUDE USING gist (
+        court_id WITH =,
+        tstzrange(scheduled_date_time, end_date_time) WITH &&
+      )
+      WHERE (status != 'cancelled');
+    `);
   },
 
   async down (queryInterface, Sequelize) {
