@@ -3,12 +3,12 @@ import { sequelize } from '../config/connection.js';
 
 const UserLevel = sequelize.define('UserLevel', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     unique: true,
     references: {
@@ -36,8 +36,8 @@ const UserLevel = sequelize.define('UserLevel', {
   }
 }, {
   tableName: 'user_levels',
-  timestamps: true
+  timestamps: true,
+  underscored: true
 });
 
 export default UserLevel;
-

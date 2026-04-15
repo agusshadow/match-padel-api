@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      courtId: {
-        type: Sequelize.INTEGER,
+      court_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'courts',
@@ -20,8 +20,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      user_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'users',
@@ -30,12 +30,12 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      scheduledDate: {
+      scheduled_date: {
         type: Sequelize.DATEONLY,
         allowNull: false
       },
-      slotId: {
-        type: Sequelize.INTEGER,
+      slot_id: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'court_slots',
@@ -44,11 +44,11 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      scheduledDateTime: {
+      scheduled_date_time: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      endDateTime: {
+      end_date_time: {
         type: Sequelize.DATE,
         allowNull: true
       },
@@ -61,39 +61,39 @@ module.exports = {
         defaultValue: 'pending',
         allowNull: false
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('court_reservations', ['courtId'], {
+    await queryInterface.addIndex('court_reservations', ['court_id'], {
       name: 'idx_court_reservations_court_id'
     });
 
-    await queryInterface.addIndex('court_reservations', ['userId'], {
+    await queryInterface.addIndex('court_reservations', ['user_id'], {
       name: 'idx_court_reservations_user_id'
     });
 
-    await queryInterface.addIndex('court_reservations', ['slotId'], {
+    await queryInterface.addIndex('court_reservations', ['slot_id'], {
       name: 'idx_court_reservations_slot_id'
     });
 
-    await queryInterface.addIndex('court_reservations', ['scheduledDateTime'], {
+    await queryInterface.addIndex('court_reservations', ['scheduled_date_time'], {
       name: 'idx_reservations_scheduled_datetime'
     });
 
-    await queryInterface.addIndex('court_reservations', ['endDateTime'], {
+    await queryInterface.addIndex('court_reservations', ['end_date_time'], {
       name: 'idx_reservations_end_datetime'
     });
 
-    await queryInterface.addIndex('court_reservations', ['slotId', 'scheduledDate', 'status'], {
+    await queryInterface.addIndex('court_reservations', ['slot_id', 'scheduled_date', 'status'], {
       name: 'idx_reservations_slot_date_status'
     });
   },

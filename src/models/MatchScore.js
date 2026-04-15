@@ -11,12 +11,12 @@ export const SCORE_STATUS_VALUES = Object.values(SCORE_STATUS);
 
 const MatchScore = sequelize.define('MatchScore', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   matchId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'matches',
@@ -42,7 +42,7 @@ const MatchScore = sequelize.define('MatchScore', {
     }
   },
   confirmedBy: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -52,7 +52,7 @@ const MatchScore = sequelize.define('MatchScore', {
     onDelete: 'SET NULL'
   },
   rejectedBy: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -80,6 +80,7 @@ const MatchScore = sequelize.define('MatchScore', {
 }, {
   tableName: 'match_scores',
   timestamps: true,
+  underscored: true,
   paranoid: false,
   hooks: {
     beforeUpdate: async (matchScore, options) => {
@@ -104,4 +105,3 @@ MatchScore.SCORE_STATUS = SCORE_STATUS;
 MatchScore.SCORE_STATUS_VALUES = SCORE_STATUS_VALUES;
 
 export default MatchScore;
-

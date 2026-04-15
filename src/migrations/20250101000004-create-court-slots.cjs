@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      courtId: {
-        type: Sequelize.INTEGER,
+      court_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'courts',
@@ -20,19 +20,19 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      dayOfWeek: {
+      day_of_week: {
         type: Sequelize.INTEGER,
         allowNull: false
       },
-      startTime: {
+      start_time: {
         type: Sequelize.TIME,
         allowNull: false
       },
-      endTime: {
+      end_time: {
         type: Sequelize.TIME,
         allowNull: false
       },
-      isAvailable: {
+      is_available: {
         type: Sequelize.BOOLEAN,
         defaultValue: true
       },
@@ -40,23 +40,23 @@ module.exports = {
         type: Sequelize.DECIMAL(10, 2),
         allowNull: false
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('court_slots', ['courtId'], {
+    await queryInterface.addIndex('court_slots', ['court_id'], {
       name: 'idx_court_slots_court_id'
     });
 
-    await queryInterface.addIndex('court_slots', ['courtId', 'dayOfWeek', 'startTime'], {
+    await queryInterface.addIndex('court_slots', ['court_id', 'day_of_week', 'start_time'], {
       unique: true,
       name: 'idx_court_slots_unique'
     });

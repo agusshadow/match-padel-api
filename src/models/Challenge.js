@@ -21,17 +21,17 @@ const REWARD_TYPE_VALUES = Object.values(REWARD_TYPE);
 
 const Challenge = sequelize.define('Challenge', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   title: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.TEXT,
     allowNull: false,
     comment: 'Título del desafío'
   },
   description: {
-    type: DataTypes.STRING(500),
+    type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Descripción del desafío'
   },
@@ -44,7 +44,7 @@ const Challenge = sequelize.define('Challenge', {
     }
   },
   actionType: {
-    type: DataTypes.STRING(100),
+    type: DataTypes.TEXT,
     allowNull: false,
     comment: 'Tipo de acción que completa el desafío (PLAY_MATCH, WIN_MATCH, etc.)'
   },
@@ -74,7 +74,7 @@ const Challenge = sequelize.define('Challenge', {
     comment: 'Cantidad de XP como recompensa'
   },
   rewardCosmeticId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'cosmetics',
@@ -95,6 +95,7 @@ const Challenge = sequelize.define('Challenge', {
 }, {
   tableName: 'challenges',
   timestamps: true,
+  underscored: true,
   indexes: [
     {
       fields: ['type']
@@ -116,4 +117,3 @@ Challenge.REWARD_TYPE_VALUES = REWARD_TYPE_VALUES;
 
 export default Challenge;
 export { CHALLENGE_TYPE, CHALLENGE_TYPE_VALUES, REWARD_TYPE, REWARD_TYPE_VALUES };
-

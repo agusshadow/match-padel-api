@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      user_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         unique: true,
         references: {
@@ -31,21 +31,21 @@ module.exports = {
         allowNull: false,
         defaultValue: 1
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('user_levels', ['userId'], {
+    await queryInterface.addIndex('user_levels', ['user_id'], {
       unique: true,
-      name: 'user_levels_userId_unique'
+      name: 'user_levels_user_id_unique'
     });
   },
 

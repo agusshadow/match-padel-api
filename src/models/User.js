@@ -5,30 +5,31 @@ import bcrypt from 'bcryptjs';
 // Modelo simple de Usuario
 const User = sequelize.define('User', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   name: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false
   },
   email: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
     unique: true
   },
   password: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false
   },
   role: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     defaultValue: 'user'
   }
 }, {
   tableName: 'users',
-  timestamps: true
+  timestamps: true,
+  underscored: true
 });
 
 User.beforeCreate(async (user) => {

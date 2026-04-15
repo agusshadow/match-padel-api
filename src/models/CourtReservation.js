@@ -16,12 +16,12 @@ const RESERVATION_DURATION_MINUTES = 90;
 
 const CourtReservation = sequelize.define('CourtReservation', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   courtId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'courts',
@@ -31,7 +31,7 @@ const CourtReservation = sequelize.define('CourtReservation', {
     onDelete: 'CASCADE'
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'users',
@@ -45,7 +45,7 @@ const CourtReservation = sequelize.define('CourtReservation', {
     allowNull: false
   },
   slotId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true, // Permitir null para datos existentes (se cambiará a NOT NULL después)
     references: {
       model: 'court_slots',
@@ -78,6 +78,7 @@ const CourtReservation = sequelize.define('CourtReservation', {
 }, {
   tableName: 'court_reservations',
   timestamps: true,
+  underscored: true,
   paranoid: false
 });
 

@@ -8,42 +8,42 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
       title: {
-        type: Sequelize.STRING(255),
+        type: Sequelize.TEXT(255),
         allowNull: false
       },
       description: {
-        type: Sequelize.STRING(500),
+        type: Sequelize.TEXT(500),
         allowNull: true
       },
       type: {
         type: Sequelize.ENUM('daily', 'weekly', 'monthly'),
         allowNull: false
       },
-      actionType: {
-        type: Sequelize.STRING(100),
+      action_type: {
+        type: Sequelize.TEXT(100),
         allowNull: false
       },
-      targetValue: {
+      target_value: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 1
       },
-      rewardType: {
+      reward_type: {
         type: Sequelize.ENUM('xp', 'cosmetic', 'both'),
         allowNull: false
       },
-      rewardXp: {
+      reward_xp: {
         type: Sequelize.INTEGER,
         allowNull: true
       },
-      rewardCosmeticId: {
-        type: Sequelize.INTEGER,
+      reward_cosmetic_id: {
+        type: Sequelize.BIGINT,
         allowNull: true
       },
-      isActive: {
+      is_active: {
         type: Sequelize.BOOLEAN,
         defaultValue: true,
         allowNull: false
@@ -52,12 +52,12 @@ module.exports = {
         type: Sequelize.JSON,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
@@ -68,11 +68,11 @@ module.exports = {
       name: 'idx_challenges_type'
     });
 
-    await queryInterface.addIndex('challenges', ['isActive'], {
+    await queryInterface.addIndex('challenges', ['is_active'], {
       name: 'idx_challenges_is_active'
     });
 
-    await queryInterface.addIndex('challenges', ['actionType'], {
+    await queryInterface.addIndex('challenges', ['action_type'], {
       name: 'idx_challenges_action_type'
     });
   },

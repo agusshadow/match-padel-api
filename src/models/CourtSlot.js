@@ -3,12 +3,12 @@ import { sequelize } from '../config/connection.js';
 
 const CourtSlot = sequelize.define('CourtSlot', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   courtId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'courts',
@@ -47,11 +47,12 @@ const CourtSlot = sequelize.define('CourtSlot', {
 }, {
   tableName: 'court_slots',
   timestamps: true,
+  underscored: true,
   paranoid: false,
   indexes: [
     {
       unique: true,
-      fields: ['courtId', 'dayOfWeek', 'startTime']
+      fields: ['court_id', 'day_of_week', 'start_time']
     }
   ]
 });

@@ -3,12 +3,12 @@ import { sequelize } from '../config/connection.js';
 
 const Club = sequelize.define('Club', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   name: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
     validate: {
       notEmpty: true,
@@ -16,7 +16,7 @@ const Club = sequelize.define('Club', {
     }
   },
   address: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
     validate: {
       notEmpty: true,
@@ -24,7 +24,7 @@ const Club = sequelize.define('Club', {
     }
   },
   city: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
     validate: {
       notEmpty: true,
@@ -32,7 +32,7 @@ const Club = sequelize.define('Club', {
     }
   },
   phone: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: true,
     validate: {
       len: [7, 20]
@@ -65,6 +65,7 @@ const Club = sequelize.define('Club', {
 }, {
   tableName: 'clubs',
   timestamps: true,
+  underscored: true,
   paranoid: false
 });
 

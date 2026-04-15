@@ -17,17 +17,17 @@ const ACQUISITION_METHOD_VALUES = Object.values(ACQUISITION_METHOD);
 
 const Cosmetic = sequelize.define('Cosmetic', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   name: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.TEXT,
     allowNull: false,
     comment: 'Nombre del cosmético'
   },
   description: {
-    type: DataTypes.STRING(500),
+    type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Descripción del cosmético'
   },
@@ -41,7 +41,7 @@ const Cosmetic = sequelize.define('Cosmetic', {
     comment: 'Tipo de cosmético'
   },
   imageUrl: {
-    type: DataTypes.STRING(500),
+    type: DataTypes.TEXT,
     allowNull: false,
     comment: 'URL completa de la imagen en el bucket público'
   },
@@ -62,7 +62,7 @@ const Cosmetic = sequelize.define('Cosmetic', {
     comment: 'Precio si es comprable (NULL si no es comprable)'
   },
   challengeId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'challenges',
@@ -78,15 +78,16 @@ const Cosmetic = sequelize.define('Cosmetic', {
 }, {
   tableName: 'cosmetics',
   timestamps: true,
+  underscored: true,
   indexes: [
     {
-      fields: ['acquisitionMethod']
+      fields: ['acquisition_method']
     },
     {
-      fields: ['challengeId']
+      fields: ['challenge_id']
     },
     {
-      fields: ['isActive']
+      fields: ['is_active']
     },
     {
       fields: ['type']
@@ -101,4 +102,3 @@ Cosmetic.ACQUISITION_METHOD_VALUES = ACQUISITION_METHOD_VALUES;
 
 export default Cosmetic;
 export { COSMETIC_TYPE, COSMETIC_TYPE_VALUES, ACQUISITION_METHOD, ACQUISITION_METHOD_VALUES };
-

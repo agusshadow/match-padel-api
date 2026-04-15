@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      user_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'users',
@@ -21,10 +21,10 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       action: {
-        type: Sequelize.STRING,
+        type: Sequelize.TEXT,
         allowNull: false
       },
-      xpAmount: {
+      xp_amount: {
         type: Sequelize.INTEGER,
         allowNull: false
       },
@@ -32,28 +32,28 @@ module.exports = {
         type: Sequelize.JSON,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('user_experience', ['userId'], {
-      name: 'user_experience_userId_idx'
+    await queryInterface.addIndex('user_experience', ['user_id'], {
+      name: 'user_experience_user_id_idx'
     });
 
     await queryInterface.addIndex('user_experience', ['action'], {
       name: 'user_experience_action_idx'
     });
 
-    await queryInterface.addIndex('user_experience', ['userId', 'action'], {
-      name: 'user_experience_userId_action_idx'
+    await queryInterface.addIndex('user_experience', ['user_id', 'action'], {
+      name: 'user_experience_user_id_action_idx'
     });
   },
 

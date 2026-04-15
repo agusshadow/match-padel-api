@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      clubId: {
-        type: Sequelize.INTEGER,
+      club_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'clubs',
@@ -21,7 +21,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       name: {
-        type: Sequelize.STRING,
+        type: Sequelize.TEXT,
         allowNull: false
       },
       type: {
@@ -32,23 +32,23 @@ module.exports = {
         type: Sequelize.ENUM('synthetic', 'cement', 'grass'),
         allowNull: false
       },
-      isActive: {
+      is_active: {
         type: Sequelize.BOOLEAN,
         defaultValue: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('courts', ['clubId'], {
+    await queryInterface.addIndex('courts', ['club_id'], {
       name: 'idx_courts_club_id'
     });
   },

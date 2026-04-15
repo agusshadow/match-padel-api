@@ -3,12 +3,12 @@ import { sequelize } from '../config/connection.js';
 
 const MatchScoreSet = sequelize.define('MatchScoreSet', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   matchScoreId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'match_scores',
@@ -42,14 +42,14 @@ const MatchScoreSet = sequelize.define('MatchScoreSet', {
 }, {
   tableName: 'match_score_sets',
   timestamps: true,
+  underscored: true,
   paranoid: false,
   indexes: [
     {
       unique: true,
-      fields: ['matchScoreId', 'setNumber']
+      fields: ['match_score_id', 'set_number']
     }
   ]
 });
 
 export default MatchScoreSet;
-

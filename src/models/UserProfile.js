@@ -29,12 +29,12 @@ const DOMINANT_HAND_VALUES = Object.values(DOMINANT_HAND);
 
 const UserProfile = sequelize.define('UserProfile', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     unique: true,
     references: {
@@ -43,7 +43,7 @@ const UserProfile = sequelize.define('UserProfile', {
     }
   },
   location: {
-    type: DataTypes.STRING(255),
+    type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Ubicación del usuario (ciudad, país)'
   },
@@ -126,12 +126,12 @@ const UserProfile = sequelize.define('UserProfile', {
     comment: 'Nivel de agilidad (1-10)'
   },
   picture: {
-    type: DataTypes.STRING(500),
+    type: DataTypes.TEXT,
     allowNull: true,
     comment: 'URL de la foto de perfil'
   },
   equippedPaletteId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'cosmetics',
@@ -143,7 +143,8 @@ const UserProfile = sequelize.define('UserProfile', {
   }
 }, {
   tableName: 'user_profiles',
-  timestamps: true
+  timestamps: true,
+  underscored: true
 });
 
 // Exportar constantes para uso en otros archivos
@@ -155,4 +156,3 @@ UserProfile.DOMINANT_HAND = DOMINANT_HAND;
 UserProfile.DOMINANT_HAND_VALUES = DOMINANT_HAND_VALUES;
 
 export default UserProfile;
-

@@ -12,12 +12,12 @@ const NOTIFICATION_TYPE_VALUES = Object.values(NOTIFICATION_TYPE);
 
 const Notification = sequelize.define('Notification', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'users',
@@ -50,15 +50,16 @@ const Notification = sequelize.define('Notification', {
 }, {
   tableName: 'notifications',
   timestamps: true,
+  underscored: true,
   indexes: [
     {
-      fields: ['userId']
+      fields: ['user_id']
     },
     {
       fields: ['read']
     },
     {
-      fields: ['userId', 'read']
+      fields: ['user_id', 'read']
     }
   ]
 });
@@ -69,4 +70,3 @@ Notification.NOTIFICATION_TYPE_VALUES = NOTIFICATION_TYPE_VALUES;
 
 export default Notification;
 export { NOTIFICATION_TYPE, NOTIFICATION_TYPE_VALUES };
-

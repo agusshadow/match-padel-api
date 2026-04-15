@@ -12,12 +12,12 @@ const EXPERIENCE_ACTION_VALUES = Object.values(EXPERIENCE_ACTION);
 
 const UserExperience = sequelize.define('UserExperience', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'users',
@@ -27,7 +27,7 @@ const UserExperience = sequelize.define('UserExperience', {
     onDelete: 'CASCADE'
   },
   action: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false
   },
   xpAmount: {
@@ -45,15 +45,16 @@ const UserExperience = sequelize.define('UserExperience', {
 }, {
   tableName: 'user_experience',
   timestamps: true,
+  underscored: true,
   indexes: [
     {
-      fields: ['userId']
+      fields: ['user_id']
     },
     {
       fields: ['action']
     },
     {
-      fields: ['userId', 'action']
+      fields: ['user_id', 'action']
     }
   ]
 });
@@ -64,4 +65,3 @@ UserExperience.EXPERIENCE_ACTION_VALUES = EXPERIENCE_ACTION_VALUES;
 
 export default UserExperience;
 export { EXPERIENCE_ACTION, EXPERIENCE_ACTION_VALUES };
-

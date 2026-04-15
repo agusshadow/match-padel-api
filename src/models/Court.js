@@ -21,12 +21,12 @@ const COURT_SURFACE_VALUES = Object.values(COURT_SURFACE);
 
 const Court = sequelize.define('Court', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   clubId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'clubs',
@@ -36,7 +36,7 @@ const Court = sequelize.define('Court', {
     onDelete: 'CASCADE'
   },
   name: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
     validate: {
       notEmpty: true,
@@ -64,6 +64,7 @@ const Court = sequelize.define('Court', {
 }, {
   tableName: 'courts',
   timestamps: true,
+  underscored: true,
   paranoid: false
 });
 

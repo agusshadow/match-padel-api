@@ -5,13 +5,13 @@ module.exports = {
   async up (queryInterface, Sequelize) {
     await queryInterface.createTable('match_scores', {
       id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.BIGINT,
         primaryKey: true,
         autoIncrement: true,
         allowNull: false
       },
-      matchId: {
-        type: Sequelize.INTEGER,
+      match_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         unique: true,
         references: {
@@ -21,7 +21,7 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      winnerTeam: {
+      winner_team: {
         type: Sequelize.INTEGER,
         allowNull: false
       },
@@ -30,8 +30,8 @@ module.exports = {
         defaultValue: 'pending_confirmation',
         allowNull: false
       },
-      confirmedBy: {
-        type: Sequelize.INTEGER,
+      confirmed_by: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -40,8 +40,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
-      rejectedBy: {
-        type: Sequelize.INTEGER,
+      rejected_by: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -50,35 +50,35 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
-      confirmationComment: {
+      confirmation_comment: {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      rejectionComment: {
+      rejection_comment: {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      confirmedAt: {
+      confirmed_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      rejectedAt: {
+      rejected_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('match_scores', ['matchId'], {
+    await queryInterface.addIndex('match_scores', ['match_id'], {
       unique: true,
       name: 'idx_match_scores_match_id'
     });
@@ -87,11 +87,11 @@ module.exports = {
       name: 'idx_match_scores_status'
     });
 
-    await queryInterface.addIndex('match_scores', ['confirmedBy'], {
+    await queryInterface.addIndex('match_scores', ['confirmed_by'], {
       name: 'idx_match_scores_confirmed_by'
     });
 
-    await queryInterface.addIndex('match_scores', ['rejectedBy'], {
+    await queryInterface.addIndex('match_scores', ['rejected_by'], {
       name: 'idx_match_scores_rejected_by'
     });
   },

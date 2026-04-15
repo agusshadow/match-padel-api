@@ -14,12 +14,12 @@ const MATCH_STATUS_VALUES = Object.values(MATCH_STATUS);
 
 const Match = sequelize.define('Match', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   reservationId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'court_reservations',
@@ -29,7 +29,7 @@ const Match = sequelize.define('Match', {
     onDelete: 'CASCADE'
   },
   createdBy: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'users',
@@ -39,8 +39,8 @@ const Match = sequelize.define('Match', {
     onDelete: 'CASCADE'
   },
   team1Player1Id: {
-    type: DataTypes.INTEGER,
-    allowNull: true, // Se cambiará a NOT NULL después de backfill
+    type: DataTypes.BIGINT,
+    allowNull: true,
     references: {
       model: 'users',
       key: 'id'
@@ -49,7 +49,7 @@ const Match = sequelize.define('Match', {
     onDelete: 'SET NULL'
   },
   team1Player2Id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -59,7 +59,7 @@ const Match = sequelize.define('Match', {
     onDelete: 'SET NULL'
   },
   team2Player1Id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -69,7 +69,7 @@ const Match = sequelize.define('Match', {
     onDelete: 'SET NULL'
   },
   team2Player2Id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -81,11 +81,11 @@ const Match = sequelize.define('Match', {
   // Campos denormalizados para mejor performance
   matchDateTime: {
     type: DataTypes.DATE,
-    allowNull: true // Permitir null para datos existentes
+    allowNull: true
   },
   matchEndDateTime: {
     type: DataTypes.DATE,
-    allowNull: true // Permitir null para datos existentes
+    allowNull: true
   },
   status: {
     type: DataTypes.ENUM(...MATCH_STATUS_VALUES),
@@ -109,7 +109,7 @@ const Match = sequelize.define('Match', {
     allowNull: true
   },
   cancelledBy: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: true,
     references: {
       model: 'users',
@@ -125,6 +125,7 @@ const Match = sequelize.define('Match', {
 }, {
   tableName: 'matches',
   timestamps: true,
+  underscored: true,
   paranoid: false,
   validate: {
     validateTeams() {

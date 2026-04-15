@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      reservationId: {
-        type: Sequelize.INTEGER,
+      reservation_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'court_reservations',
@@ -20,8 +20,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      createdBy: {
-        type: Sequelize.INTEGER,
+      created_by: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'users',
@@ -30,8 +30,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      team1Player1Id: {
-        type: Sequelize.INTEGER,
+      team1_player1_id: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -40,8 +40,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
-      team1Player2Id: {
-        type: Sequelize.INTEGER,
+      team1_player2_id: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -50,8 +50,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
-      team2Player1Id: {
-        type: Sequelize.INTEGER,
+      team2_player1_id: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -60,8 +60,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
-      team2Player2Id: {
-        type: Sequelize.INTEGER,
+      team2_player2_id: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -75,28 +75,28 @@ module.exports = {
         defaultValue: 'scheduled',
         allowNull: false
       },
-      matchDateTime: {
+      match_date_time: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      matchEndDateTime: {
+      match_end_date_time: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      startedAt: {
+      started_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      finishedAt: {
+      finished_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      cancelledAt: {
+      cancelled_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      cancelledBy: {
-        type: Sequelize.INTEGER,
+      cancelled_by: {
+        type: Sequelize.BIGINT,
         allowNull: true,
         references: {
           model: 'users',
@@ -109,52 +109,52 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('matches', ['reservationId'], {
+    await queryInterface.addIndex('matches', ['reservation_id'], {
       unique: true,
       name: 'idx_matches_reservation_unique'
     });
 
-    await queryInterface.addIndex('matches', ['createdBy'], {
+    await queryInterface.addIndex('matches', ['created_by'], {
       name: 'idx_matches_created_by'
     });
 
-    await queryInterface.addIndex('matches', ['team1Player1Id'], {
+    await queryInterface.addIndex('matches', ['team1_player1_id'], {
       name: 'idx_matches_team1_player1'
     });
 
-    await queryInterface.addIndex('matches', ['team1Player2Id'], {
+    await queryInterface.addIndex('matches', ['team1_player2_id'], {
       name: 'idx_matches_team1_player2'
     });
 
-    await queryInterface.addIndex('matches', ['team2Player1Id'], {
+    await queryInterface.addIndex('matches', ['team2_player1_id'], {
       name: 'idx_matches_team2_player1'
     });
 
-    await queryInterface.addIndex('matches', ['team2Player2Id'], {
+    await queryInterface.addIndex('matches', ['team2_player2_id'], {
       name: 'idx_matches_team2_player2'
     });
 
-    await queryInterface.addIndex('matches', ['matchDateTime'], {
+    await queryInterface.addIndex('matches', ['match_date_time'], {
       name: 'idx_matches_match_datetime'
     });
 
-    await queryInterface.addIndex('matches', ['matchEndDateTime'], {
+    await queryInterface.addIndex('matches', ['match_end_date_time'], {
       name: 'idx_matches_match_end_datetime'
     });
 
-    await queryInterface.addIndex('matches', ['status', 'matchDateTime'], {
+    await queryInterface.addIndex('matches', ['status', 'match_date_time'], {
       name: 'idx_matches_status_datetime'
     });
   },

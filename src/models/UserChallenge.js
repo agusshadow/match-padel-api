@@ -13,12 +13,12 @@ const USER_CHALLENGE_STATUS_VALUES = Object.values(USER_CHALLENGE_STATUS);
 
 const UserChallenge = sequelize.define('UserChallenge', {
   id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
   userId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'users',
@@ -29,7 +29,7 @@ const UserChallenge = sequelize.define('UserChallenge', {
     comment: 'ID del usuario'
   },
   challengeId: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.BIGINT,
     allowNull: false,
     references: {
       model: 'challenges',
@@ -81,18 +81,19 @@ const UserChallenge = sequelize.define('UserChallenge', {
 }, {
   tableName: 'user_challenges',
   timestamps: true,
+  underscored: true,
   indexes: [
     {
-      fields: ['userId', 'status']
+      fields: ['user_id', 'status']
     },
     {
-      fields: ['userId', 'expiresAt']
+      fields: ['user_id', 'expires_at']
     },
     {
-      fields: ['challengeId']
+      fields: ['challenge_id']
     },
     {
-      fields: ['userId', 'challengeId', 'status']
+      fields: ['user_id', 'challenge_id', 'status']
     }
   ]
 });
@@ -103,4 +104,3 @@ UserChallenge.USER_CHALLENGE_STATUS_VALUES = USER_CHALLENGE_STATUS_VALUES;
 
 export default UserChallenge;
 export { USER_CHALLENGE_STATUS, USER_CHALLENGE_STATUS_VALUES };
-

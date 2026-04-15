@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      user_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'users',
@@ -20,8 +20,8 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      challengeId: {
-        type: Sequelize.INTEGER,
+      challenge_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'challenges',
@@ -30,12 +30,12 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'CASCADE'
       },
-      assignedAt: {
+      assigned_at: {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      expiresAt: {
+      expires_at: {
         type: Sequelize.DATE,
         allowNull: false
       },
@@ -49,39 +49,39 @@ module.exports = {
         allowNull: false,
         defaultValue: 'pending'
       },
-      completedAt: {
+      completed_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      claimedAt: {
+      claimed_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('user_challenges', ['userId', 'status'], {
+    await queryInterface.addIndex('user_challenges', ['user_id', 'status'], {
       name: 'idx_user_challenges_user_status'
     });
 
-    await queryInterface.addIndex('user_challenges', ['userId', 'expiresAt'], {
+    await queryInterface.addIndex('user_challenges', ['user_id', 'expires_at'], {
       name: 'idx_user_challenges_user_expires'
     });
 
-    await queryInterface.addIndex('user_challenges', ['challengeId'], {
+    await queryInterface.addIndex('user_challenges', ['challenge_id'], {
       name: 'idx_user_challenges_challenge'
     });
 
-    await queryInterface.addIndex('user_challenges', ['userId', 'challengeId', 'status'], {
+    await queryInterface.addIndex('user_challenges', ['user_id', 'challenge_id', 'status'], {
       name: 'idx_user_challenges_user_challenge_status'
     });
   },

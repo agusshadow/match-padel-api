@@ -8,10 +8,10 @@ module.exports = {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER
+        type: Sequelize.BIGINT
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      user_id: {
+        type: Sequelize.BIGINT,
         allowNull: false,
         references: {
           model: 'users',
@@ -33,32 +33,32 @@ module.exports = {
         allowNull: false,
         defaultValue: false
       },
-      readAt: {
+      read_at: {
         type: Sequelize.DATE,
         allowNull: true
       },
-      createdAt: {
+      created_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
-      updatedAt: {
+      updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
     });
 
-    await queryInterface.addIndex('notifications', ['userId'], {
-      name: 'notifications_userId_idx'
+    await queryInterface.addIndex('notifications', ['user_id'], {
+      name: 'notifications_user_id_idx'
     });
 
     await queryInterface.addIndex('notifications', ['read'], {
       name: 'notifications_read_idx'
     });
 
-    await queryInterface.addIndex('notifications', ['userId', 'read'], {
-      name: 'notifications_userId_read_idx'
+    await queryInterface.addIndex('notifications', ['user_id', 'read'], {
+      name: 'notifications_user_id_read_idx'
     });
   },
 
