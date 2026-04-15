@@ -16,9 +16,7 @@ module.exports = {
     }
 
     const users = await queryInterface.sequelize.query(
-      isPostgres
-        ? `SELECT id FROM users WHERE id != ${agustin.id} ORDER BY id LIMIT 3`
-        : `SELECT id FROM users WHERE id != ${agustin.id} ORDER BY id LIMIT 3`,
+      `SELECT id FROM users WHERE id != ${agustin.id} ORDER BY id LIMIT 3`,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -28,17 +26,11 @@ module.exports = {
     }
 
     const [reservation] = await queryInterface.sequelize.query(
-      isPostgres
-        ? `SELECT cr.id, cr."scheduledDateTime", cr."endDateTime"
-           FROM court_reservations cr
-           WHERE cr.status = 'confirmed'
-           AND cr.id NOT IN (SELECT "reservationId" FROM matches WHERE "reservationId" IS NOT NULL)
-           ORDER BY cr.id LIMIT 1`
-        : `SELECT cr.id, cr.scheduledDateTime, cr.endDateTime
-           FROM court_reservations cr
-           WHERE cr.status = 'confirmed'
-           AND cr.id NOT IN (SELECT reservationId FROM matches WHERE reservationId IS NOT NULL)
-           ORDER BY cr.id LIMIT 1`,
+      `SELECT cr.id, cr.scheduled_date_time, cr.end_date_time
+       FROM court_reservations cr
+       WHERE cr.status = 'confirmed'
+       AND cr.id NOT IN (SELECT reservation_id FROM matches WHERE reservation_id IS NOT NULL)
+       ORDER BY cr.id LIMIT 1`,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
 
@@ -47,45 +39,61 @@ module.exports = {
       return;
     }
 
-    const res = isPostgres ? {
+    const res = {
       id: reservation.id,
-      scheduledDateTime: reservation.scheduledDateTime || reservation.scheduleddatetime,
-      endDateTime: reservation.endDateTime || reservation.enddatetime
-    } : reservation;
+      scheduled_date_time: reservation.scheduled_date_time || reservation.scheduledDateTime || reservation.scheduleddatetime,
+      end_date_time: reservation.end_date_time || reservation.endDateTime || reservation.enddatetime
+    };
 
     const match = {
-      reservationId: res.id,
-      team1Player1Id: agustin.id,
-      team1Player2Id: users[0].id,
-      team2Player1Id: users[1].id,
-      team2Player2Id: users[2].id,
-      createdBy: agustin.id,
-      matchDateTime: res.scheduledDateTime ? new Date(res.scheduledDateTime) : new Date(),
-      matchEndDateTime: res.endDateTime ? new Date(res.endDateTime) : new Date(),
+      reservation_id: res.id,
+      created_by: agustin.id,
+      match_date_time: res.scheduled_date_time ? new Date(res.scheduled_date_time) : new Date(),
+      match_end_date_time: res.end_date_time ? new Date(res.end_date_time) : new Date(),
       status: 'pending_confirmation',
-      finishedAt: new Date(),
+      finished_at: new Date(),
       notes: 'Partido pendiente de cargar resultado - Owner: Agustin',
-      createdAt: new Date(),
-      updatedAt: new Date()
+      created_at: new Date(),
+      updated_at: new Date()
     };
 
     await queryInterface.bulkInsert('matches', [match]);
+    
+    // Get the inserted match ID
+    const [insertedMatch] = await queryInterface.sequelize.query(
+      `SELECT id FROM matches WHERE reservation_id = ${res.id} LIMIT 1`,
+      { type: queryInterface.sequelize.QueryTypes.SELECT }
+    );
+
+    if (insertedMatch) {
+      const participants = [
+        { match_id: insertedMatch.id, user_id: agustin.id, team_number: 1, position: 'drive', created_at: new Date(), updated_at: new Date() },
+        { match_id: insertedMatch.id, user_id: users[0].id, team_number: 1, position: 'reves', created_at: new Date(), updated_at: new Date() },
+        { match_id: insertedMatch.id, user_id: users[1].id, team_number: 2, position: 'drive', created_at: new Date(), updated_at: new Date() },
+        { match_id: insertedMatch.id, user_id: users[2].id, team_number: 2, position: 'reves', created_at: new Date(), updated_at: new Date() }
+      ];
+      await queryInterface.bulkInsert('match_participants', participants);
+    }
+
     console.log(`✅ Match pendiente de resultado creado para agustin (ID: ${agustin.id})`);
   },
 
   async down (queryInterface, Sequelize) {
-    const isPostgres = queryInterface.sequelize.getDialect() === 'postgres';
-    await queryInterface.sequelize.query(
-      isPostgres
-        ? `DELETE FROM matches 
-           WHERE "createdBy" = (SELECT id FROM users WHERE email = 'agustin@example.com' LIMIT 1)
-           AND status = 'pending_confirmation'
-           AND notes = 'Partido pendiente de cargar resultado - Owner: Agustin'`
-        : `DELETE FROM matches 
-           WHERE createdBy = (SELECT id FROM users WHERE email = 'agustin@example.com' LIMIT 1)
-           AND status = 'pending_confirmation'
-           AND notes = 'Partido pendiente de cargar resultado - Owner: Agustin'`
+    const [agustin] = await queryInterface.sequelize.query(
+      `SELECT id FROM users WHERE email = 'agustin@example.com' LIMIT 1`,
+      { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
+
+    if (agustin) {
+      const [match] = await queryInterface.sequelize.query(
+        `SELECT id FROM matches WHERE created_by = ${agustin.id} AND status = 'pending_confirmation' AND notes = 'Partido pendiente de cargar resultado - Owner: Agustin' LIMIT 1`,
+        { type: queryInterface.sequelize.QueryTypes.SELECT }
+      );
+
+      if (match) {
+        await queryInterface.bulkDelete('match_participants', { match_id: match.id });
+        await queryInterface.bulkDelete('matches', { id: match.id });
+      }
+    }
   }
 };
-

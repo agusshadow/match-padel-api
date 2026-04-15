@@ -6,21 +6,21 @@ module.exports = {
     // Obtener todos los matches completados y pendientes de confirmación que estén completos (4 jugadores)
     const dialect = queryInterface.sequelize.getDialect();
     const query = dialect === 'postgres'
-      ? `SELECT id, "team1Player1Id", "team1Player2Id", "team2Player1Id", "team2Player2Id", status, "createdAt"
+      ? `SELECT id, team1_player1_id, team1_player2_id, team2_player1_id, team2_player2_id, status, created_at
        FROM matches 
        WHERE status IN ('completed', 'pending_confirmation')
-       AND "team1Player1Id" IS NOT NULL
-       AND "team1Player2Id" IS NOT NULL
-       AND "team2Player1Id" IS NOT NULL
-       AND "team2Player2Id" IS NOT NULL
+       AND team1_player1_id IS NOT NULL
+       AND team1_player2_id IS NOT NULL
+       AND team2_player1_id IS NOT NULL
+       AND team2_player2_id IS NOT NULL
        ORDER BY id`
-      : `SELECT id, team1Player1Id, team1Player2Id, team2Player1Id, team2Player2Id, status, createdAt
+      : `SELECT id, team1_player1_id, team1_player2_id, team2_player1_id, team2_player2_id, status, created_at
        FROM matches 
        WHERE status IN ('completed', 'pending_confirmation')
-       AND team1Player1Id IS NOT NULL
-       AND team1Player2Id IS NOT NULL
-       AND team2Player1Id IS NOT NULL
-       AND team2Player2Id IS NOT NULL
+       AND team1_player1_id IS NOT NULL
+       AND team1_player2_id IS NOT NULL
+       AND team2_player1_id IS NOT NULL
+       AND team2_player2_id IS NOT NULL
        ORDER BY id`;
     
     const completedMatches = await queryInterface.sequelize.query(
@@ -33,15 +33,15 @@ module.exports = {
       return;
     }
 
-    // Normalizar datos de matches (PostgreSQL devuelve nombres en minúsculas)
+    // Normalizar datos de matches
     const normalizedMatches = completedMatches.map(match => ({
       id: match.id,
-      team1Player1Id: match.team1Player1Id || match.team1player1id,
-      team1Player2Id: match.team1Player2Id || match.team1player2id,
-      team2Player1Id: match.team2Player1Id || match.team2player1id,
-      team2Player2Id: match.team2Player2Id || match.team2player2id,
+      team1_player1_id: match.team1_player1_id,
+      team1_player2_id: match.team1_player2_id,
+      team2_player1_id: match.team2_player1_id,
+      team2_player2_id: match.team2_player2_id,
       status: match.status,
-      createdAt: match.createdAt || match.createdat
+      created_at: match.created_at
     }));
 
     // Función para generar sets realistas
@@ -96,9 +96,9 @@ module.exports = {
         }
         
         sets.push({
-          setNumber: set,
-          team1Score: team1Score,
-          team2Score: team2Score
+          set_number: set,
+          team1_score: team1Score,
+          team2_score: team2Score
         });
         
         // Si ya tenemos un ganador claro (2 sets ganados), podemos terminar
@@ -107,18 +107,18 @@ module.exports = {
           if (set < numSets) {
             const finalSet = numSets;
             if (team1Wins === targetWins) {
-              // Team 2 gana el set final
+              // Team 2 gana the set final
               sets.push({
-                setNumber: finalSet,
-                team1Score: Math.floor(Math.random() * 5) + 0,
-                team2Score: Math.floor(Math.random() * 2) + 6
+                set_number: finalSet,
+                team1_score: Math.floor(Math.random() * 5) + 0,
+                team2_score: Math.floor(Math.random() * 2) + 6
               });
             } else {
-              // Team 1 gana el set final
+              // Team 1 gana the set final
               sets.push({
-                setNumber: finalSet,
-                team1Score: Math.floor(Math.random() * 2) + 6,
-                team2Score: Math.floor(Math.random() * 5) + 0
+                set_number: finalSet,
+                team1_score: Math.floor(Math.random() * 2) + 6,
+                team2_score: Math.floor(Math.random() * 5) + 0
               });
             }
           }
@@ -132,18 +132,18 @@ module.exports = {
     const matchScores = [];
     const matchScoreSets = [];
 
-    for (const match of completedMatches) {
+    for (const match of normalizedMatches) {
       // Decidir qué equipo ganó (aleatorio pero consistente)
       const winnerTeam = Math.random() > 0.5 ? 1 : 2;
       
       // Determinar el estado del score según el estado del match
       let scoreStatus;
-      let confirmedBy = null;
-      let rejectedBy = null;
-      let confirmedAt = null;
-      let rejectedAt = null;
-      let confirmationComment = null;
-      let rejectionComment = null;
+      let confirmed_by = null;
+      let rejected_by = null;
+      let confirmed_at = null;
+      let rejected_at = null;
+      let confirmation_comment = null;
+      let rejection_comment = null;
       
       if (match.status === 'completed') {
         // Si el match está completado, el score debe estar confirmado
@@ -151,31 +151,28 @@ module.exports = {
         
         // Seleccionar un jugador del equipo contrario (team 2) como quien confirmó
         // Puede ser team2Player1 o team2Player2
-        confirmedBy = Math.random() > 0.5 ? match.team2Player1Id : match.team2Player2Id;
-        confirmedAt = new Date(match.createdAt);
-        confirmedAt.setHours(confirmedAt.getHours() + 1); // 1 hora después del match
-        confirmationComment = 'Resultado confirmado correctamente';
+        confirmed_by = Math.random() > 0.5 ? match.team2_player1_id : match.team2_player2_id;
+        confirmed_at = new Date(match.created_at);
+        confirmed_at.setHours(confirmed_at.getHours() + 1); // 1 hora después del match
+        confirmation_comment = 'Resultado confirmado correctamente';
       } else {
         // Si el match está pendiente de confirmación, el score está pendiente
         scoreStatus = 'pending_confirmation';
       }
       
-      // Generar los sets
-      const sets = generateSets(winnerTeam);
-      
       // Crear el MatchScore
       const matchScore = {
-        matchId: match.id,
-        winnerTeam: winnerTeam,
+        match_id: match.id,
+        winner_team: winnerTeam,
         status: scoreStatus,
-        confirmedBy: confirmedBy,
-        rejectedBy: rejectedBy,
-        confirmationComment: confirmationComment,
-        rejectionComment: rejectionComment,
-        confirmedAt: confirmedAt,
-        rejectedAt: rejectedAt,
-        createdAt: match.createdAt,
-        updatedAt: match.createdAt
+        confirmed_by: confirmed_by,
+        rejected_by: rejected_by,
+        confirmation_comment: confirmation_comment,
+        rejection_comment: rejection_comment,
+        confirmed_at: confirmed_at,
+        rejected_at: rejected_at,
+        created_at: match.created_at,
+        updated_at: match.created_at
       };
       
       matchScores.push(matchScore);
@@ -189,19 +186,18 @@ module.exports = {
       
       // Obtener los IDs de los scores insertados
       const matchIdsQuery = dialect === 'postgres'
-        ? `SELECT id, "matchId" FROM match_scores WHERE "matchId" IN (${normalizedMatches.map(m => m.id).join(',')})`
-        : `SELECT id, matchId FROM match_scores WHERE matchId IN (${normalizedMatches.map(m => m.id).join(',')})`;
+        ? `SELECT id, match_id FROM match_scores WHERE match_id IN (${normalizedMatches.map(m => m.id).join(',')})`
+        : `SELECT id, match_id FROM match_scores WHERE match_id IN (${normalizedMatches.map(m => m.id).join(',')})`;
       
       const matchScoreIds = await queryInterface.sequelize.query(
         matchIdsQuery,
         { type: queryInterface.sequelize.QueryTypes.SELECT }
       );
       
-      // Crear un mapa de matchId -> matchScoreId
+      // Crear un mapa de match_id -> matchScoreId
       const matchIdToScoreId = {};
       matchScoreIds.forEach(score => {
-        const matchId = score.matchId || score.matchid;
-        matchIdToScoreId[matchId] = score.id;
+        matchIdToScoreId[score.match_id] = score.id;
       });
       
       // Crear los MatchScoreSets para cada score
@@ -213,22 +209,22 @@ module.exports = {
         const winnerTeam = Math.random() > 0.5 ? 1 : 2;
         const sets = generateSets(winnerTeam);
         
-        // Actualizar el winnerTeam en el MatchScore si aún no se hizo
+        // Actualizar el winner_team en el MatchScore si aún no se hizo
         const updateQuery = dialect === 'postgres'
-          ? `UPDATE match_scores SET "winnerTeam" = ${winnerTeam} WHERE id = ${matchScoreId}`
-          : `UPDATE match_scores SET winnerTeam = ${winnerTeam} WHERE id = ${matchScoreId}`;
+          ? `UPDATE match_scores SET winner_team = ${winnerTeam} WHERE id = ${matchScoreId}`
+          : `UPDATE match_scores SET winner_team = ${winnerTeam} WHERE id = ${matchScoreId}`;
         
         await queryInterface.sequelize.query(updateQuery);
         
         // Crear los sets
         for (const set of sets) {
           matchScoreSets.push({
-            matchScoreId: matchScoreId,
-            setNumber: set.setNumber,
-            team1Score: set.team1Score,
-            team2Score: set.team2Score,
-            createdAt: match.createdAt,
-            updatedAt: match.createdAt
+            match_score_id: matchScoreId,
+            set_number: set.set_number,
+            team1_score: set.team1_score,
+            team2_score: set.team2_score,
+            created_at: match.created_at,
+            updated_at: match.created_at
           });
         }
       }
@@ -259,4 +255,3 @@ module.exports = {
     await queryInterface.bulkDelete('match_scores', null, {});
   }
 };
-

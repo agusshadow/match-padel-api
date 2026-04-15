@@ -36,13 +36,8 @@ const createMatch = async (req, res) => {
     
     const matchData = {
       ...req.body,
-      team1Player1Id: userId,
-      createdBy: userId
+      created_by: userId
     };
-    
-    if (req.body.team1Player1Id && req.body.team1Player1Id !== userId) {
-      return error(res, 'Solo puedes crear partidos como team1Player1 (anfitrión). No puedes establecer un team1Player1Id diferente', 403, 'FORBIDDEN');
-    }
     
     const match = await matchService.createMatch(matchData);
     return successObject(res, match, 201, 'Partido creado exitosamente');
@@ -58,8 +53,7 @@ const createMatchWithReservation = async (req, res) => {
     const matchData = {
       ...req.body,
       userId,
-      team1Player1Id: userId,
-      createdBy: userId
+      created_by: userId
     };
 
     const match = await matchService.createMatchWithReservation(matchData);

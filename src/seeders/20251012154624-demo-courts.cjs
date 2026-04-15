@@ -17,116 +17,116 @@ module.exports = {
     await queryInterface.bulkInsert('courts', [
       // Club Pádel Central
       {
-        clubId: clubIds['Club Pádel Central'],
+        club_id: clubIds['Club Pádel Central'],
         name: 'Cancha 1',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Club Pádel Central'],
+        club_id: clubIds['Club Pádel Central'],
         name: 'Cancha 2',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       // Pádel Norte
       {
-        clubId: clubIds['Pádel Norte'],
+        club_id: clubIds['Pádel Norte'],
         name: 'Cancha Central',
         type: 'covered',
         surface: 'cement',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Pádel Norte'],
+        club_id: clubIds['Pádel Norte'],
         name: 'Cancha Norte',
         type: 'outdoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       // Club Deportivo Sur
       {
-        clubId: clubIds['Club Deportivo Sur'],
+        club_id: clubIds['Club Deportivo Sur'],
         name: 'Cancha Principal',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Club Deportivo Sur'],
+        club_id: clubIds['Club Deportivo Sur'],
         name: 'Cancha Secundaria',
         type: 'outdoor',
         surface: 'cement',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       // Pádel Oeste - 2 canchas
       {
-        clubId: clubIds['Pádel Oeste'],
+        club_id: clubIds['Pádel Oeste'],
         name: 'Cancha Premium',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Pádel Oeste'],
+        club_id: clubIds['Pádel Oeste'],
         name: 'Cancha VIP',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       // Mega Pádel Center - 4 canchas
       {
-        clubId: clubIds['Mega Pádel Center'],
+        club_id: clubIds['Mega Pádel Center'],
         name: 'Cancha A',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Mega Pádel Center'],
+        club_id: clubIds['Mega Pádel Center'],
         name: 'Cancha B',
         type: 'indoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Mega Pádel Center'],
+        club_id: clubIds['Mega Pádel Center'],
         name: 'Cancha C',
         type: 'covered',
         surface: 'cement',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
-        clubId: clubIds['Mega Pádel Center'],
+        club_id: clubIds['Mega Pádel Center'],
         name: 'Cancha D',
         type: 'outdoor',
         surface: 'synthetic',
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       }
     ], {});
   },

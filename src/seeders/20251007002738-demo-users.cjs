@@ -16,64 +16,64 @@ module.exports = {
         email: 'agustin@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Admin Sistema',
         email: 'admin@example.com',
         password: adminPassword,
         role: 'admin',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'María Rodriguez',
         email: 'maria@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Carlos López',
         email: 'carlos@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Ana Martínez',
         email: 'ana@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Diego Fernández',
         email: 'diego@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Laura García',
         email: 'laura@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Roberto Silva',
         email: 'roberto@example.com',
         password: hashedPassword,
         role: 'user',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       }
     ], {});
   },

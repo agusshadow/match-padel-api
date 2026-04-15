@@ -29,14 +29,14 @@ module.exports = {
     
     const courts = await queryInterface.sequelize.query(
       isPostgres
-        ? 'SELECT c.id, c.name, cl.name as "clubName" FROM courts c JOIN clubs cl ON c."clubId" = cl.id ORDER BY c.id'
-        : 'SELECT c.id, c.name, cl.name as clubName FROM courts c JOIN clubs cl ON c.clubId = cl.id ORDER BY c.id',
+        ? 'SELECT c.id, c.name, cl.name as "club_name" FROM courts c JOIN clubs cl ON c.club_id = cl.id ORDER BY c.id'
+        : 'SELECT c.id, c.name, cl.name as club_name FROM courts c JOIN clubs cl ON c.club_id = cl.id ORDER BY c.id',
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
     
     const courtIds = {};
     courts.forEach(court => {
-      const clubName = isPostgres ? (court.clubName || court.clubname) : court.clubName;
+      const clubName = court.club_name || court.clubName || court.clubname;
       courtIds[`${clubName} - ${court.name}`] = court.id;
     });
 
@@ -73,14 +73,14 @@ module.exports = {
         for (const day of dayConfig.days) {
           for (const slot of timeSlots) {
             slots.push({
-              courtId,
-              dayOfWeek: day,
-              startTime: slot.start,
-              endTime: slot.end,
-              isAvailable: true,
+              court_id: courtId,
+              day_of_week: day,
+              start_time: slot.start,
+              end_time: slot.end,
+              is_available: true,
               price: slot.price,
-              createdAt: new Date(),
-              updatedAt: new Date()
+              created_at: new Date(),
+              updated_at: new Date()
             });
           }
         }

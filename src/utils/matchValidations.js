@@ -22,27 +22,27 @@ const validateMatchCreation = async (scheduledDate, slot, slotId) => {
   const errors = [];
   const now = new Date();
 
-  const matchDateTime = combineDateAndTime(scheduledDate, slot.startTime);
+  const matchDateTime = combineDateAndTime(scheduledDate, slot.start_time);
   if (matchDateTime < now) {
     errors.push('No se puede crear un partido en el pasado');
   }
 
   const matchDay = matchDateTime.getDay();
-  if (slot.dayOfWeek !== matchDay) {
+  if (slot.day_of_week !== matchDay) {
     const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     errors.push(
-      `El slot está configurado para ${days[slot.dayOfWeek]} pero la fecha seleccionada es ${days[matchDay]}`
+      `El slot está configurado para ${days[slot.day_of_week]} pero la fecha seleccionada es ${days[matchDay]}`
     );
   }
 
-  if (!slot.isAvailable) {
+  if (!slot.is_available) {
     errors.push('El slot seleccionado no está disponible');
   }
 
   const existingReservation = await CourtReservation.findOne({
     where: {
-      slotId: slotId,
-      scheduledDate: scheduledDate,
+      slot_id: slotId,
+      scheduled_date: scheduledDate,
       status: {
         [Op.notIn]: ['cancelled', 'completed']
       }

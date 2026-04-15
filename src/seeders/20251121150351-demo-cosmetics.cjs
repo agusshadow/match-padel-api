@@ -8,73 +8,73 @@ module.exports = {
         name: 'Paleta Adidas',
         description: 'Paleta de padel de la marca Adidas',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-adidas.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-adidas.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Paleta Bullpadel',
         description: 'Paleta de padel de la marca Bullpadel',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-bullpadel.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-bullpadel.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Paleta Head',
         description: 'Paleta de padel de la marca Head',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-head.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-head.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Paleta MatchPadel',
         description: 'Paleta de padel oficial de MatchPadel',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-matchpadel-2.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-matchpadel-2.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Paleta Wilson',
         description: 'Paleta de padel de la marca Wilson',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-wilson.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta-wilson.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Paleta Clásica',
         description: 'Paleta de padel clásica',
         type: 'palette',
-        imageUrl: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta.svg',
-        acquisitionMethod: 'free',
+        image_url: 'https://fsyrlranrtkrnovmlvja.supabase.co/storage/v1/object/public/cosmetics/paletas/paleta.svg',
+        acquisition_method: 'free',
         price: null,
-        challengeId: null,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        challenge_id: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       }
     ], {});
   },
@@ -83,4 +83,3 @@ module.exports = {
     await queryInterface.bulkDelete('cosmetics', null, {});
   }
 };
-

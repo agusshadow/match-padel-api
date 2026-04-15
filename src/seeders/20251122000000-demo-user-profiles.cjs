@@ -15,10 +15,7 @@ module.exports = {
     }
 
     // Función para generar URL de avatar de persona usando i.pravatar.cc
-    // Este servicio genera fotos reales de personas (rango 1-70)
     const generateAvatarUrl = (name, seed) => {
-      // Convertir el nombre y seed en un número entre 1 y 70
-      // i.pravatar.cc tiene 70 fotos diferentes de personas reales
       const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const imageId = ((hash + seed) % 70) + 1; // Rango 1-70
       return `https://i.pravatar.cc/300?img=${imageId}`;
@@ -26,10 +23,10 @@ module.exports = {
 
     // Verificar qué perfiles ya existen
     const existingProfiles = await queryInterface.sequelize.query(
-      'SELECT "userId" FROM user_profiles',
+      'SELECT user_id FROM user_profiles',
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
-    const existingUserIds = new Set(existingProfiles.map(p => p.userId));
+    const existingUserIds = new Set(existingProfiles.map(p => p.user_id));
 
     // Preparar perfiles para insertar o actualizar
     const profilesToInsert = [];
@@ -41,16 +38,16 @@ module.exports = {
       if (existingUserIds.has(user.id)) {
         // Actualizar perfil existente
         profilesToUpdate.push({
-          userId: user.id,
+          user_id: user.id,
           picture: avatarUrl
         });
       } else {
         // Crear nuevo perfil
         profilesToInsert.push({
-          userId: user.id,
+          user_id: user.id,
           picture: avatarUrl,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          created_at: new Date(),
+          updated_at: new Date()
         });
       }
     });
@@ -65,9 +62,9 @@ module.exports = {
     if (profilesToUpdate.length > 0) {
       for (const profile of profilesToUpdate) {
         await queryInterface.sequelize.query(
-          `UPDATE user_profiles SET picture = :picture, "updatedAt" = NOW() WHERE "userId" = :userId`,
+          `UPDATE user_profiles SET picture = :picture, updated_at = NOW() WHERE user_id = :user_id`,
           {
-            replacements: { picture: profile.picture, userId: profile.userId },
+            replacements: { picture: profile.picture, user_id: profile.user_id },
             type: queryInterface.sequelize.QueryTypes.RAW
           }
         );
@@ -81,10 +78,9 @@ module.exports = {
   async down (queryInterface, Sequelize) {
     // Eliminar todas las imágenes de perfil (dejar los perfiles pero sin picture)
     await queryInterface.sequelize.query(
-      `UPDATE user_profiles SET picture = NULL, "updatedAt" = NOW()`,
+      `UPDATE user_profiles SET picture = NULL, updated_at = NOW()`,
       { type: queryInterface.sequelize.QueryTypes.RAW }
     );
     console.log('✅ Imágenes de perfil eliminadas');
   }
 };
-

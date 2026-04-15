@@ -8,15 +8,15 @@ module.exports = {
     
     const slots = await queryInterface.sequelize.query(
       isPostgres
-        ? `SELECT cs.id, cs."courtId", cs."startTime", cs."endTime", cs.price
+        ? `SELECT cs.id, cs.court_id, cs.start_time, cs.end_time, cs.price
            FROM court_slots cs
-           WHERE cs."isAvailable" = true
-           ORDER BY cs."courtId", cs."dayOfWeek", cs."startTime"
+           WHERE cs.is_available = true
+           ORDER BY cs.court_id, cs.day_of_week, cs.start_time
            LIMIT 30`
-        : `SELECT cs.id, cs.courtId, cs.startTime, cs.endTime, cs.price
+        : `SELECT cs.id, cs.court_id, cs.start_time, cs.end_time, cs.price
            FROM court_slots cs
-           WHERE cs.isAvailable = true
-           ORDER BY cs.courtId, cs.dayOfWeek, cs.startTime
+           WHERE cs.is_available = true
+           ORDER BY cs.court_id, cs.day_of_week, cs.start_time
            LIMIT 30`,
       { type: queryInterface.sequelize.QueryTypes.SELECT }
     );
@@ -37,10 +37,10 @@ module.exports = {
       const slot = slots[i];
       const user = users[i % users.length];
       
-      const slotId = isPostgres ? (slot.id || slot.Id) : slot.id;
-      const courtId = isPostgres ? (slot.courtId || slot.courtid) : slot.courtId;
-      const startTime = isPostgres ? (slot.startTime || slot.starttime) : slot.startTime;
-      const endTime = isPostgres ? (slot.endTime || slot.endtime) : slot.endTime;
+      const slotId = slot.id;
+      const courtId = slot.court_id || slot.courtId;
+      const startTime = slot.start_time || slot.startTime;
+      const endTime = slot.end_time || slot.endTime;
       
       const scheduledDate = new Date(today);
       scheduledDate.setDate(today.getDate() + Math.floor(Math.random() * 30) + 1);
@@ -55,26 +55,24 @@ module.exports = {
       endDateTime.setHours(endH, endM, 0, 0);
       
       reservations.push({
-        courtId,
-        userId: user.id,
-        scheduledDate: scheduledDate.toISOString().split('T')[0],
-        slotId,
-        scheduledDateTime,
-        endDateTime,
+        court_id: courtId,
+        user_id: user.id,
+        scheduled_date: scheduledDate.toISOString().split('T')[0],
+        slot_id: slotId,
+        scheduled_date_time: scheduledDateTime,
+        end_date_time: endDateTime,
         price: slot.price,
         status: 'confirmed',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        created_at: new Date(),
+        updated_at: new Date()
       });
     }
 
     await queryInterface.bulkInsert('court_reservations', reservations);
     
-    const slotIds = reservations.map(r => r.slotId);
+    const slotIds = reservations.map(r => r.slot_id);
     await queryInterface.sequelize.query(
-      isPostgres
-        ? `UPDATE court_slots SET "isAvailable" = false WHERE id IN (${slotIds.join(',')})`
-        : `UPDATE court_slots SET isAvailable = false WHERE id IN (${slotIds.join(',')})`
+      `UPDATE court_slots SET is_available = false WHERE id IN (${slotIds.join(',')})`
     );
     
     console.log(`✅ ${reservations.length} reservas creadas`);
@@ -85,9 +83,7 @@ module.exports = {
     const isPostgres = dialect === 'postgres';
     
     await queryInterface.sequelize.query(
-      isPostgres
-        ? 'UPDATE court_slots SET "isAvailable" = true WHERE id IN (SELECT "slotId" FROM court_reservations WHERE "slotId" IS NOT NULL)'
-        : 'UPDATE court_slots SET isAvailable = true WHERE id IN (SELECT slotId FROM court_reservations WHERE slotId IS NOT NULL)'
+      `UPDATE court_slots SET is_available = true WHERE id IN (SELECT slot_id FROM court_reservations WHERE slot_id IS NOT NULL)`
     );
     
     await queryInterface.bulkDelete('court_reservations', null, {});

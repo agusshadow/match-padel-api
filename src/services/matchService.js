@@ -1,39 +1,44 @@
 import Match from '../models/Match.js';
+import MatchParticipant from '../models/MatchParticipant.js';
+import User from '../models/User.js';
 import CourtReservation from '../models/CourtReservation.js';
 import CourtSlot from '../models/CourtSlot.js';
 import { sequelize } from '../config/connection.js';
 import { Op } from 'sequelize';
 
-const getAllMatchPlayers = (match) => {
-  return [
-    match.team1Player1Id,
-    match.team1Player2Id,
-    match.team2Player1Id,
-    match.team2Player2Id
-  ].filter(id => id !== null);
+const getAllMatchPlayers = async (matchId) => {
+  const participants = await MatchParticipant.findAll({
+    where: { match_id: matchId }
+  });
+  return participants.map(p => p.user_id);
 };
 
-const isUserInMatch = (match, userId) => {
-  return getAllMatchPlayers(match).includes(userId);
+const isUserInMatch = async (matchId, userId) => {
+  const participant = await MatchParticipant.findOne({
+    where: { match_id: matchId, user_id: userId }
+  });
+  return !!participant;
 };
 
-const getTeamAvailability = (match) => {
+const getTeamAvailability = async (matchId) => {
+  const participants = await MatchParticipant.findAll({
+    where: { match_id: matchId },
+    include: [{ model: User, as: 'user', include: ['profile'] }]
+  });
+
+  const team1 = participants.filter(p => p.team_number === 1);
+  const team2 = participants.filter(p => p.team_number === 2);
+
   return {
     team1: {
-      available: !match.team1Player2Id,
-      hasSpace: !match.team1Player2Id,
-      players: [
-        match.team1Player1,
-        match.team1Player2
-      ].filter(Boolean)
+      available: team1.length < 2,
+      hasSpace: team1.length < 2,
+      players: team1.map(p => p.user)
     },
     team2: {
-      available: !match.team2Player1Id || !match.team2Player2Id,
-      hasSpace: !match.team2Player1Id || !match.team2Player2Id,
-      players: [
-        match.team2Player1,
-        match.team2Player2
-      ].filter(Boolean)
+      available: team2.length < 2,
+      hasSpace: team2.length < 2,
+      players: team2.map(p => p.user)
     }
   };
 };
@@ -47,27 +52,35 @@ const getMatchById = async (id) => {
 };
 
 const createMatch = async (matchData) => {
-  if (!matchData.createdBy) {
-    throw new Error('El campo createdBy es requerido');
+  if (!matchData.created_by) {
+    throw new Error('El campo created_by es requerido');
   }
   
-  if (matchData.createdBy && matchData.team1Player1Id && matchData.createdBy !== matchData.team1Player1Id) {
-    throw new Error('El creador del partido debe ser team1Player1Id');
+  const transaction = await sequelize.transaction();
+  try {
+    const match = await Match.create(matchData, { transaction });
+    
+    await MatchParticipant.create({
+      match_id: match.id,
+      user_id: matchData.created_by,
+      team_number: 1,
+      position: 'left' // Default position for creator
+    }, { transaction });
+
+    await transaction.commit();
+    return match;
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
   }
-  
-  if (!matchData.team1Player1Id) {
-    matchData.team1Player1Id = matchData.createdBy;
-  }
-  
-  return await Match.create(matchData);
 };
 
 const updateMatch = async (id, updateData) => {
   const match = await Match.findByPk(id);
   if (!match) throw new Error('Match no encontrado');
   
-  if (updateData.hasOwnProperty('createdBy')) {
-    delete updateData.createdBy;
+  if (updateData.hasOwnProperty('created_by')) {
+    delete updateData.created_by;
   }
   
   return await match.update(updateData);
@@ -85,22 +98,18 @@ const createMatchWithReservation = async (matchData) => {
   
   try {
     const {
-      slotId,
-      userId,
-      scheduledDate,
+      slotId: slot_id,
+      userId: user_id,
+      scheduledDate: scheduled_date,
       notes
     } = matchData;
 
-    if (!slotId || !scheduledDate) {
+    if (!slot_id || !scheduled_date) {
       throw new Error('slotId y scheduledDate son requeridos');
     }
 
-    const slot = await CourtSlot.findByPk(slotId, {
-      include: [
-        {
-          association: 'court'
-        }
-      ],
+    const slot = await CourtSlot.findByPk(slot_id, {
+      include: [{ association: 'court' }],
       transaction
     });
 
@@ -108,72 +117,44 @@ const createMatchWithReservation = async (matchData) => {
       throw new Error('Slot no encontrado');
     }
 
-    const validation = await validateMatchCreation(scheduledDate, slot, slotId);
+    const validation = await validateMatchCreation(scheduled_date, slot, slot_id);
     if (!validation.isValid) {
       throw new Error(validation.errors.join(', '));
     }
 
-    const scheduledDateTime = combineDateAndTime(scheduledDate, slot.startTime);
-    const endDateTime = combineDateAndTime(scheduledDate, slot.endTime);
+    const scheduled_date_time = combineDateAndTime(scheduled_date, slot.start_time);
+    const end_date_time = combineDateAndTime(scheduled_date, slot.end_time);
 
     const reservation = await CourtReservation.create({
-      courtId: slot.courtId,
-      userId,
-      scheduledDate,
-      slotId: slot.id,
-      scheduledDateTime,
-      endDateTime,
+      court_id: slot.court_id,
+      user_id,
+      scheduled_date,
+      slot_id: slot.id,
+      scheduled_date_time,
+      end_date_time,
       price: slot.price,
       status: 'confirmed'
     }, { transaction });
 
     const match = await Match.create({
-      reservationId: reservation.id,
-      team1Player1Id: userId,
-      team1Player2Id: null,
-      team2Player1Id: null,
-      team2Player2Id: null,
-      createdBy: userId,
-      matchDateTime: scheduledDateTime,
-      matchEndDateTime: endDateTime,
+      reservation_id: reservation.id,
+      created_by: user_id,
+      match_date_time: scheduled_date_time,
+      match_end_date_time: end_date_time,
       status: Match.MATCH_STATUS.SCHEDULED,
       notes
     }, { transaction });
 
+    await MatchParticipant.create({
+      match_id: match.id,
+      user_id: user_id,
+      team_number: 1,
+      position: 'left'
+    }, { transaction });
+
     await transaction.commit();
 
-    return await Match.findByPk(match.id, {
-      include: [
-        {
-          association: 'reservation',
-          include: [
-            {
-              association: 'court',
-              include: [
-                {
-                  association: 'club'
-                }
-              ]
-            },
-            {
-              association: 'user'
-            }
-          ]
-        },
-        {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
-        }
-      ]
-    });
+    return await getMatchByIdDetailed(match.id);
 
   } catch (error) {
     await transaction.rollback();
@@ -187,54 +168,16 @@ const getAllMatchesDetailed = async () => {
       {
         association: 'reservation',
         include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
+          { association: 'court', include: [{ association: 'club' }] },
+          { association: 'user' }
         ]
       },
       {
-        association: 'team1Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team1Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
+        association: 'participants',
+        include: [{ model: User, as: 'user', include: ['profile'] }]
       }
     ],
-    order: [['matchDateTime', 'ASC']]
+    order: [['match_date_time', 'ASC']]
   });
 };
 
@@ -244,51 +187,13 @@ const getMatchByIdDetailed = async (id) => {
       {
         association: 'reservation',
         include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
+          { association: 'court', include: [{ association: 'club' }] },
+          { association: 'user' }
         ]
       },
       {
-        association: 'team1Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team1Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
+        association: 'participants',
+        include: [{ model: User, as: 'user', include: ['profile'] }]
       }
     ]
   });
@@ -301,46 +206,14 @@ const getMatchByIdDetailed = async (id) => {
 };
 
 const getMatchTeamAvailability = async (matchId) => {
-  const match = await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'team1Player1'
-      },
-      {
-        association: 'team1Player2'
-      },
-      {
-        association: 'team2Player1'
-      },
-      {
-        association: 'team2Player2'
-      },
-      {
-        association: 'reservation',
-        include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          }
-        ]
-      }
-    ]
-  });
-
-  if (!match) {
-    throw new Error('Partido no encontrado');
-  }
-
-  const teamAvailability = getTeamAvailability(match);
+  const match = await getMatchByIdDetailed(matchId);
+  const teamAvailability = await getTeamAvailability(matchId);
+  const playersCount = await MatchParticipant.count({ where: { match_id: matchId } });
 
   return {
     match,
     teams: teamAvailability,
-    isFull: getAllMatchPlayers(match).length >= 4
+    isFull: playersCount >= 4
   };
 };
 
@@ -348,119 +221,46 @@ const joinMatch = async (matchId, userId, desiredTeam = null) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const match = await Match.findByPk(matchId, {
-      include: [
-        {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
-        }
-      ],
-      transaction
-    });
+    const match = await Match.findByPk(matchId, { transaction });
+    if (!match) throw new Error('Partido no encontrado');
 
-    if (!match) {
-      throw new Error('Partido no encontrado');
-    }
-
-    if (isUserInMatch(match, userId)) {
+    if (await isUserInMatch(matchId, userId)) {
       throw new Error('Ya estás participando en este partido');
     }
 
-    const allPlayers = getAllMatchPlayers(match);
-    if (allPlayers.length >= 4) {
+    const participants = await MatchParticipant.findAll({ where: { match_id: matchId }, transaction });
+    if (participants.length >= 4) {
       throw new Error('El partido ya está completo (4 jugadores)');
     }
 
-    let updateData = {};
-    let position = '';
+    let team_number = desiredTeam;
+    const team1Count = participants.filter(p => p.team_number === 1).length;
+    const team2Count = participants.filter(p => p.team_number === 2).length;
 
-    if (desiredTeam !== null) {
-      if (desiredTeam !== 1 && desiredTeam !== 2) {
-        throw new Error('El equipo debe ser 1 o 2');
-      }
-
-      if (desiredTeam === 1) {
-        if (!match.team1Player2Id) {
-          updateData.team1Player2Id = userId;
-          position = 'team1Player2';
-        } else {
-          throw new Error('El equipo 1 ya está completo');
-        }
-      } else if (desiredTeam === 2) {
-        if (!match.team2Player1Id) {
-          updateData.team2Player1Id = userId;
-          position = 'team2Player1';
-        } else if (!match.team2Player2Id) {
-          updateData.team2Player2Id = userId;
-          position = 'team2Player2';
-        } else {
-          throw new Error('El equipo 2 ya está completo');
-        }
-      }
+    if (team_number !== null) {
+      if (team_number !== 1 && team_number !== 2) throw new Error('El equipo debe ser 1 o 2');
+      if (team_number === 1 && team1Count >= 2) throw new Error('El equipo 1 ya está completo');
+      if (team_number === 2 && team2Count >= 2) throw new Error('El equipo 2 ya está completo');
     } else {
-      if (!match.team1Player2Id) {
-        updateData.team1Player2Id = userId;
-        position = 'team1Player2';
-      } else if (!match.team2Player1Id) {
-        updateData.team2Player1Id = userId;
-        position = 'team2Player1';
-      } else if (!match.team2Player2Id) {
-        updateData.team2Player2Id = userId;
-        position = 'team2Player2';
-      } else {
-        throw new Error('El partido ya está completo (4 jugadores)');
-      }
+      team_number = team1Count < 2 ? 1 : 2;
     }
 
-    await match.update(updateData, { transaction });
+    const participant = await MatchParticipant.create({
+      match_id: matchId,
+      user_id: userId,
+      team_number,
+      position: (team_number === 1 ? (team1Count === 0 ? 'left' : 'right') : (team2Count === 0 ? 'left' : 'right'))
+    }, { transaction });
 
     await transaction.commit();
 
-    const updatedMatch = await Match.findByPk(matchId, {
-      include: [
-        {
-          association: 'reservation',
-          include: [
-            {
-              association: 'court',
-              include: [
-                {
-                  association: 'club'
-                }
-              ]
-            },
-            {
-              association: 'user'
-            }
-          ]
-        },
-        {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
-        }
-      ]
-    });
+    const updatedMatch = await getMatchByIdDetailed(matchId);
 
     return {
       match: updatedMatch,
-      position: position,
-      message: `Te has unido al partido como ${position}`
+      position: participant.position,
+      team: team_number,
+      message: `Te has unido al equipo ${team_number} como ${participant.position}`
     };
 
   } catch (error) {
@@ -473,107 +273,33 @@ const leaveMatch = async (matchId, userId) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const match = await Match.findByPk(matchId, {
-      include: [
-        {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
-        }
-      ],
+    const match = await Match.findByPk(matchId, { transaction });
+    if (!match) throw new Error('Partido no encontrado');
+
+    const participant = await MatchParticipant.findOne({
+      where: { match_id: matchId, user_id: userId },
       transaction
     });
 
-    if (!match) {
-      throw new Error('Partido no encontrado');
-    }
-
-    let userPosition = null;
-    
-    if (match.team1Player1Id === userId) {
-      userPosition = 'team1Player1';
-    } else if (match.team1Player2Id === userId) {
-      userPosition = 'team1Player2';
-    } else if (match.team2Player1Id === userId) {
-      userPosition = 'team2Player1';
-    } else if (match.team2Player2Id === userId) {
-      userPosition = 'team2Player2';
-    }
-
-    if (!userPosition) {
+    if (!participant) {
       throw new Error('No estás participando en este partido');
     }
 
-    if (userPosition === 'team1Player1') {
+    if (match.created_by === userId) {
       throw new Error('El creador del partido no puede abandonarlo. Si deseas cancelar el partido, debes eliminarlo');
     }
 
-    if (
-      match.status === Match.MATCH_STATUS.IN_PROGRESS ||
-      match.status === Match.MATCH_STATUS.PENDING_CONFIRMATION ||
-      match.status === Match.MATCH_STATUS.COMPLETED
-    ) {
+    if ([Match.MATCH_STATUS.IN_PROGRESS, Match.MATCH_STATUS.PENDING_CONFIRMATION, Match.MATCH_STATUS.COMPLETED].includes(match.status)) {
       throw new Error('No puedes abandonar un partido que ya está en progreso, pendiente de confirmación o completado');
     }
 
-    let updateData = {};
-    const position = userPosition;
-
-    if (position === 'team1Player2') {
-      updateData.team1Player2Id = null;
-    } else if (position === 'team2Player1') {
-      updateData.team2Player1Id = null;
-    } else if (position === 'team2Player2') {
-      updateData.team2Player2Id = null;
-    }
-
-    await match.update(updateData, { transaction });
-
+    await participant.destroy({ transaction });
     await transaction.commit();
 
-    const updatedMatch = await Match.findByPk(matchId, {
-      include: [
-        {
-          association: 'reservation',
-          include: [
-            {
-              association: 'court',
-              include: [
-                {
-                  association: 'club'
-                }
-              ]
-            },
-            {
-              association: 'user'
-            }
-          ]
-        },
-        {
-          association: 'team1Player1'
-        },
-        {
-          association: 'team1Player2'
-        },
-        {
-          association: 'team2Player1'
-        },
-        {
-          association: 'team2Player2'
-        }
-      ]
-    });
+    const updatedMatch = await getMatchByIdDetailed(matchId);
 
     return {
       match: updatedMatch,
-      position: position,
       message: `Has abandonado el partido exitosamente`
     };
 
@@ -585,12 +311,9 @@ const leaveMatch = async (matchId, userId) => {
 
 const startMatch = async (matchId, userId) => {
   const match = await Match.findByPk(matchId);
-  
-  if (!match) {
-    throw new Error('Partido no encontrado');
-  }
+  if (!match) throw new Error('Partido no encontrado');
 
-  if (!isUserInMatch(match, userId)) {
+  if (!(await isUserInMatch(matchId, userId))) {
     throw new Error('Solo los jugadores del partido pueden iniciarlo');
   }
 
@@ -598,51 +321,15 @@ const startMatch = async (matchId, userId) => {
     throw new Error(`No se puede iniciar un partido con estado: ${match.status}`);
   }
 
-  await match.update({ status: Match.MATCH_STATUS.IN_PROGRESS });
-
-  return await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'reservation',
-        include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
-        ]
-      },
-      {
-        association: 'team1Player1'
-      },
-      {
-        association: 'team1Player2'
-      },
-      {
-        association: 'team2Player1'
-      },
-      {
-        association: 'team2Player2'
-      }
-    ]
-  });
+  await match.update({ status: Match.MATCH_STATUS.IN_PROGRESS, started_at: new Date() });
+  return await getMatchByIdDetailed(matchId);
 };
 
 const finishMatch = async (matchId, userId) => {
   const match = await Match.findByPk(matchId);
-  
-  if (!match) {
-    throw new Error('Partido no encontrado');
-  }
+  if (!match) throw new Error('Partido no encontrado');
 
-  if (!isUserInMatch(match, userId)) {
+  if (!(await isUserInMatch(matchId, userId))) {
     throw new Error('Solo los jugadores del partido pueden finalizarlo');
   }
 
@@ -650,58 +337,16 @@ const finishMatch = async (matchId, userId) => {
     throw new Error(`No se puede finalizar un partido con estado: ${match.status}`);
   }
 
-  await match.update({ status: Match.MATCH_STATUS.PENDING_CONFIRMATION });
-
-  return await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'reservation',
-        include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
-        ]
-      },
-      {
-        association: 'team1Player1'
-      },
-      {
-        association: 'team1Player2'
-      },
-      {
-        association: 'team2Player1'
-      },
-      {
-        association: 'team2Player2'
-      }
-    ]
-  });
+  await match.update({ status: Match.MATCH_STATUS.PENDING_CONFIRMATION, finished_at: new Date() });
+  return await getMatchByIdDetailed(matchId);
 };
 
 const confirmMatch = async (matchId, userId) => {
-  const match = await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'score'
-      }
-    ]
-  });
-  
-  if (!match) {
-    throw new Error('Partido no encontrado');
-  }
+  const match = await Match.findByPk(matchId, { include: ['score'] });
+  if (!match) throw new Error('Partido no encontrado');
 
   if (!match.score || match.score.status !== 'confirmed') {
-    throw new Error('No se puede confirmar un partido sin un resultado confirmado. Use el endpoint de confirmación de score.');
+    throw new Error('No se puede confirmar un partido sin un resultado confirmado.');
   }
 
   if (match.status !== Match.MATCH_STATUS.PENDING_CONFIRMATION) {
@@ -709,132 +354,44 @@ const confirmMatch = async (matchId, userId) => {
   }
 
   await match.update({ status: Match.MATCH_STATUS.COMPLETED });
-
-  return await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'reservation',
-        include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
-        ]
-      },
-      {
-        association: 'team1Player1'
-      },
-      {
-        association: 'team1Player2'
-      },
-      {
-        association: 'team2Player1'
-      },
-      {
-        association: 'team2Player2'
-      }
-    ]
-  });
+  return await getMatchByIdDetailed(matchId);
 };
 
 const cancelMatch = async (matchId, userId) => {
   const match = await Match.findByPk(matchId);
-  
-  if (!match) {
-    throw new Error('Partido no encontrado');
-  }
+  if (!match) throw new Error('Partido no encontrado');
 
-  if (!isUserInMatch(match, userId)) {
+  if (!(await isUserInMatch(matchId, userId))) {
     throw new Error('Solo los jugadores del partido pueden cancelarlo');
   }
 
-  if (match.status === Match.MATCH_STATUS.CANCELLED) {
-    throw new Error('El partido ya está cancelado');
-  }
+  if (match.status === Match.MATCH_STATUS.CANCELLED) throw new Error('El partido ya está cancelado');
+  if (match.status === Match.MATCH_STATUS.COMPLETED) throw new Error('No se puede cancelar un partido completado');
 
-  if (match.status === Match.MATCH_STATUS.COMPLETED) {
-    throw new Error('No se puede cancelar un partido completado');
-  }
-
-  await match.update({ status: Match.MATCH_STATUS.CANCELLED });
-
-  return await Match.findByPk(matchId, {
-    include: [
-      {
-        association: 'reservation',
-        include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
-        ]
-      },
-      {
-        association: 'team1Player1'
-      },
-      {
-        association: 'team1Player2'
-      },
-      {
-        association: 'team2Player1'
-      },
-      {
-        association: 'team2Player2'
-      }
-    ]
-  });
+  await match.update({ status: Match.MATCH_STATUS.CANCELLED, cancelled_at: new Date(), cancelled_by: userId });
+  return await getMatchByIdDetailed(matchId);
 };
 
 const getUserMatches = async (userId, filters = {}) => {
-  if (typeof filters === 'string') {
-    filters = { status: filters };
-  }
-  
   const { status, upcoming, past } = filters;
   const now = new Date();
   
-  const whereConditions = {
-    [Op.or]: [
-      { team1Player1Id: userId },
-      { team1Player2Id: userId },
-      { team2Player1Id: userId },
-      { team2Player2Id: userId }
-    ]
-  };
+  const matchIds = (await MatchParticipant.findAll({
+    where: { user_id: userId },
+    attributes: ['match_id']
+  })).map(p => p.match_id);
+
+  const whereConditions = { id: { [Op.in]: matchIds } };
 
   if (status) {
-    if (!Match.MATCH_STATUS_VALUES.includes(status)) {
-      throw new Error(`Status inválido. Valores válidos: ${Match.MATCH_STATUS_VALUES.join(', ')}`);
-    }
+    if (!Match.MATCH_STATUS_VALUES.includes(status)) throw new Error('Status inválido');
     whereConditions.status = status;
   }
 
   if (upcoming) {
-    whereConditions.matchDateTime = {
-      [Op.gte]: now,
-      [Op.not]: null
-    };
+    whereConditions.match_date_time = { [Op.gte]: now };
   } else if (past) {
-    whereConditions.matchDateTime = {
-      [Op.lt]: now,
-      [Op.not]: null
-    };
+    whereConditions.match_date_time = { [Op.lt]: now };
   }
 
   return await Match.findAll({
@@ -843,115 +400,35 @@ const getUserMatches = async (userId, filters = {}) => {
       {
         association: 'reservation',
         include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
+          { association: 'court', include: [{ association: 'club' }] },
+          { association: 'user' }
         ]
       },
       {
-        association: 'team1Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team1Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
+        association: 'participants',
+        include: [{ model: User, as: 'user', include: ['profile'] }]
       }
     ],
-    order: [['matchDateTime', 'ASC']]
+    order: [['match_date_time', 'ASC']]
   });
 };
 
 const getAvailableMatches = async (userId = null, filters = {}) => {
   const { dateFilter, availableSpaces } = filters;
-  
   const now = new Date();
   
   const whereConditions = {
     status: Match.MATCH_STATUS.SCHEDULED,
-    matchDateTime: { 
-      [Op.gte]: now,
-      [Op.not]: null
-    },
-    [Op.or]: [
-      { team1Player2Id: null },
-      { team2Player1Id: null },
-      { team2Player2Id: null }
-    ]
+    match_date_time: { [Op.gte]: now }
   };
 
   if (dateFilter) {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfToday = new Date(today);
-    const endOfToday = new Date(today);
-    endOfToday.setHours(23, 59, 59, 999);
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const startOfTomorrow = new Date(tomorrow);
-    const endOfTomorrow = new Date(tomorrow);
-    endOfTomorrow.setHours(23, 59, 59, 999);
-    
-    const nextWeek = new Date(today);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    const endOfWeek = new Date(nextWeek);
-    endOfWeek.setHours(23, 59, 59, 999);
+    const endOfToday = new Date(today); endOfToday.setHours(23, 59, 59, 999);
+    const endOfWeek = new Date(today); endOfWeek.setDate(today.getDate() + 7); endOfWeek.setHours(23, 59, 59, 999);
 
-    switch (dateFilter) {
-      case 'today':
-        whereConditions.matchDateTime = {
-          [Op.gte]: startOfToday,
-          [Op.lte]: endOfToday,
-          [Op.not]: null
-        };
-        break;
-      case 'tomorrow':
-        whereConditions.matchDateTime = {
-          [Op.gte]: startOfTomorrow,
-          [Op.lte]: endOfTomorrow,
-          [Op.not]: null
-        };
-        break;
-      case 'thisWeek':
-        whereConditions.matchDateTime = {
-          [Op.gte]: startOfToday,
-          [Op.lte]: endOfWeek,
-          [Op.not]: null
-        };
-        break;
-    }
+    if (dateFilter === 'today') whereConditions.match_date_time = { [Op.between]: [now, endOfToday] };
+    else if (dateFilter === 'thisWeek') whereConditions.match_date_time = { [Op.between]: [now, endOfWeek] };
   }
 
   const matches = await Match.findAll({
@@ -961,76 +438,33 @@ const getAvailableMatches = async (userId = null, filters = {}) => {
         association: 'reservation',
         required: true,
         include: [
-          {
-            association: 'court',
-            include: [
-              {
-                association: 'club'
-              }
-            ]
-          },
-          {
-            association: 'user'
-          }
-          // ⭐ Slot removido - usar matchDateTime directamente
+          { association: 'court', include: [{ association: 'club' }] },
+          { association: 'user' }
         ]
       },
       {
-        association: 'team1Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team1Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player1',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
-      },
-      {
-        association: 'team2Player2',
-        include: [
-          {
-            association: 'profile'
-          }
-        ]
+        association: 'participants',
+        include: [{ model: User, as: 'user', include: ['profile'] }]
       }
     ],
-    order: [
-      ['matchDateTime', 'ASC']
-    ]
+    order: [['match_date_time', 'ASC']]
   });
 
   let filteredMatches = matches;
-  if (availableSpaces) {
-    filteredMatches = matches.filter(match => {
-      const playersCount = getAllMatchPlayers(match).length;
-      const availableSpots = 4 - playersCount;
-      
-      if (availableSpaces === 'one') {
-        return availableSpots === 1;
-      } else if (availableSpaces === 'twoOrMore') {
-        return availableSpots >= 2;
-      }
-      
-      return true;
-    });
+  
+  // Filtrar partidos donde el usuario ya participa
+  if (userId) {
+    filteredMatches = filteredMatches.filter(m => !m.participants.some(p => p.user_id === userId));
   }
 
-  if (userId) {
-    filteredMatches = filteredMatches.filter(match => !isUserInMatch(match, userId));
+  // Filtrar por espacios disponibles
+  filteredMatches = filteredMatches.filter(m => m.participants.length < 4);
+
+  if (availableSpaces) {
+    filteredMatches = filteredMatches.filter(m => {
+      const spots = 4 - m.participants.length;
+      return availableSpaces === 'one' ? spots === 1 : spots >= 2;
+    });
   }
 
   return filteredMatches;

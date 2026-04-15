@@ -17,15 +17,12 @@ module.exports = {
 
     // Calcular experiencia y nivel
     // Fórmula: level = floor(sqrt(experience / 10)) + 1
-    // Nivel 3: 40-89 XP
-    // Nivel 4: 90-159 XP
-    // Vamos a ponerlo en nivel 3 con 60 XP (cerca de subir a nivel 4)
     const currentExperience = 60;
     const currentLevel = Math.floor(Math.sqrt(currentExperience / 10)) + 1; // Debería ser nivel 3
 
     // Verificar si ya existe un UserLevel para este usuario
     const [existingLevels] = await queryInterface.sequelize.query(
-      `SELECT id FROM user_levels WHERE "userId" = ${userId} LIMIT 1`
+      `SELECT id FROM user_levels WHERE user_id = ${userId} LIMIT 1`
     );
 
     if (existingLevels.length > 0) {
@@ -34,81 +31,80 @@ module.exports = {
         `UPDATE user_levels 
          SET experience = ${currentExperience}, 
              level = ${currentLevel},
-             "updatedAt" = CURRENT_TIMESTAMP
-         WHERE "userId" = ${userId}`
+             updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = ${userId}`
       );
       console.log(`UserLevel actualizado para usuario ${userId}: ${currentExperience} XP, Nivel ${currentLevel}`);
     } else {
       // Crear nuevo UserLevel
       await queryInterface.bulkInsert('user_levels', [
         {
-          userId: userId,
+          user_id: userId,
           experience: currentExperience,
           level: currentLevel,
-          createdAt: new Date(),
-          updatedAt: new Date()
+          created_at: new Date(),
+          updated_at: new Date()
         }
       ]);
       console.log(`UserLevel creado para usuario ${userId}: ${currentExperience} XP, Nivel ${currentLevel}`);
     }
 
     // Crear registros de experiencia para simular historial
-    // Simular que jugó varios partidos (algunos ganados, algunos perdidos)
     const now = new Date();
     const experienceRecords = [
       {
-        userId: userId,
+        user_id: userId,
         action: 'PLAY_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 1 }),
-        createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // Hace 7 días
-        updatedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // Hace 7 días
+        updated_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         action: 'WIN_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 1 }),
-        createdAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
-        updatedAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+        updated_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         action: 'PLAY_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 2 }),
-        createdAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // Hace 5 días
-        updatedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // Hace 5 días
+        updated_at: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         action: 'PLAY_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 3 }),
-        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), // Hace 3 días
-        updatedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000), // Hace 3 días
+        updated_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         action: 'WIN_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 3 }),
-        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-        updatedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
+        updated_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         action: 'PLAY_MATCH',
-        xpAmount: 10,
+        xp_amount: 10,
         metadata: JSON.stringify({ matchId: 4 }),
-        createdAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Hace 1 día
-        updatedAt: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)
+        created_at: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000), // Hace 1 día
+        updated_at: new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000)
       }
     ];
 
     // Eliminar registros existentes del usuario para evitar duplicados
     await queryInterface.sequelize.query(
-      `DELETE FROM user_experience WHERE "userId" = ${userId}`
+      `DELETE FROM user_experience WHERE user_id = ${userId}`
     );
 
     await queryInterface.bulkInsert('user_experience', experienceRecords);
@@ -121,12 +117,12 @@ module.exports = {
 
     // Eliminar notificaciones existentes del usuario
     await queryInterface.sequelize.query(
-      `DELETE FROM notifications WHERE "userId" = ${userId}`
+      `DELETE FROM notifications WHERE user_id = ${userId}`
     );
 
     const notifications = [
       {
-        userId: userId,
+        user_id: userId,
         type: 'LEVEL_UP',
         data: JSON.stringify({
           newLevel: 2,
@@ -135,12 +131,12 @@ module.exports = {
           experienceToNextLevel: 380
         }),
         read: false,
-        readAt: null,
-        createdAt: weekAgo,
-        updatedAt: weekAgo
+        read_at: null,
+        created_at: weekAgo,
+        updated_at: weekAgo
       },
       {
-        userId: userId,
+        user_id: userId,
         type: 'LEVEL_UP',
         data: JSON.stringify({
           newLevel: 3,
@@ -149,24 +145,24 @@ module.exports = {
           experienceToNextLevel: 360
         }),
         read: true,
-        readAt: twoDaysAgo,
-        createdAt: twoDaysAgo,
-        updatedAt: twoDaysAgo
+        read_at: twoDaysAgo,
+        created_at: twoDaysAgo,
+        updated_at: twoDaysAgo
       },
       {
-        userId: userId,
+        user_id: userId,
         type: 'MATCH_COMPLETED',
         data: JSON.stringify({
           matchId: 3,
           message: 'Tu partido ha sido completado'
         }),
         read: false,
-        readAt: null,
-        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-        updatedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+        read_at: null,
+        created_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
+        updated_at: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
       },
       {
-        userId: userId,
+        user_id: userId,
         type: 'ACHIEVEMENT',
         data: JSON.stringify({
           achievementId: 1,
@@ -174,21 +170,21 @@ module.exports = {
           description: 'Has ganado tu primer partido'
         }),
         read: true,
-        readAt: weekAgo,
-        createdAt: weekAgo,
-        updatedAt: weekAgo
+        read_at: weekAgo,
+        created_at: weekAgo,
+        updated_at: weekAgo
       },
       {
-        userId: userId,
+        user_id: userId,
         type: 'MATCH_COMPLETED',
         data: JSON.stringify({
           matchId: 4,
           message: 'Tu partido ha sido completado'
         }),
         read: false,
-        readAt: null,
-        createdAt: yesterday,
-        updatedAt: yesterday
+        read_at: null,
+        created_at: yesterday,
+        updated_at: yesterday
       }
     ];
 
@@ -215,11 +211,11 @@ module.exports = {
 
     // Eliminar registros creados por este seeder
     await queryInterface.sequelize.query(
-      `DELETE FROM user_experience WHERE "userId" = ${userId}`
+      `DELETE FROM user_experience WHERE user_id = ${userId}`
     );
 
     await queryInterface.sequelize.query(
-      `DELETE FROM notifications WHERE "userId" = ${userId}`
+      `DELETE FROM notifications WHERE user_id = ${userId}`
     );
 
     // Resetear UserLevel a valores por defecto
@@ -227,11 +223,10 @@ module.exports = {
       `UPDATE user_levels 
        SET experience = 0, 
            level = 1,
-           "updatedAt" = CURRENT_TIMESTAMP
-       WHERE "userId" = ${userId}`
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ${userId}`
     );
 
     console.log(`✅ Datos eliminados para agustin@example.com`);
   }
 };
-

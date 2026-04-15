@@ -12,9 +12,9 @@ module.exports = {
         description: 'Club de pádel con canchas de última generación y excelente iluminación.',
         latitude: -34.6037,
         longitude: -58.3816,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Pádel Norte',
@@ -24,9 +24,9 @@ module.exports = {
         description: 'Centro deportivo especializado en pádel con canchas techadas.',
         latitude: -34.5895,
         longitude: -58.3974,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Club Deportivo Sur',
@@ -36,9 +36,9 @@ module.exports = {
         description: 'Complejo deportivo con múltiples canchas de pádel y servicios completos.',
         latitude: -34.6205,
         longitude: -58.3731,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Pádel Oeste',
@@ -48,9 +48,9 @@ module.exports = {
         description: 'Club de pádel en zona oeste con canchas premium y servicios de primera.',
         latitude: -34.6100,
         longitude: -58.4000,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       },
       {
         name: 'Mega Pádel Center',
@@ -60,9 +60,9 @@ module.exports = {
         description: 'El centro de pádel más grande de la ciudad con 4 canchas profesionales y todas las comodidades.',
         latitude: -34.5800,
         longitude: -58.3900,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date()
       }
     ], {});
   },
