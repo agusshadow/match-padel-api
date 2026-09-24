@@ -8,6 +8,7 @@
 -- EXTENSIONS
 create extension if not exists "uuid-ossp";
 create extension if not exists "pg_cron";
+create extension if not exists "btree_gist"; -- requerida por court_reservations.no_overlap
 
 -- ============================================================
 -- ENUMS
