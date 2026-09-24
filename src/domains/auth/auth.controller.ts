@@ -31,32 +31,35 @@ export async function register(req: Request, res: Response, next: NextFunction):
       throw new AppError('Username already taken', 409, 'USERNAME_TAKEN')
     }
 
-    // Create Supabase auth user
+    // Create Supabase auth user using admin API — pass metadata so the DB trigger
+    // handle_new_user() inserts public.users with the correct full_name and username.
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: body.email,
       password: body.password,
       email_confirm: true,
+      user_metadata: {
+        full_name: body.full_name,
+        username: body.username,
+      },
     })
 
     if (authError || !authData.user) {
-      throw new AppError(authError?.message ?? 'Failed to create user', 400)
+      throw new AppError(authError?.message ?? 'Failed to create auth user', 400)
     }
 
-    // Insert into users table
+    // The DB trigger handle_new_user() already inserted public.users using user_metadata.
+    // Update the row to ensure full_name and username are correct.
     const { data: user, error: userError } = await supabase
       .from('users')
-      .insert({
-        id: authData.user.id,
-        full_name: body.full_name,
-        username: body.username,
-      })
+      .update({ full_name: body.full_name, username: body.username })
+      .eq('id', authData.user.id)
       .select()
       .single()
 
     if (userError || !user) {
       // Rollback auth user
       await supabase.auth.admin.deleteUser(authData.user.id)
-      throw new AppError('Failed to create user profile', 500)
+      throw new AppError('Failed to update user profile', 500)
     }
 
     // Sign in to get tokens
