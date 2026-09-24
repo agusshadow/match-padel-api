@@ -1,0 +1,154 @@
+import { matchRepository, CreateMatchData, ScoreData } from './match.repository'
+import { NotFoundError, ForbiddenError, ValidationError } from '../../types/errors'
+import { AppError } from '../../types/errors'
+
+const ELO_WIN_DELTA = 15
+const ELO_LOSS_DELTA = -15
+
+export const matchService = {
+  async getMyMatches(userId: string, options: { status?: string; type?: string; page?: number }) {
+    return matchRepository.findByUser(userId, options)
+  },
+
+  async getMatchById(id: string) {
+    return matchRepository.findById(id)
+  },
+
+  async createMatch(data: CreateMatchData, createdBy: string) {
+    return matchRepository.create(data, createdBy)
+  },
+
+  async joinByLobbyUrl(lobbyUrl: string, userId: string) {
+    const match = await matchRepository.findByLobbyUrl(lobbyUrl)
+
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    if (match.status !== 'waiting') {
+      throw new AppError('Match is not open for joining', 400, 'MATCH_NOT_OPEN')
+    }
+
+    const players = (match as any).match_players ?? []
+
+    const alreadyIn = players.some((p: any) => p.user_id === userId)
+    if (alreadyIn) {
+      throw new AppError('Already in this match', 400, 'ALREADY_JOINED')
+    }
+
+    if (players.length >= 4) {
+      throw new AppError('Match is full', 400, 'MATCH_FULL')
+    }
+
+    const team1Count = players.filter((p: any) => p.team === 1).length
+    const team2Count = players.filter((p: any) => p.team === 2).length
+    const team = team1Count <= team2Count ? 1 : 2
+
+    await matchRepository.join(match.id, userId, team)
+
+    if (players.length + 1 >= 4) {
+      await matchRepository.updateStatus(match.id, 'in_progress')
+    }
+
+    return matchRepository.findById(match.id)
+  },
+
+  async submitScore(matchId: string, score: ScoreData, userId: string) {
+    const match = await matchRepository.findById(matchId)
+
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    if (match.status === 'cancelled') {
+      throw new AppError('Match is cancelled', 400, 'MATCH_CANCELLED')
+    }
+
+    if (match.score_status === 'accepted') {
+      throw new AppError('Score already accepted', 400, 'SCORE_ACCEPTED')
+    }
+
+    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
+    if (!userTeam) {
+      throw new ForbiddenError('Not a player in this match')
+    }
+
+    return matchRepository.submitScore(matchId, score, userId)
+  },
+
+  async acceptScore(matchId: string, userId: string) {
+    const match = await matchRepository.findById(matchId)
+
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    if (match.score_status !== 'pending') {
+      throw new AppError('No pending score to accept', 400, 'NO_PENDING_SCORE')
+    }
+
+    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
+    if (!userTeam) {
+      throw new ForbiddenError('Not a player in this match')
+    }
+
+    // Determine winner by comparing sets won
+    const score1 = (match.score_team1 as number[]) ?? []
+    const score2 = (match.score_team2 as number[]) ?? []
+
+    let sets1 = 0
+    let sets2 = 0
+    for (let i = 0; i < Math.min(score1.length, score2.length); i++) {
+      if (score1[i] > score2[i]) sets1++
+      else if (score2[i] > score1[i]) sets2++
+    }
+
+    const winnerTeam = sets1 > sets2 ? 1 : 2
+
+    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam)
+
+    if (match.is_ranked) {
+      await this._applyEloChanges(matchId, winnerTeam)
+    }
+
+    return updatedMatch
+  },
+
+  async _applyEloChanges(matchId: string, winnerTeam: number) {
+    const players = await matchRepository.getPlayers(matchId)
+
+    for (const player of players) {
+      const isWinner = player.team === winnerTeam
+      const delta = isWinner ? ELO_WIN_DELTA : ELO_LOSS_DELTA
+      const eloBefore = await matchRepository.getUserElo(player.user_id)
+      const eloAfter = Math.max(0, eloBefore + delta)
+
+      await matchRepository.updateUserElo(player.user_id, eloAfter)
+      await matchRepository.insertEloHistory({
+        user_id: player.user_id,
+        match_id: matchId,
+        elo_before: eloBefore,
+        elo_after: eloAfter,
+        delta,
+      })
+    }
+  },
+
+  async cancelMatch(matchId: string, userId: string) {
+    const match = await matchRepository.findById(matchId)
+
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    if (match.created_by !== userId) {
+      throw new ForbiddenError('Only the creator can cancel this match')
+    }
+
+    if (match.status === 'completed') {
+      throw new AppError('Cannot cancel a completed match', 400, 'MATCH_COMPLETED')
+    }
+
+    return matchRepository.cancel(matchId)
+  },
+}
