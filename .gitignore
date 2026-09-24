@@ -4,3 +4,4 @@ dist
 !.env.example
 *.log
 coverage
+.DS_Store
