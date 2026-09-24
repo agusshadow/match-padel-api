@@ -9,4 +9,5 @@ router.post('/login', login)
 router.post('/logout', requireAuth, logout)
 router.get('/me', requireAuth, me)
 
+export const authRouter = router
 export default router

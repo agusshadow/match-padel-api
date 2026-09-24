@@ -6,7 +6,7 @@ export class AuthRepository {
     const { data } = await supabase
       .from('users')
       .select('id')
-      .eq('id', (await supabase.auth.admin.getUserByEmail(email))?.data?.user?.id ?? '')
+      .eq('email', email)
       .maybeSingle()
     return data
   }
@@ -32,7 +32,6 @@ export class AuthRepository {
   }
 
   static async signOut(_userId: string) {
-    // Con service_role no hay sesión que cerrar server-side; el cliente invalida el token
     return true
   }
 
