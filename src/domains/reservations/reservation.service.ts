@@ -13,6 +13,7 @@ import {
   findAvailableSlots,
 } from './reservation.repository'
 import type { CreateReservationRequest } from './reservation.validator'
+import { notifications } from '../notifications/notification.service'
 
 const MAX_ACTIVE_RESERVATIONS = 3
 
@@ -102,12 +103,14 @@ export async function validateAndCreateReservation(
   const totalPrice = Math.round(court.price_per_hour * durationHours * 100) / 100
 
   // 8. Create the reservation
-  return create({
+  const reservation = await create({
     ...data,
     userId,
     clubId: court.club_id,
     totalPrice,
   })
+
+  return reservation
 }
 
 export async function cancelReservation(id: string, userId: string) {
@@ -128,6 +131,9 @@ export async function cancelReservation(id: string, userId: string) {
   if (!result) {
     throw new NotFoundError('Reservation')
   }
+
+  // Notify user of cancellation
+  notifications.reservationCancelled(userId, id).catch(() => {})
 
   return result
 }

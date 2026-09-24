@@ -1,6 +1,7 @@
 import { matchRepository, CreateMatchData, ScoreData } from './match.repository'
-import { NotFoundError, ForbiddenError, ValidationError } from '../../types/errors'
+import { NotFoundError, ForbiddenError } from '../../types/errors'
 import { AppError } from '../../types/errors'
+import { notifications } from '../notifications/notification.service'
 
 const ELO_WIN_DELTA = 15
 const ELO_LOSS_DELTA = -15
@@ -48,6 +49,9 @@ export const matchService = {
 
     if (players.length + 1 >= 4) {
       await matchRepository.updateStatus(match.id, 'in_progress')
+      // Notify all players that the match is ready
+      const allPlayerIds = [...players.map((p: any) => p.user_id), userId]
+      notifications.matchStarted(allPlayerIds, match.id).catch(() => {})
     }
 
     return matchRepository.findById(match.id)
@@ -73,7 +77,18 @@ export const matchService = {
       throw new ForbiddenError('Not a player in this match')
     }
 
-    return matchRepository.submitScore(matchId, score, userId)
+    const result = await matchRepository.submitScore(matchId, score, userId)
+
+    // Notify other players that a score was submitted
+    const players = await matchRepository.getPlayers(matchId)
+    const otherPlayerIds = players
+      .filter((p: any) => p.user_id !== userId)
+      .map((p: any) => p.user_id)
+    if (otherPlayerIds.length > 0) {
+      notifications.scoreSubmitted(otherPlayerIds, matchId).catch(() => {})
+    }
+
+    return result
   },
 
   async acceptScore(matchId: string, userId: string) {
@@ -110,6 +125,12 @@ export const matchService = {
     if (match.is_ranked) {
       await this._applyEloChanges(matchId, winnerTeam)
     }
+
+    // Notify all players that the score was accepted
+    const players = await matchRepository.getPlayers(matchId)
+    const playerIds = players.map((p: any) => p.user_id)
+    // ELO change differs per player; send generic notification
+    notifications.scoreAccepted(playerIds, matchId, 0).catch(() => {})
 
     return updatedMatch
   },
@@ -149,6 +170,17 @@ export const matchService = {
       throw new AppError('Cannot cancel a completed match', 400, 'MATCH_COMPLETED')
     }
 
-    return matchRepository.cancel(matchId)
+    const cancelledMatch = await matchRepository.cancel(matchId)
+
+    // Notify other players
+    const players = await matchRepository.getPlayers(matchId)
+    const otherPlayerIds = players
+      .filter((p: any) => p.user_id !== userId)
+      .map((p: any) => p.user_id)
+    if (otherPlayerIds.length > 0) {
+      notifications.matchCancelled(otherPlayerIds, matchId).catch(() => {})
+    }
+
+    return cancelledMatch
   },
 }
