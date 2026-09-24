@@ -4,11 +4,11 @@ export interface CreateTournamentData {
   name: string
   description?: string
   club_id?: string
-  format: 'round_robin' | 'elimination'
+  format: 'round_robin' | 'single_elimination' | 'double_elimination' | 'americano'
   max_teams: number
-  min_elo?: number
-  max_elo?: number
-  prize_info?: string
+  entry_fee?: number
+  prize_pool?: number
+  rules?: Record<string, unknown>
   start_date: string
   end_date?: string
   created_by: string
@@ -24,8 +24,8 @@ export const tournamentRepository = {
       .from('tournaments')
       .select(
         `
-        id, name, description, format, status, max_teams, min_elo, max_elo,
-        prize_info, start_date, end_date, created_at,
+        id, name, description, format, status, max_teams, entry_fee, prize_pool,
+        start_date, end_date, created_at,
         club:clubs(name, city),
         creator:users!tournaments_created_by_fkey(username, full_name),
         tournament_teams(id)
@@ -54,12 +54,12 @@ export const tournamentRepository = {
       .from('tournaments')
       .select(
         `
-        id, name, description, format, status, max_teams, min_elo, max_elo,
-        prize_info, start_date, end_date, created_at, updated_at, created_by,
+        id, name, description, format, status, max_teams, entry_fee, prize_pool, rules,
+        start_date, end_date, created_at, updated_at, created_by,
         club:clubs(id, name, city, address),
         creator:users!tournaments_created_by_fkey(id, username, full_name),
         tournament_teams(
-          id, name, status, created_at,
+          id, name, registered_at,
           player1:users!tournament_teams_player1_id_fkey(id, username, full_name, elo),
           player2:users!tournament_teams_player2_id_fkey(id, username, full_name, elo)
         ),
@@ -87,9 +87,9 @@ export const tournamentRepository = {
         club_id: data.club_id,
         format: data.format,
         max_teams: data.max_teams,
-        min_elo: data.min_elo,
-        max_elo: data.max_elo,
-        prize_info: data.prize_info,
+        entry_fee: data.entry_fee,
+        prize_pool: data.prize_pool,
+        rules: data.rules,
         start_date: data.start_date,
         end_date: data.end_date,
         created_by: data.created_by,
@@ -150,7 +150,6 @@ export const tournamentRepository = {
       .from('tournament_teams')
       .select('*', { count: 'exact', head: true })
       .eq('tournament_id', tournamentId)
-      .eq('status', 'active')
 
     if (error) throw error
     return count ?? 0
