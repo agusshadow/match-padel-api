@@ -12,6 +12,7 @@ import reservationRouter from './domains/reservations/reservation.router'
 import clubRouter from './domains/clubs/club.router'
 import courtRouter from './domains/courts/court.router'
 import notificationRouter from './domains/notifications/notification.router'
+import tournamentRouter from './domains/tournaments/tournament.router'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -54,6 +55,7 @@ v1.use('/reservations', reservationRouter)
 v1.use('/clubs', clubRouter)
 v1.use('/courts', courtRouter)
 v1.use('/notifications', notificationRouter)
+v1.use('/tournaments', tournamentRouter)
 
 app.use('/api/v1', v1)
 
