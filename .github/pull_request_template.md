@@ -15,9 +15,6 @@
 <!-- Steps to verify in the dev environment -->
 1.
 
-## Screenshots
-<!-- Required for UI changes: before / after, mobile and desktop where relevant. "N/A" otherwise -->
-
 ## Checklist
 - [ ] CI is green
 - [ ] Tests added or updated
