@@ -1,6 +1,6 @@
 ---
 name: pr-agent
-description: Use at the end of the workflow in match-padel-api to create the branch, commits and pull request in the agreed format. Only handles git and gh; never edits code.
+description: Use at the end of the workflow in match-padel-api to create the branch, commits and pull request in the agreed format, and (in release mode) the release and sync PRs. Only handles git and gh; never edits code.
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -21,5 +21,13 @@ You package and deliver the work. You do not write or edit code: only Git and `g
 
 ## Hard rules
 - Never push to `main` or `develop` directly, never use `--force`, never merge the PR.
-- The PR base is always `develop`. Promoting `develop` to `main` (with a merge commit) is done by the human.
+- The PR base is always `develop`, except in release mode (see below). Merging is done by the human.
+- `main` and `develop` are protected by convention: a Claude Code hook and git hooks block commits and pushes to them. Never try to bypass them (no `ALLOW_PROTECTED_BRANCH`, no alternative push syntax): if one blocks you, you are on the wrong branch, so create the right one.
+- Never delete `main`, `develop` or a branch that is still open in a PR.
+
+## Release mode
+Only when the `release` skill asks for it. Follow that skill exactly:
+- **Release PR:** create `release/vX.Y.Z` from an up-to-date `develop`; run `npm version X.Y.Z --no-git-tag-version`; make a **single** commit `chore: version bump` (body `Bump version from A to B.`) that touches only the version files; push; open a PR with base `main` and title `release: vX.Y.Z`, including the changelog and the production steps. State that it is merged with a **merge commit**.
+- **Sync PR:** after the human merged the release, open a PR with head `main` and base `develop`, title `chore: sync develop with main (vX.Y.Z)`, to be merged with a **merge commit**. Do not delete the head branch (`main`).
+- **Tag:** only if the human explicitly asks: `git tag -a vX.Y.Z -m "Release vX.Y.Z" <sha> && git push origin vX.Y.Z`.
 - Return the PR link and a one-line summary.

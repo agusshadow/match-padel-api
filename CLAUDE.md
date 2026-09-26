@@ -167,12 +167,15 @@ Requirements come in through a Claude session. The main session **orchestrates**
 | `reviewer` | Diff review. Does not modify code |
 | `pr-agent` | Git and `gh`: branches, commits, PR |
 
-Supporting skills: `new-domain`, `db-migration`, `pr-format`.
+Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`.
 
 ## Branches, environments and hard rules
 
 - `main` is **production** (Render `match-padel-api`, Supabase `match-padel`). `develop` is the working branch (Render `match-padel-api-dev`, Supabase `match-padel-dev`).
-- Every PR goes against `develop` and is merged with **squash**. `develop` → `main` uses a **merge commit** and is done by the human.
+- **`main` and `develop` accept no direct commits or pushes.** Everything goes through a pull request. GitHub branch protection is not available for private repos on the free plan, so it is enforced locally: (1) a Claude Code hook (`.claude/hooks/guard-protected-branches.py`, registered in `.claude/settings.json`) that blocks agents, in every session on this repo; (2) git hooks in `.githooks/` for the human, enabled once per clone with `git config core.hooksPath .githooks`. Only the human may override the git hooks in an emergency (`ALLOW_PROTECTED_BRANCH=1`); agents must never bypass them.
+- **Day-to-day:** feature branch from `develop` → PR against `develop` → merged with **squash** by the human.
+- **Release** (`/release` skill): when `develop` has accumulated several commits, a `release/vX.Y.Z` branch is cut from `develop` with all of them plus **one** extra commit, `chore: version bump`, that only raises the version. It is merged into `main` with a **merge commit** (to keep traceability), then `main` is merged back into `develop` (PR, **merge commit**) so both branches are level again.
+- Never enable "automatically delete head branches" on the repository: the release flow uses `develop` and `main` as PR heads.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
 - **Never** touch production (database, services, variables) from an agent session. Schema changes are applied in dev and the SQL for production is documented in the PR.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".

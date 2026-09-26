@@ -1,0 +1,12 @@
+#!/bin/sh
+# Blocks direct commits to main and develop. Use a feature branch and a pull request.
+branch=$(git symbolic-ref --short -q HEAD)
+case "$branch" in
+  main|develop)
+    [ "$ALLOW_PROTECTED_BRANCH" = "1" ] && exit 0
+    echo "x Direct commits to '$branch' are blocked." >&2
+    echo "  Create a branch: git switch -c feat/<topic>  (releases: release/vX.Y.Z)" >&2
+    echo "  Emergency override (human only): ALLOW_PROTECTED_BRANCH=1 git commit ..." >&2
+    exit 1
+    ;;
+esac
