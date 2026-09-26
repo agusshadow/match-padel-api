@@ -3,20 +3,20 @@ name: new-domain
 description: Recipe to create a new business domain in match-padel-api with the correct layered structure (router, controller, service, repository, validator, tests).
 ---
 
-# Crear un dominio nuevo
+# Create a new domain
 
-Fuente completa: `docs/implementing.md` ("Agregar un dominio nuevo") y `docs/conventions.md`. Este skill es el resumen operativo.
+Full reference: `docs/implementing.md` ("Agregar un dominio nuevo") and `docs/conventions.md`. This skill is the operational summary.
 
-1. Confirmá que el dominio no existe ya en `src/domains/` y que el plan lo justifica.
-2. Creá `src/domains/<nombre>/` con exactamente estos archivos:
-   - `<nombre>.validator.ts` — schemas Zod exportados.
-   - `<nombre>.repository.ts` — todas las queries a Supabase; devuelve datos, no respuestas HTTP.
-   - `<nombre>.service.ts` — lógica de negocio pura, sin Express; lanza errores de `src/types/errors.ts`.
-   - `<nombre>.controller.ts` — parsea, valida con Zod, llama al service, responde con el envelope `{ success, data }`.
-   - `<nombre>.router.ts` — define rutas y encadena `requireAuth` (de `src/middleware/auth.middleware.ts`) y validaciones.
-   - `__tests__/<nombre>.test.ts`.
-3. Montá el router en `src/index.ts` bajo `/api/v1/<nombre>`.
-4. Si necesita tablas nuevas, pedile el cambio a `db-agent`; no toques el schema.
-5. Corré `npm run typecheck`.
+1. Confirm the domain does not already exist in `src/domains/` and that the plan justifies it.
+2. Create `src/domains/<name>/` with exactly these files:
+   - `<name>.validator.ts` — exported Zod schemas.
+   - `<name>.repository.ts` — all Supabase queries; returns data, not HTTP responses.
+   - `<name>.service.ts` — pure business logic, no Express; throws errors from `src/types/errors.ts`.
+   - `<name>.controller.ts` — parses, validates with Zod, calls the service, responds with the `{ success, data }` envelope.
+   - `<name>.router.ts` — defines routes and chains `requireAuth` (from `src/middleware/auth.middleware.ts`) and validations.
+   - `__tests__/<name>.test.ts`.
+3. Mount the router in `src/index.ts` under `/api/v1/<name>`.
+4. If it needs new tables, ask `db-agent` for the change; do not touch the schema.
+5. Run `npm run typecheck`.
 
-Reglas: sin queries fuera del repository, sin `console.log`, sin `any`, y las dependencias entre dominios van repository→repository, nunca service→service.
+Rules: no queries outside the repository, no `console.log`, no `any`, and dependencies between domains go repository→repository, never service→service.

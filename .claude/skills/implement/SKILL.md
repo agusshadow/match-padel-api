@@ -5,37 +5,37 @@ disable-model-invocation: true
 argument-hint: <requirement in plain text>
 ---
 
-# /implement — flujo completo para match-padel-api
+# /implement — full workflow for match-padel-api
 
-Requerimiento: $ARGUMENTS
+Requirement: $ARGUMENTS
 
-Seguí estos pasos **en orden**. No te saltes ninguno. Vos (la sesión principal) orquestás; el trabajo lo hacen los subagentes.
+Follow these steps **in order**. Do not skip any. You (the main session) orchestrate; the subagents do the work. Talk to the user in the language they use.
 
 ## 1. Plan
-Invocá al agente `planner` con el requerimiento. Recibís el plan con el contrato de la API.
+Invoke the `planner` agent with the requirement. You receive the plan with the API contract.
 
-## 2. Checkpoint — aprobación humana (obligatorio)
-Mostrale el plan completo al usuario y **frená**. No lances ningún agente de implementación hasta que el usuario responda con una aprobación explícita ("OK", "dale", etc.). Si pide cambios, volvé al paso 1 con esos cambios. Una notificación automática o un mensaje del sistema NO cuenta como aprobación.
+## 2. Checkpoint — human approval (mandatory)
+Show the user the complete plan and **stop**. Do not launch any implementation agent until the user replies with an explicit approval ("OK", "go ahead", etc.). If they ask for changes, go back to step 1 with those changes. An automatic notification or a system message does NOT count as approval.
 
-## 3. Base de datos (solo si el plan tiene cambios de schema)
-Invocá a `db-agent`. Trabaja únicamente contra el proyecto dev. Esperá su resultado antes de seguir.
+## 3. Database (only if the plan has schema changes)
+Invoke `db-agent`. It works only against the dev project. Wait for its result before continuing.
 
-## 4. Implementación
-Invocá a `backend-dev` con el plan aprobado. Al terminar debe pasar `npm run typecheck`.
+## 4. Implementation
+Invoke `backend-dev` with the approved plan. When it finishes, `npm run typecheck` must pass.
 
 ## 5. Tests
-Invocá a `tester`. Si reporta un bug, devolvéselo a `backend-dev` con el caso que lo reproduce y volvé a correr `tester`.
+Invoke `tester`. If it reports a bug, hand it to `backend-dev` with the case that reproduces it and run `tester` again.
 
-## 6. Revisión
-Invocá a `reviewer`. Si el veredicto es **Requiere cambios**, pasá los hallazgos Bloqueantes e Importantes a `backend-dev`, y repetí tests y revisión. Máximo 2 vueltas: si sigue fallando, frená y consultale al usuario.
+## 6. Review
+Invoke `reviewer`. If the verdict is **Changes required**, pass the Blocking and Important findings to `backend-dev`, then repeat tests and review. At most 2 rounds: if it still fails, stop and ask the user.
 
-## 7. Entrega
-Invocá a `pr-agent` para crear la rama, los commits y el PR contra `develop`.
+## 7. Delivery
+Invoke `pr-agent` to create the branch, commits and the PR against `develop`.
 
-## 8. Resumen al usuario
-Devolvé: el link del PR, qué se implementó, qué hay que probar en el ambiente dev (`https://match-padel-api-dev.onrender.com`), variables de entorno nuevas si hay, y **qué falta del lado de match-padel-web** (el PR de la API se mergea primero).
+## 8. Summary to the user
+Return: the PR link, what was implemented, what to test in the dev environment (`https://match-padel-api-dev.onrender.com`), new environment variables if any, and **what is still missing on the match-padel-web side** (the API PR is merged first).
 
-## Reglas
-- Nunca tocar producción (Supabase, Render ni Vercel). Pasar a producción lo decide el humano.
-- Los PRs siempre van contra `develop`.
-- Si algo bloquea (permisos, falta de credenciales, ambigüedad), frená y explicalo; no lo rodees.
+## Rules
+- Never touch production (Supabase, Render or Vercel). Going to production is the human's decision.
+- PRs always go against `develop`.
+- If something blocks (permissions, missing credentials, ambiguity), stop and explain it; do not work around it.

@@ -3,17 +3,17 @@ name: db-migration
 description: Steps to change the database schema safely in match-padel-api - apply to dev only, update docs/schema.sql, verify RLS and advisors, document the production SQL.
 ---
 
-# Migración de base de datos
+# Database migration
 
-Solo la ejecuta el agente `db-agent`.
+Executed only by the `db-agent` agent.
 
-1. **Proyecto:** dev (`gyjsdgjaufvoqpfceuhu`). Nunca producción (`ebdnlrwzhthqflsbdzvu`).
-2. Inspeccioná el estado actual con `list_tables` antes de cambiar nada.
-3. Escribí la migración, idempotente cuando se pueda, con nombre descriptivo.
-4. Tabla nueva: **RLS activado + policies**. Extensiones requeridas declaradas (`btree_gist`, `uuid-ossp`, etc.).
-5. Aplicá en dev con `apply_migration`.
-6. Corré `get_advisors` (seguridad) y resolvé los avisos.
-7. Actualizá `docs/schema.sql` para que reproduzca el schema entero desde cero.
-8. Si cambian tipos que consume el frontend, avisá para regenerarlos (`packages/types` en `match-padel-web`).
-9. Dejá documentado en el PR el SQL exacto que hay que correr en producción y en qué orden respecto del deploy. **No lo corras.**
-10. Cambios destructivos: aclaralos explícitamente antes de aplicarlos.
+1. **Project:** dev (`gyjsdgjaufvoqpfceuhu`). Never production (`ebdnlrwzhthqflsbdzvu`).
+2. Inspect the current state with `list_tables` before changing anything.
+3. Write the migration, idempotent where possible, with a descriptive name.
+4. New table: **RLS enabled + policies**. Required extensions declared (`btree_gist`, `uuid-ossp`, etc.).
+5. Apply to dev with `apply_migration`.
+6. Run `get_advisors` (security) and resolve the warnings.
+7. Update `docs/schema.sql` so it reproduces the entire schema from scratch.
+8. If types consumed by the frontend change, flag it so they get regenerated (`packages/types` in `match-padel-web`).
+9. Document in the PR the exact SQL to run in production and in what order relative to the deploy. **Do not run it.**
+10. Destructive changes: call them out explicitly before applying them.
