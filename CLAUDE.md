@@ -136,9 +136,15 @@ This document describes the **target architecture**. The existing code does not 
 | Role-based auth | `requireRole`, `requireClubStaff` | They do not exist; only `requireAuth` |
 | DB types | Generated in `src/types/supabase.ts` | The file does not exist |
 | Tests | Vitest + Supertest, 70% in `src/domains/` | No framework and no tests |
-| Logs | Logger, no `console.log` | There are scattered `console.log` uses |
+| Logs | Logger, no `console.log` | `src/lib/logger.ts` is a thin `console` wrapper that nothing imports; `index.ts` and the error handlers call `console.log`/`console.error` directly |
 | Push | Firebase Admin | Not installed |
-| Async error handling | Every error reaches the error handler | Unhandled promise rejections exist and crash the process |
+| Async error handling | Every error reaches the error handler | Unhandled promise rejections exist and crash the process. The MercadoPago webhook replies 200 and can then call `next(err)` (headers already sent) |
+| Error responses | The `{ success: false, error: { code, message, details } }` envelope | The mounted `error.middleware.ts`, `notFound` and `auth.middleware.ts` answer `{ error, message }`. `error.ts` has the envelope but is not mounted |
+| Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`; no role is available |
+| Auth domain files | Controller → service → repository | `auth.service.ts` is never imported (its repository and validator only by each other); `auth.controller.ts` does everything itself |
+| Input validation | Zod in every controller | `matches` and `users` controllers read `req.body` without a schema; only `auth`, `reservations` and (inline) `tournaments` validate |
+| Webhook safety | Signature check + idempotency via `mp_webhook_events` | No signature verification and no idempotency; the `mp_webhook_events` table is not in `schema.sql` |
+| ELO | Worker computing ELO | `match.service.ts` applies a fixed ±15 on accepted ranked scores, non-transactional; there are no scheduled jobs |
 
 ## Agent workflow
 
@@ -170,3 +176,9 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
 - **Never** touch production (database, services, variables) from an agent session. Schema changes are applied in dev and the SQL for production is documented in the PR.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
+
+## Documentation map
+
+- `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
+- `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".
+- `docs/schema.sql` — the full database schema (source of truth for dev; production may have drifted).
