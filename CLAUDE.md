@@ -1,26 +1,26 @@
 # CLAUDE.md — match-padel-api
 
-Este archivo es tu contrato de trabajo. Léelo completo antes de tocar cualquier archivo.
+This file is your working contract. Read it completely before touching any file.
 
-## Qué es este proyecto
-API REST para Match Padel. Node.js + Express 4 + TypeScript. Sirve tanto a la PWA de jugadores como al panel de administración B2B.
+## What this project is
+REST API for Match Padel. Node.js + Express 4 + TypeScript. It serves both the player PWA and the B2B admin panel.
 
 ## Stack
 - **Runtime**: Node.js 22 + TypeScript
 - **Framework**: Express 4
-- **Base de datos**: Supabase (PostgreSQL) — cliente `@supabase/supabase-js` con `service_role` key (bypassa RLS)
-- **Auth**: Supabase JWT — verificado en middleware `requireAuth`
-- **Pagos**: MercadoPago SDK
-- **Push**: Firebase Admin SDK (objetivo; todavía no instalado)
-- **Validación**: Zod (en cada controller, siempre)
-- **Tests**: Vitest + Supertest (objetivo; todavía no configurado, ver "Estado real vs. objetivo")
-- **Logs**: stdout JSON estructurado (no `console.log`, siempre el logger)
+- **Database**: Supabase (PostgreSQL) — `@supabase/supabase-js` client with the `service_role` key (bypasses RLS)
+- **Auth**: Supabase JWT — verified in the `requireAuth` middleware
+- **Payments**: MercadoPago SDK
+- **Push**: Firebase Admin SDK (target; not installed yet)
+- **Validation**: Zod (in every controller, always)
+- **Tests**: Vitest + Supertest (target; not configured yet, see "Real state vs. target")
+- **Logs**: structured JSON to stdout (no `console.log`, always the logger)
 
-## Estructura de carpetas
+## Folder structure
 
 ```
 src/
-├── domains/          ← un directorio por dominio de negocio
+├── domains/          ← one directory per business domain
 │   ├── auth/
 │   ├── clubs/
 │   ├── reservations/
@@ -28,48 +28,48 @@ src/
 │   ├── tournaments/
 │   ├── users/
 │   └── platform/
-├── middleware/       ← middlewares globales reutilizables
-├── lib/              ← clientes externos (supabase, mercadopago, firebase, logger)
-├── types/            ← tipos globales compartidos (no tipos de dominio)
-└── index.ts          ← setup de Express, middlewares globales, registro de routers (punto de entrada)
+├── middleware/       ← reusable global middleware
+├── lib/              ← external clients (supabase, mercadopago, firebase, logger)
+├── types/            ← shared global types (not domain types)
+└── index.ts          ← Express setup, global middleware, router registration (entry point)
 ```
 
-Cada dominio tiene exactamente esta estructura interna:
+Every domain has exactly this internal structure:
 ```
-domains/<nombre>/
-├── <nombre>.router.ts      ← define rutas y encadena middlewares
-├── <nombre>.controller.ts  ← recibe req, valida con Zod, llama service, devuelve res
-├── <nombre>.service.ts     ← lógica de negocio pura (sin Express)
-├── <nombre>.repository.ts  ← todas las queries a Supabase (único lugar con DB calls)
-├── <nombre>.validator.ts   ← schemas Zod exportados y reutilizados en controller
-└── __tests__/              ← tests de integración con Supertest
+domains/<name>/
+├── <name>.router.ts      ← defines routes and chains middleware
+├── <name>.controller.ts  ← receives req, validates with Zod, calls the service, returns res
+├── <name>.service.ts     ← pure business logic (no Express)
+├── <name>.repository.ts  ← all Supabase queries (the only place with DB calls)
+├── <name>.validator.ts   ← exported Zod schemas, reused in the controller
+└── __tests__/            ← integration tests with Supertest
 ```
 
-## Reglas de arquitectura — NUNCA las rompas
+## Architecture rules — NEVER break them
 
-1. **El flujo es siempre**: Router → Controller → Service → Repository. Sin atajos.
-2. **El Controller no tiene lógica de negocio**. Solo: parsear req, validar con Zod, llamar service, devolver res.
-3. **El Service no sabe que existe Express**. No importa `Request`, `Response` ni `NextFunction`.
-4. **El Repository es el único lugar con queries a Supabase**. Ningún otro archivo usa `supabase.from(...)`.
-5. **Si una operación toca dos dominios**, el service de uno importa el *repository* del otro. Nunca importa el *service* de otro dominio.
-6. **Validación con Zod siempre en el controller**, antes de llamar al service. Si el body no pasa el schema, responder 400 antes de llegar al service.
-7. **Nunca declarar tipos a mano** para entidades de la DB. Usar los tipos generados en `src/types/supabase.ts`.
+1. **The flow is always**: Router → Controller → Service → Repository. No shortcuts.
+2. **The Controller has no business logic**. Only: parse req, validate with Zod, call the service, return res.
+3. **The Service does not know Express exists**. It never imports `Request`, `Response` or `NextFunction`.
+4. **The Repository is the only place with Supabase queries**. No other file uses `supabase.from(...)`.
+5. **If an operation touches two domains**, one domain's service imports the other's *repository*. Never the other's *service*.
+6. **Zod validation always in the controller**, before calling the service. If the body fails the schema, respond 400 before reaching the service.
+7. **Never hand-write types** for DB entities. Use the generated types in `src/types/supabase.ts`.
 
-## Envelope de respuesta — formato obligatorio
+## Response envelope — mandatory format
 
-**Éxito:**
+**Success:**
 ```json
 { "success": true, "data": <payload> }
 ```
 
 **Error:**
 ```json
-{ "success": false, "error": { "code": "SNAKE_CASE_CODE", "message": "legible", "details": {} } }
+{ "success": false, "error": { "code": "SNAKE_CASE_CODE", "message": "readable", "details": {} } }
 ```
 
-Códigos de error estándar: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `INTERNAL_ERROR`.
+Standard error codes: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `INTERNAL_ERROR`.
 
-**Paginación** (cuando aplica):
+**Pagination** (when applicable):
 ```json
 {
   "success": true,
@@ -78,95 +78,95 @@ Códigos de error estándar: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATI
 }
 ```
 
-## Middlewares de auth (objetivo; hoy solo existe `requireAuth`)
+## Auth middleware (target; today only `requireAuth` exists)
 
 ```typescript
-requireAuth                          // verifica JWT de Supabase, agrega req.user
-requireRole(['super_admin'])         // solo para rutas /platform/*
-requireClubStaff(clubId, ['owner', 'manager'])  // verifica club_staff table
+requireAuth                          // verifies the Supabase JWT, adds req.user
+requireRole(['super_admin'])         // only for /platform/* routes
+requireClubStaff(clubId, ['owner', 'manager'])  // checks the club_staff table
 ```
 
-Siempre en ese orden en la cadena de middlewares de la ruta.
+Always in that order in a route's middleware chain.
 
-## Variables de entorno
+## Environment variables
 
-Ver `.env.example`. Nunca hardcodear valores. Acceder siempre via `process.env.NOMBRE`.
-Obligatorias hoy: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`. Además `CORS_ORIGIN`, `APP_URL`, `API_URL` y `MP_ACCESS_TOKEN` según el ambiente. (`JWT_SECRET` figuraba antes pero el código no la usa.)
+See `.env.example`. Never hardcode values. Always access them via `process.env.NAME`.
+Required today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`. Also `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN` depending on the environment. (`JWT_SECRET` used to be listed but the code does not use it.)
 
 ## Rate limiting
 
-- 100 req/min por IP (global)
-- 1000 req/min por usuario autenticado
-- 5 req/min en endpoints sensibles: `/auth/register`, `/auth/login`, webhooks de MercadoPago
+- 100 req/min per IP (global)
+- 1000 req/min per authenticated user
+- 5 req/min on sensitive endpoints: `/auth/register`, `/auth/login`, MercadoPago webhooks
 
-## Cómo agregar un endpoint nuevo
+## How to add a new endpoint
 
-Lee `docs/implementing.md`. Siempre.
+Read `docs/implementing.md`. Always.
 
 ## Tests
 
-- Archivo de test en `src/domains/<nombre>/__tests__/<nombre>.test.ts`
-- Usar Supertest para tests de integración (no unit tests del controller aislado)
-- Mockear Supabase con `vi.mock` en el repository
-- Cobertura mínima 70% en `src/domains/`
-- Correr con: `npm test` (cuando el framework esté configurado)
+- Test file at `src/domains/<name>/__tests__/<name>.test.ts`
+- Use Supertest for integration tests (not isolated controller unit tests)
+- Mock Supabase with `vi.mock` in the repository
+- Minimum coverage 70% in `src/domains/`
+- Run with: `npm test` (once the framework is configured)
 
-## Lo que NO debes hacer
+## What you must NOT do
 
-- ❌ `console.log` — usar el logger de `src/lib/logger.ts`
-- ❌ Queries a Supabase fuera de un repository
-- ❌ Lógica de negocio en el controller
-- ❌ Importar tipos de la DB escritos a mano — solo desde `src/types/supabase.ts`
-- ❌ Usar `any` en TypeScript
-- ❌ Endpoints sin validación Zod
-- ❌ Responses sin el envelope `{ success, data/error }`
-- ❌ EventEmitter para operaciones async simples — usar `async/await` directo
+- ❌ `console.log` — use the logger in `src/lib/logger.ts`
+- ❌ Supabase queries outside a repository
+- ❌ Business logic in the controller
+- ❌ Hand-written DB types — only from `src/types/supabase.ts`
+- ❌ Use `any` in TypeScript
+- ❌ Endpoints without Zod validation
+- ❌ Responses without the `{ success, data/error }` envelope
+- ❌ EventEmitter for simple async operations — use `async/await` directly
 
-## Estado real vs. objetivo
+## Real state vs. target
 
-Este documento describe la **arquitectura objetivo**. El código existente no siempre la cumple. Para código nuevo seguí el objetivo; no copies los desvíos de la columna derecha, y no los "arregles de paso" sin que el plan lo pida (se limpian en tareas aparte).
+This document describes the **target architecture**. The existing code does not always meet it. For new code follow the target; do not copy the deviations in the right-hand column, and do not "fix them along the way" unless the plan asks for it (they are cleaned up in separate tasks).
 
-| Tema | Objetivo (este documento) | Realidad hoy |
+| Topic | Target (this document) | Reality today |
 |---|---|---|
-| Controllers | Sin lógica ni queries | `auth.controller.ts` hace consultas a Supabase y lógica de negocio |
-| Nombres de archivo | `.router.ts`, `.validator.ts` | Correcto en su mayoría; hay routers duplicados en plural (`clubs.router.ts`, `matches.router.ts`, `reservations.router.ts`, `tournaments.router.ts`, `users.router.ts`) sin uso |
-| Middleware | Un archivo por responsabilidad | Duplicados: `auth.ts` y `auth.middleware.ts`, `error.ts` y `error.middleware.ts` (10 archivos importan cada versión de auth). **Canónicos: `auth.middleware.ts` y `error.middleware.ts`** (el rate limit real está inline en `index.ts`; `rate-limiter.middleware.ts` solo lo usa el `app.ts` muerto) |
-| Punto de entrada | `index.ts` | Además existe `app.ts` duplicado que no se usa |
-| Rate limiting | 100/min por IP, 1000/min por usuario, 5/min en endpoints sensibles | 200 requests por 15 min, global, y sin `trust proxy` (detrás de Render todos comparten la misma IP) |
-| Auth por rol | `requireRole`, `requireClubStaff` | No existen; solo `requireAuth` |
-| Tipos de la DB | Generados en `src/types/supabase.ts` | El archivo no existe |
-| Tests | Vitest + Supertest, 70% en `src/domains/` | Sin framework ni tests |
-| Logs | Logger, sin `console.log` | Hay usos sueltos de `console.log` |
-| Push | Firebase Admin | No instalado |
-| Manejo de errores async | Todo error llega al error handler | Hay rechazos de promesas sin manejar que tumban el proceso |
+| Controllers | No logic, no queries | `auth.controller.ts` makes Supabase queries and holds business logic |
+| File names | `.router.ts`, `.validator.ts` | Mostly correct; there are unused duplicate plural routers (`clubs.router.ts`, `matches.router.ts`, `reservations.router.ts`, `tournaments.router.ts`, `users.router.ts`) |
+| Middleware | One file per responsibility | Duplicates: `auth.ts` and `auth.middleware.ts`, `error.ts` and `error.middleware.ts` (10 files import each version of auth). **Canonical: `auth.middleware.ts` and `error.middleware.ts`** (the real rate limit is inline in `index.ts`; `rate-limiter.middleware.ts` is only used by the dead `app.ts`) |
+| Entry point | `index.ts` | A duplicate `app.ts` also exists and is unused |
+| Rate limiting | 100/min per IP, 1000/min per user, 5/min on sensitive endpoints | 200 requests per 15 min, global, and no `trust proxy` (behind Render everyone shares the same IP) |
+| Role-based auth | `requireRole`, `requireClubStaff` | They do not exist; only `requireAuth` |
+| DB types | Generated in `src/types/supabase.ts` | The file does not exist |
+| Tests | Vitest + Supertest, 70% in `src/domains/` | No framework and no tests |
+| Logs | Logger, no `console.log` | There are scattered `console.log` uses |
+| Push | Firebase Admin | Not installed |
+| Async error handling | Every error reaches the error handler | Unhandled promise rejections exist and crash the process |
 
-## Flujo de trabajo con agentes
+## Agent workflow
 
-Los requerimientos entran por una sesión de Claude. La sesión principal **orquesta**; los subagentes de `.claude/agents/` ejecutan. El comando `/implement <requerimiento>` (`.claude/skills/implement/`) dispara el flujo completo:
+Requirements come in through a Claude session. The main session **orchestrates**; the subagents in `.claude/agents/` execute. The `/implement <requirement>` command (`.claude/skills/implement/`) triggers the full flow:
 
-1. `planner` → plan + contrato de API
-2. **Checkpoint: el usuario aprueba el plan** (nada se codea antes)
-3. `db-agent` (solo si hay cambios de schema; solo Supabase dev)
-4. `backend-dev` → implementación
+1. `planner` → plan + API contract
+2. **Checkpoint: the user approves the plan** (nothing is coded before that)
+3. `db-agent` (only if there are schema changes; Supabase dev only)
+4. `backend-dev` → implementation
 5. `tester` → tests
-6. `reviewer` → revisión (máx. 2 vueltas de correcciones)
-7. `pr-agent` → rama, commits y PR contra `develop`
+6. `reviewer` → review (max. 2 rounds of fixes)
+7. `pr-agent` → branch, commits and PR against `develop`
 
-| Agente | Responsabilidad |
+| Agent | Responsibility |
 |---|---|
-| `planner` | Plan y contrato de API. Solo lectura |
-| `backend-dev` | Código de `src/` (dominios, middleware, pagos, sockets, jobs) |
-| `db-agent` | Migraciones, RLS, `docs/schema.sql`. Solo Supabase dev |
-| `tester` | Tests. No modifica código de producción |
-| `reviewer` | Revisión del diff. No modifica código |
-| `pr-agent` | Git y `gh`: ramas, commits, PR |
+| `planner` | Plan and API contract. Read-only |
+| `backend-dev` | Code in `src/` (domains, middleware, payments, sockets, jobs) |
+| `db-agent` | Migrations, RLS, `docs/schema.sql`. Supabase dev only |
+| `tester` | Tests. Does not modify production code |
+| `reviewer` | Diff review. Does not modify code |
+| `pr-agent` | Git and `gh`: branches, commits, PR |
 
-Skills de apoyo: `new-domain`, `db-migration`, `pr-format`.
+Supporting skills: `new-domain`, `db-migration`, `pr-format`.
 
-## Ramas, ambientes y reglas duras
+## Branches, environments and hard rules
 
-- `main` es **producción** (Render `match-padel-api`, Supabase `match-padel`). `develop` es la rama de trabajo (Render `match-padel-api-dev`, Supabase `match-padel-dev`).
-- Todo PR va contra `develop` y se mergea con **squash**. `develop` → `main` usa **merge commit** y lo hace el humano.
-- Commits y PRs en **inglés**, commits convencionales. Ver el skill `pr-format`.
-- **Nunca** tocar producción (base de datos, servicios, variables) desde una sesión de agentes. Los cambios de schema se aplican en dev y el SQL para producción queda documentado en el PR.
-- Si un cambio de API afecta a `match-padel-web`, el PR de la API se mergea primero y el PR de web lo referencia en "Related PR".
+- `main` is **production** (Render `match-padel-api`, Supabase `match-padel`). `develop` is the working branch (Render `match-padel-api-dev`, Supabase `match-padel-dev`).
+- Every PR goes against `develop` and is merged with **squash**. `develop` → `main` uses a **merge commit** and is done by the human.
+- Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
+- **Never** touch production (database, services, variables) from an agent session. Schema changes are applied in dev and the SQL for production is documented in the PR.
+- If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
