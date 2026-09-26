@@ -1,92 +1,92 @@
-# Arquitectura — match-padel-api
+# Architecture — match-padel-api
 
-## Patrón general
+## General pattern
 
-Monolito Express organizado por dominios de negocio. No microservicios. Un solo proceso, pero cada dominio es autónomo internamente.
+Express monolith organized by business domains. No microservices. A single process, but each domain is self-contained internally.
 
-## Dominios y orden de dependencia
+## Domains and dependency order
 
 ```
-auth ──────────────────────────────────────── base (sin deps)
-users ─────────────────────────────────────── depende de auth
-clubs ─────────────────────────────────────── depende de auth, users
-reservations ──────────────────────────────── depende de clubs, users
-matches ───────────────────────────────────── depende de clubs, users, reservations
-tournaments ───────────────────────────────── depende de clubs, matches
-platform ──────────────────────────────────── depende de todos (solo super_admin)
+auth ──────────────────────────────────────── base (no deps)
+users ─────────────────────────────────────── depends on auth
+clubs ─────────────────────────────────────── depends on auth, users
+reservations ──────────────────────────────── depends on clubs, users
+matches ───────────────────────────────────── depends on clubs, users, reservations
+tournaments ───────────────────────────────── depends on clubs, matches
+platform ──────────────────────────────────── depends on all (super_admin only)
 ```
 
-Implementar en ese orden. No implementar un dominio antes de que sus dependencias estén completas.
+Implement in that order. Do not implement a domain before its dependencies are complete.
 
-## Capas dentro de cada dominio
+## Layers within each domain
 
 ```
 Request HTTP
     │
     ▼
-[Router]         — define rutas, encadena middlewares de auth, delega al controller
+[Router]         — defines routes, chains auth middlewares, delegates to the controller
     │
     ▼
-[Controller]     — valida input con Zod, llama al service, forma la response con el envelope
+[Controller]     — validates input with Zod, calls the service, builds the response with the envelope
     │
     ▼
-[Service]        — lógica de negocio pura; no conoce Express; puede llamar a repositories de otros dominios
+[Service]        — pure business logic; knows nothing about Express; may call repositories from other domains
     │
     ▼
-[Repository]     — ÚNICO lugar con queries a Supabase; devuelve tipos tipados de la DB
+[Repository]     — ONLY place with Supabase queries; returns typed DB types
     │
     ▼
 [Supabase DB]
 ```
 
-## Módulos globales (src/lib/)
+## Global modules (src/lib/)
 
-| Archivo | Qué exporta |
+| File | What it exports |
 |---|---|
-| `supabase.ts` | cliente con `service_role` key — bypassa RLS |
-| `logger.ts` | logger JSON estructurado (pino o similar) |
-| `mercadopago.ts` | instancia configurada del SDK de MP |
-| `firebase.ts` | Firebase Admin SDK inicializado |
+| `supabase.ts` | client with the `service_role` key — bypasses RLS |
+| `logger.ts` | structured JSON logger (pino or similar) |
+| `mercadopago.ts` | configured instance of the MP SDK |
+| `firebase.ts` | initialized Firebase Admin SDK |
 
-## Módulos globales (src/middleware/)
+## Global modules (src/middleware/)
 
-| Archivo | Qué hace |
+| File | What it does |
 |---|---|
-| `requireAuth.ts` | verifica JWT Supabase, agrega `req.user` |
-| `requireRole.ts` | verifica `users.role` (solo para `super_admin`) |
-| `requireClubStaff.ts` | verifica presencia en tabla `club_staff` con rol requerido |
-| `rateLimiter.ts` | express-rate-limit configurado por tier |
-| `errorHandler.ts` | catch-all de errores, forma el envelope de error |
+| `requireAuth.ts` | verifies the Supabase JWT, adds `req.user` |
+| `requireRole.ts` | checks `users.role` (only for `super_admin`) |
+| `requireClubStaff.ts` | checks presence in the `club_staff` table with the required role |
+| `rateLimiter.ts` | express-rate-limit configured per tier |
+| `errorHandler.ts` | catch-all for errors, builds the error envelope |
 
-## Flujo de un request típico
+## Flow of a typical request
 
 ```
 POST /api/v1/matches/:id/scores/accept
     │
-    ├─ requireAuth           → verifica JWT, agrega req.user
-    ├─ requireClubStaff      → no aplica (es el jugador quien acepta)
+    ├─ requireAuth           → verifies JWT, adds req.user
+    ├─ requireClubStaff      → not applicable (the player is the one accepting)
     │
     ▼
 MatchesController.acceptScore(req, res)
-    ├─ valida params con Zod
-    ├─ llama MatchesService.acceptScore(matchId, userId)
+    ├─ validates params with Zod
+    ├─ calls MatchesService.acceptScore(matchId, userId)
     │
     ▼
 MatchesService.acceptScore(matchId, userId)
     ├─ MatchesRepository.findById(matchId)
-    ├─ valida estado del match (debe ser 'disputed')
+    ├─ validates match status (must be 'disputed')
     ├─ MatchesRepository.updateStatus(matchId, 'finished')
-    ├─ calculateElo(matchId)          ← función async directa, no EventEmitter
-    │   └─ RankingRepository.upsertRankings(...)  ← transacción atómica
+    ├─ calculateElo(matchId)          ← direct async function, not EventEmitter
+    │   └─ RankingRepository.upsertRankings(...)  ← atomic transaction
     └─ notifyPlayers(matchId)         ← Firebase FCM
     │
     ▼
-Controller devuelve { success: true, data: { match, eloDeltas } }
+Controller returns { success: true, data: { match, eloDeltas } }
 ```
 
-## Decisiones técnicas clave
+## Key technical decisions
 
-- **Sin EventEmitter**: el cálculo de ELO es una función async llamada directamente. Si tarda, el cliente espera (máximo ~200ms para el cálculo + 4 writes en transacción).
-- **service_role en el backend**: el cliente de Supabase en la API usa `service_role` y bypassa RLS completamente. La seguridad es responsabilidad de los middlewares de Express.
-- **CRON jobs fuera del proceso**: los scheduled jobs viven en Supabase Edge Functions, no en node-cron dentro de Express. Si el proceso de Express muere, los jobs siguen corriendo.
-- **Un solo cliente de Supabase**: instanciado en `src/lib/supabase.ts`, importado por todos los repositories. No crear nuevas instancias.
+- **No EventEmitter**: the ELO calculation is an async function called directly. If it takes a while, the client waits (at most ~200ms for the calculation + 4 writes in a transaction).
+- **service_role in the backend**: the Supabase client in the API uses `service_role` and bypasses RLS completely. Security is the responsibility of the Express middlewares.
+- **CRON jobs outside the process**: scheduled jobs live in Supabase Edge Functions, not in node-cron inside Express. If the Express process dies, the jobs keep running.
+- **A single Supabase client**: instantiated in `src/lib/supabase.ts`, imported by all repositories. Do not create new instances.

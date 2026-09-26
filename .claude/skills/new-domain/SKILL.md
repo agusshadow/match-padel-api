@@ -5,7 +5,7 @@ description: Recipe to create a new business domain in match-padel-api with the 
 
 # Create a new domain
 
-Full reference: `docs/implementing.md` ("Agregar un dominio nuevo") and `docs/conventions.md`. This skill is the operational summary.
+Full reference: `docs/implementing.md` ("Adding a new domain") and `docs/conventions.md`. This skill is the operational summary.
 
 1. Confirm the domain does not already exist in `src/domains/` and that the plan justifies it.
 2. Create `src/domains/<name>/` with exactly these files:

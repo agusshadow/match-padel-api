@@ -1,12 +1,12 @@
-# Cómo implementar cosas — match-padel-api
+# How to implement things — match-padel-api
 
-## Agregar un endpoint nuevo
+## Adding a new endpoint
 
-Seguí estos pasos en orden. No saltear ninguno.
+Follow these steps in order. Do not skip any.
 
-### 1. Definir el schema de validación
+### 1. Define the validation schema
 
-En `src/domains/<dominio>/<dominio>.validators.ts`:
+In `src/domains/<domain>/<domain>.validators.ts`:
 
 ```typescript
 export const createReservationSchema = z.object({
@@ -17,9 +17,9 @@ export const createReservationSchema = z.object({
 export type CreateReservationInput = z.infer<typeof createReservationSchema>
 ```
 
-### 2. Agregar el método al repository
+### 2. Add the method to the repository
 
-En `src/domains/<dominio>/<dominio>.repository.ts`:
+In `src/domains/<domain>/<domain>.repository.ts`:
 
 ```typescript
 async create(input: CreateReservationInput & { userId: string }) {
@@ -33,64 +33,64 @@ async create(input: CreateReservationInput & { userId: string }) {
 }
 ```
 
-### 3. Agregar la lógica al service
+### 3. Add the logic to the service
 
-En `src/domains/<dominio>/<dominio>.service.ts`:
+In `src/domains/<domain>/<domain>.service.ts`:
 
 ```typescript
 async create(input: CreateReservationInput, userId: string) {
-  // 1. Verificar disponibilidad (llama al repository)
+  // 1. Check availability (calls the repository)
   const isAvailable = await this.repository.checkAvailability(input.courtId, input.startTime, input.endTime)
-  if (!isAvailable) throw new AppError('COURT_NOT_AVAILABLE', 'La cancha no está disponible en ese horario', 409)
+  if (!isAvailable) throw new AppError('COURT_NOT_AVAILABLE', 'The court is not available at that time', 409)
   
-  // 2. Crear la reserva
+  // 2. Create the reservation
   const reservation = await this.repository.create({ ...input, userId })
   
-  // 3. Iniciar pago en MercadoPago (si aplica)
+  // 3. Start payment in MercadoPago (if applicable)
   const paymentLink = await createMercadoPagoPreference(reservation)
   
   return { reservation, paymentLink }
 }
 ```
 
-### 4. Agregar el método al controller
+### 4. Add the method to the controller
 
-En `src/domains/<dominio>/<dominio>.controller.ts`:
+In `src/domains/<domain>/<domain>.controller.ts`:
 
 ```typescript
 async create(req: Request, res: Response) {
-  // Validar input
+  // Validate input
   const input = createReservationSchema.safeParse(req.body)
   if (!input.success) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Input inválido', details: input.error.flatten() }
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: input.error.flatten() }
     })
   }
   
-  // Llamar al service
+  // Call the service
   const result = await this.service.create(input.data, req.user.id)
   
-  // Devolver response
+  // Return response
   return res.status(201).json({ success: true, data: result })
 }
 ```
 
-### 5. Registrar la ruta
+### 5. Register the route
 
-En `src/domains/<dominio>/<dominio>.routes.ts`:
+In `src/domains/<domain>/<domain>.routes.ts`:
 
 ```typescript
 router.post('/', requireAuth, controller.create.bind(controller))
 ```
 
-### 6. Escribir el test
+### 6. Write the test
 
-En `src/domains/<dominio>/__tests__/<dominio>.test.ts`:
+In `src/domains/<domain>/__tests__/<domain>.test.ts`:
 
 ```typescript
 describe('POST /api/v1/reservations', () => {
-  it('crea una reserva cuando los datos son válidos', async () => {
+  it('creates a reservation when the data is valid', async () => {
     vi.mocked(reservationRepository.checkAvailability).mockResolvedValue(true)
     vi.mocked(reservationRepository.create).mockResolvedValue(mockReservation)
     
@@ -108,47 +108,47 @@ describe('POST /api/v1/reservations', () => {
 
 ---
 
-## Agregar un dominio nuevo
+## Adding a new domain
 
-1. Crear carpeta `src/domains/<nombre>/`
-2. Crear los 5 archivos: `routes.ts`, `controller.ts`, `service.ts`, `repository.ts`, `validators.ts`
-3. Crear `__tests__/<nombre>.test.ts`
-4. Registrar el router en `src/app.ts`: `app.use('/api/v1/<nombre>', <nombre>Router)`
-
----
-
-## Agregar un middleware nuevo
-
-1. Crear `src/middleware/<nombre>.ts`
-2. Exportar una función con firma `(req, res, next) => void`
-3. Si es global, registrarlo en `src/app.ts` antes de los routers
-4. Si es por ruta, encadenarlo en el `routes.ts` del dominio correspondiente
+1. Create folder `src/domains/<name>/`
+2. Create the 5 files: `routes.ts`, `controller.ts`, `service.ts`, `repository.ts`, `validators.ts`
+3. Create `__tests__/<name>.test.ts`
+4. Register the router in `src/app.ts`: `app.use('/api/v1/<name>', <name>Router)`
 
 ---
 
-## Webhook de MercadoPago
+## Adding a new middleware
 
-Los webhooks llegan a `POST /api/v1/payments/webhook`. El flujo es:
-
-1. Verificar firma del webhook (header `x-signature`)
-2. Buscar el `mp_event_id` en `mp_webhook_events` — si existe, responder 200 y no procesar (idempotencia)
-3. Insertar el evento en `mp_webhook_events`
-4. Procesar según `type`: `payment` → actualizar estado de la reserva/partido
-5. Responder 200 siempre (MercadoPago reintenta si recibe otro status)
+1. Create `src/middleware/<name>.ts`
+2. Export a function with signature `(req, res, next) => void`
+3. If it is global, register it in `src/app.ts` before the routers
+4. If it is per-route, chain it in the corresponding domain's `routes.ts`
 
 ---
 
-## Cálculo de ELO (no modificar sin leer ELO-Algorithm.md)
+## MercadoPago webhook
 
-El cálculo se dispara desde `MatchesService.acceptScore()` como una llamada async directa:
+Webhooks arrive at `POST /api/v1/payments/webhook`. The flow is:
+
+1. Verify the webhook signature (header `x-signature`)
+2. Look up the `mp_event_id` in `mp_webhook_events` — if it exists, respond 200 and do not process (idempotency)
+3. Insert the event into `mp_webhook_events`
+4. Process according to `type`: `payment` → update the reservation/match status
+5. Always respond 200 (MercadoPago retries if it receives any other status)
+
+---
+
+## ELO calculation (do not modify without reading ELO-Algorithm.md)
+
+The calculation is triggered from `MatchesService.acceptScore()` as a direct async call:
 
 ```typescript
-// En MatchesService
+// In MatchesService
 async acceptScore(matchId: string) {
   await this.repository.updateStatus(matchId, 'finished')
-  await calculateAndPersistElo(matchId)   // función async, esperar su resolución
+  await calculateAndPersistElo(matchId)   // async function, await its resolution
   await notifyPlayersEloReady(matchId)    // push notification
 }
 ```
 
-`calculateAndPersistElo` vive en `src/domains/matches/matches.elo-worker.ts` y ejecuta todo en una transacción de Supabase.
+`calculateAndPersistElo` lives in `src/domains/matches/matches.elo-worker.ts` and runs everything in a Supabase transaction.

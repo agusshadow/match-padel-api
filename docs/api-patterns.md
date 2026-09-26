@@ -5,11 +5,11 @@
 /api/v1/
 ```
 
-## Envelope de respuesta
+## Response envelope
 
-Todo response de la API tiene esta forma. Sin excepciones.
+Every API response has this shape. No exceptions.
 
-**Éxito:**
+**Success:**
 ```json
 {
   "success": true,
@@ -17,7 +17,7 @@ Todo response de la API tiene esta forma. Sin excepciones.
 }
 ```
 
-**Éxito con paginación:**
+**Success with pagination:**
 ```json
 {
   "success": true,
@@ -37,33 +37,33 @@ Todo response de la API tiene esta forma. Sin excepciones.
   "success": false,
   "error": {
     "code": "SNAKE_CASE_CODE",
-    "message": "Descripción legible para el usuario",
+    "message": "Human-readable description for the user",
     "details": { }
   }
 }
 ```
 
-## Códigos de error estándar
+## Standard error codes
 
-| Código | HTTP | Cuándo usarlo |
+| Code | HTTP | When to use it |
 |---|---|---|
-| `VALIDATION_ERROR` | 400 | Body/params no pasan el schema Zod |
-| `UNAUTHORIZED` | 401 | JWT ausente o inválido |
-| `FORBIDDEN` | 403 | JWT válido pero sin permisos |
-| `NOT_FOUND` | 404 | Recurso no existe |
-| `CONFLICT` | 409 | Ya existe (email duplicado, cancha ocupada) |
-| `INTERNAL_ERROR` | 500 | Error inesperado |
+| `VALIDATION_ERROR` | 400 | Body/params fail the Zod schema |
+| `UNAUTHORIZED` | 401 | JWT missing or invalid |
+| `FORBIDDEN` | 403 | Valid JWT but no permissions |
+| `NOT_FOUND` | 404 | Resource does not exist |
+| `CONFLICT` | 409 | Already exists (duplicate email, court taken) |
+| `INTERNAL_ERROR` | 500 | Unexpected error |
 
-Códigos de dominio específico siguen el patrón `ENTIDAD_MOTIVO`: `MATCH_NOT_FOUND`, `COURT_NOT_AVAILABLE`, `ELO_CALCULATION_FAILED`.
+Domain-specific codes follow the `ENTITY_REASON` pattern: `MATCH_NOT_FOUND`, `COURT_NOT_AVAILABLE`, `ELO_CALCULATION_FAILED`.
 
-## Autenticación
+## Authentication
 
-Todas las rutas protegidas requieren:
+All protected routes require:
 ```
 Authorization: Bearer <supabase_jwt>
 ```
 
-El middleware `requireAuth` verifica el JWT contra Supabase y agrega `req.user`:
+The `requireAuth` middleware verifies the JWT against Supabase and adds `req.user`:
 ```typescript
 req.user = {
   id: string,       // users.id (UUID)
@@ -72,19 +72,19 @@ req.user = {
 }
 ```
 
-## RBAC — cadena de middlewares
+## RBAC — middleware chain
 
 ```typescript
-// Ruta pública
+// Public route
 router.get('/clubs', clubsController.list)
 
-// Requiere estar autenticado
+// Requires authentication
 router.get('/reservations', requireAuth, reservationsController.list)
 
-// Solo super_admin
+// super_admin only
 router.get('/platform/clubs', requireAuth, requireRole(['super_admin']), platformController.listClubs)
 
-// Solo staff del club con rol específico
+// Club staff with a specific role only
 router.post(
   '/:clubId/courts',
   requireAuth,
@@ -93,36 +93,36 @@ router.post(
 )
 ```
 
-`requireClubStaff` recibe el nombre del param de URL que contiene el `clubId` y consulta la tabla `club_staff`.
+`requireClubStaff` receives the name of the URL param that contains the `clubId` and queries the `club_staff` table.
 
-## Paginación
+## Pagination
 
-Query params estándar: `?page=1&limit=20`
+Standard query params: `?page=1&limit=20`
 
-El repository recibe `{ page, limit }` y devuelve `{ data, total }`. El service calcula `totalPages` y el controller arma el `meta`.
+The repository receives `{ page, limit }` and returns `{ data, total }`. The service computes `totalPages` and the controller builds the `meta`.
 
 ## Realtime (Supabase)
 
-Solo la tabla `court_reservations` tiene Realtime activado. Publica únicamente: `id`, `court_id`, `start_time`, `end_time`, `status`. Nada más.
+Only the `court_reservations` table has Realtime enabled. It publishes only: `id`, `court_id`, `start_time`, `end_time`, `status`. Nothing else.
 
-El frontend se suscribe directamente a Supabase para disponibilidad de canchas. Todo lo demás usa Socket.io contra la API.
+The frontend subscribes directly to Supabase for court availability. Everything else uses Socket.io against the API.
 
 ## Socket.io
 
-Eventos que emite la API:
-| Evento | Room | Cuándo |
+Events emitted by the API:
+| Event | Room | When |
 |---|---|---|
-| `match:player_joined` | `match:{id}` | Jugador se une al partido |
-| `match:score_loaded` | `match:{id}` | Se carga resultado |
-| `match:elo_ready` | `match:{id}` | ELO calculado y persistido |
-| `staff:new_payment` | `club:{id}` | Pago recibido en el club |
-| `chat:message` | `match:{id}` | Mensaje en el chat del partido |
+| `match:player_joined` | `match:{id}` | Player joins the match |
+| `match:score_loaded` | `match:{id}` | Score is loaded |
+| `match:elo_ready` | `match:{id}` | ELO calculated and persisted |
+| `staff:new_payment` | `club:{id}` | Payment received at the club |
+| `chat:message` | `match:{id}` | Message in the match chat |
 
-Auth del socket: el cliente envía el JWT en el handshake. El servidor lo verifica antes de permitir join a cualquier room.
+Socket auth: the client sends the JWT in the handshake. The server verifies it before allowing a join to any room.
 
 ## Webhooks MercadoPago
 
 - Endpoint: `POST /api/v1/payments/webhook`
-- Sin autenticación JWT (MP no la soporta), pero con verificación de firma `x-signature`
-- Idempotentes: verificar `mp_webhook_events.mp_event_id` antes de procesar
-- Responder siempre 200 (incluso en error interno) para evitar reintentos infinitos de MP
+- No JWT authentication (MP does not support it), but with `x-signature` signature verification
+- Idempotent: check `mp_webhook_events.mp_event_id` before processing
+- Always respond 200 (even on internal error) to avoid infinite retries from MP
