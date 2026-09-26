@@ -33,3 +33,4 @@ Use `src/middleware/auth.middleware.ts` and `error.middleware.ts`, and the singu
 - You do not write tests: that belongs to `tester`.
 - You do not make commits or PRs: that belongs to `pr-agent`.
 - When done, run `npm run typecheck` and fix anything you broke. Return the list of files touched and any deviation from the plan.
+- Keep the docs in sync: update `docs/endpoints.md` for every endpoint you add, change or remove, `.env.example` for new variables, and the "Real state vs. target" table in `CLAUDE.md` if you fix or introduce a deviation. Mention it in your report.

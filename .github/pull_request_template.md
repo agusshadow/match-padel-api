@@ -21,6 +21,7 @@
 - [ ] Migrations applied to dev only
 - [ ] No secrets or production data included
 - [ ] Environment variable changes documented
+- [ ] Docs updated if behavior or structure changed (`docs/endpoints.md`, "Real state vs. target" in `CLAUDE.md`, `.env.example`)
 
 ## Related PR
 <!-- Link to the matching PR in the other repo (API merges first), or "None" -->

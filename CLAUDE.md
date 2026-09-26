@@ -185,3 +185,15 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`.
 - `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
 - `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".
 - `docs/schema.sql` — the full database schema (source of truth for dev; production may have drifted).
+
+## Keeping documentation current
+
+Documentation is part of the definition of done. In the **same PR** as the code:
+
+- Added, changed or removed an endpoint → update `docs/endpoints.md`.
+- Fixed or introduced a deviation from the target architecture → update the "Real state vs. target" table above.
+- Added an environment variable → update `.env.example` (and `README.md` if it is required).
+- Changed the schema → update `docs/schema.sql` (see the `db-migration` skill).
+- Described something that is not built yet → mark it "target — not implemented yet".
+
+`backend-dev` makes the update, `reviewer` checks it, and the PR checklist has an item for it.

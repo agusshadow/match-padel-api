@@ -110,6 +110,10 @@ describe('POST /api/v1/reservations', () => {
 })
 ```
 
+### 7. Update the documentation
+
+Add the endpoint to `docs/endpoints.md` (method, path, auth, controller). If the change fixes or introduces a deviation from the target architecture, update the "Real state vs. target" table in `CLAUDE.md`. If you added an environment variable, update `.env.example`.
+
 ---
 
 ## Adding a new domain
