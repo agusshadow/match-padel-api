@@ -34,8 +34,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| GET | `/api/v1/clubs` | none | List clubs (paginated, `meta` with `totalPages`) | `getClubes` (`club.controller.ts`) |
-| GET | `/api/v1/clubs/:id` | none | Club detail with courts | `getClubById` |
+| GET | `/api/v1/clubs` | none | List clubs (paginated, `meta` with `totalPages`); includes `lat`/`lng` (nullable — for the map view, Trello card #49) | `getClubes` (`club.controller.ts`) |
+| GET | `/api/v1/clubs/:id` | none | Club detail with courts; includes `lat`/`lng` | `getClubById` |
 | GET | `/api/v1/clubs/:clubId/courts` | none | Courts of a club | `getClubCourts` |
 | GET | `/api/v1/clubs/:clubId/availability?date=YYYY-MM-DD` | none | Combined slot availability across every active court of the club for one day — each slot lists the specific courts free at that time with their exact price, plus a `min_price` for a "starting from" display before a court is picked | `getClubAvailabilityHandler` (calls `getClubAvailability` in `club.service.ts`, which reuses `findAvailableSlots` per court) |
 
