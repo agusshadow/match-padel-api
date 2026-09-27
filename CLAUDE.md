@@ -91,7 +91,9 @@ Always in that order in a route's middleware chain.
 ## Environment variables
 
 See `.env.example`. Never hardcode values. Always access them via `process.env.NAME`.
-Required today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT`. Also `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN` depending on the environment. (`JWT_SECRET` used to be listed but the code does not use it.)
+Required today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `PORT`. Also `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN` depending on the environment. (`JWT_SECRET` used to be listed but the code does not use it.)
+
+`SUPABASE_ANON_KEY` backs an isolated client (`supabaseAuth` in `src/lib/supabase.ts`) used only to mint sessions in `auth.controller.ts` (`signInWithPassword`). Never call session-mutating auth methods on the `service_role` client (`supabase`): supabase-js swaps its Authorization header to the authenticated user's token as soon as a session is established, silently downgrading every later `.from(...)` call in the process from `service_role` to that user.
 
 ## Rate limiting
 

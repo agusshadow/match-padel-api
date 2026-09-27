@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { supabase } from '../../lib/supabase'
+import { supabase, supabaseAuth } from '../../lib/supabase'
 import { AuthenticatedRequest } from '../../middleware/auth'
 import { AppError, NotFoundError } from '../../types/errors'
 
@@ -62,8 +62,10 @@ export async function register(req: Request, res: Response, next: NextFunction):
       throw new AppError('Failed to update user profile', 500)
     }
 
-    // Sign in to get tokens
-    const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
+    // Sign in to get tokens. Use the isolated anon-key client (supabaseAuth),
+    // never `supabase` — that would swap the shared service_role client's
+    // Authorization header to this user's token for the rest of the process.
+    const { data: sessionData, error: sessionError } = await supabaseAuth.auth.signInWithPassword({
       email: body.email,
       password: body.password,
     })
@@ -89,7 +91,8 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
   try {
     const body = LoginSchema.parse(req.body)
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    // Same isolated client as register() — see the comment there.
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
       email: body.email,
       password: body.password,
     })
