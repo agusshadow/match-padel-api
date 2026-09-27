@@ -46,6 +46,7 @@ create table public.users (
   role            user_role not null default 'player',
   skill_level     skill_level,
   preferred_hand  preferred_hand,
+  onboarding_completed_at timestamptz,
   is_active       boolean not null default true,
   fcm_token       text,
   created_at      timestamptz not null default now(),

@@ -7,12 +7,13 @@ export interface UpdateUserData {
   avatar_url?: string
   skill_level?: 'beginner' | 'intermediate' | 'advanced'
   preferred_hand?: 'drive' | 'backhand'
+  onboarding_completed_at?: string
 }
 
 const PROFILE_COLUMNS =
   'id, username, first_name, last_name, full_name, avatar_url, elo, skill_level, preferred_hand, created_at, role'
 const PROFILE_COLUMNS_FULL =
-  'id, username, first_name, last_name, full_name, avatar_url, elo, phone, skill_level, preferred_hand, role, created_at, updated_at, is_active'
+  'id, username, first_name, last_name, full_name, avatar_url, elo, phone, skill_level, preferred_hand, onboarding_completed_at, role, created_at, updated_at, is_active'
 
 export const userRepository = {
   async findById(id: string) {
