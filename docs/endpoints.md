@@ -16,8 +16,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| POST | `/api/v1/auth/register` | none | Create a Supabase auth user and profile, return session tokens | `register` (`auth.controller.ts`) |
-| POST | `/api/v1/auth/login` | none | Sign in with email and password, return user and tokens | `login` |
+| POST | `/api/v1/auth/register` | none | Create an unconfirmed Supabase auth user and profile, send the "Confirm signup" code by email; no session returned yet (`EMAIL_VERIFICATION_REQUIRED` flow — the client confirms with `supabase.auth.verifyOtp({ type: 'signup' })` directly, anon key, which returns the session) | `register` (`auth.controller.ts`) |
+| POST | `/api/v1/auth/login` | none | Sign in with email and password, return user and tokens. `403 EMAIL_NOT_CONFIRMED` if the account hasn't verified its email yet | `login` |
 | POST | `/api/v1/auth/logout` | requireAuth | Acknowledge logout (no server-side session invalidation) | `logout` |
 | GET | `/api/v1/auth/me` | requireAuth | Current user profile | `me` |
 
