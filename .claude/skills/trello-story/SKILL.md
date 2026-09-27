@@ -8,12 +8,12 @@ description: Format for Match Padel Trello cards - user stories written in Spani
 Board: **match-padel** — https://trello.com/b/0tQ57s8T/match-padel (single board for both repos).
 
 ## Lists (the pipeline)
-`Backlog` → `Listo para tomar` → `En progreso` → `En review` → `Hecho`.
+`Backlog` → `In progress` → `In review` → `Ready to release` → `Done`.
 
-- `/implement` only starts work on a card that is in **`Listo para tomar`**. A card in `Backlog` needs to be moved there first (by the human, or by you if asked to groom the backlog).
-- When `/implement` starts implementing, move the card to `En progreso`.
-- When `pr-agent` opens the PR, move the card to `En review` and add a comment with the PR link.
-- The human moves the card to `Hecho` after merging (or ask them if it's unclear whether to do it yourself).
+- There is no separate "ready" list: starting a card **is** the signal it's ready. `/implement` resolves the card (see its step 0) and moves it straight from `Backlog` to `In progress` when it starts implementing.
+- When `pr-agent` opens the PR against `develop`, move the card to `In review` and add a comment with the PR link.
+- As soon as that PR is merged into `develop` (squash, by the human), move the card to `Ready to release` yourself — immediately, don't wait to be asked. This means "done and integrated, not yet in production."
+- `Ready to release` cards move to `Done` only when the release that includes their PR is merged into `main`. The `release` skill's Phase 2 does this: for every PR bundled in the release, find its **Related Trello card** and move it to `Done`.
 
 ## Labels
 Trello's connector cannot rename labels, so they are used **by color**, not by name:

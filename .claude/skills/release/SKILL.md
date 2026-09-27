@@ -38,7 +38,8 @@ Run when the user says the release PR is merged.
 1. **Verify.** `git fetch`; `origin/main` contains the release merge commit and the `chore: version bump` commit; `package.json` on `main` has the new version.
 2. **Tag (ask first).** Offer to create the annotated tag `vX.Y.Z` on that commit and push it (`git tag -a vX.Y.Z -m "Release vX.Y.Z" <sha> && git push origin vX.Y.Z`). Only do it if the user says yes.
 3. **Sync develop.** Invoke `pr-agent` to open a PR with head `main` and base `develop`, title `chore: sync develop with main (vX.Y.Z)`, so `develop` receives the bump commit and the merge commit. It must state that this PR is merged with a **merge commit** and that the head branch (`main`) must **not** be deleted.
-4. **Report.** Give the PR link and tell the user to merge it with **"Create a merge commit"**. When done, `develop` and `main` contain the same code.
+4. **Move Trello cards to Done.** For every PR bundled in this release (the changelog from Phase 1 step 4), read its **Related Trello card** line and move that card to `Done` on the `match-padel` board (see the `trello-story` skill). Do this once the release PR (to `main`) is merged — don't wait for the sync PR. Skip any PR whose card is already `Done` or says "None".
+5. **Report.** Give the sync PR link and tell the user to merge it with **"Create a merge commit"**. When done, `develop` and `main` contain the same code.
 
 ## Rules
 - Never commit or push to `main` or `develop`, never merge a PR, never delete `main` or `develop`. The human merges.
