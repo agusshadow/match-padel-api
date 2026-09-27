@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
-import { AuthRequest } from '../../middleware/auth.middleware'
+import { AuthenticatedRequest } from '../../middleware/auth'
 import { NotFoundError, ForbiddenError, UnauthorizedError } from '../../types/errors'
 import {
   findByUser,
@@ -14,7 +14,7 @@ import {
 } from './reservation.validator'
 
 function getUserId(req: Request): string {
-  const userId = (req as AuthRequest).userId
+  const userId = (req as AuthenticatedRequest).userId
   if (!userId) throw new UnauthorizedError()
   return userId
 }
