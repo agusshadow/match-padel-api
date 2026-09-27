@@ -37,10 +37,14 @@ export async function register(req: Request, res: Response, next: NextFunction):
 
     // Create Supabase auth user using admin API — pass metadata so the DB trigger
     // handle_new_user() inserts public.users with the correct full_name and username.
+    // email_confirm: false — the account stays unconfirmed until the user enters
+    // the code from the "Confirm signup" email (see verifyEmail() below). Admin
+    // API creations never trigger that email themselves, so it's sent explicitly
+    // a few lines down via supabaseAuth.auth.resend().
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: body.email,
       password: body.password,
-      email_confirm: true,
+      email_confirm: false,
       user_metadata: {
         first_name: body.first_name,
         last_name: body.last_name,
@@ -77,24 +81,27 @@ export async function register(req: Request, res: Response, next: NextFunction):
       throw new AppError('Failed to update user profile', 500)
     }
 
-    // Sign in to get tokens. Use the isolated anon-key client (supabaseAuth),
-    // never `supabase` — that would swap the shared service_role client's
-    // Authorization header to this user's token for the rest of the process.
-    const { data: sessionData, error: sessionError } = await supabaseAuth.auth.signInWithPassword({
+    // Send the "Confirm signup" email (6-digit code). Use the isolated
+    // anon-key client (supabaseAuth), never `supabase` — see the comment on
+    // that client in lib/supabase.ts.
+    const { error: resendError } = await supabaseAuth.auth.resend({
+      type: 'signup',
       email: body.email,
-      password: body.password,
     })
 
-    if (sessionError || !sessionData.session) {
-      throw new AppError('Failed to create session', 500)
+    if (resendError) {
+      await supabase.auth.admin.deleteUser(authData.user.id)
+      throw new AppError('Failed to send verification email', 500)
     }
 
+    // No session yet — the client calls supabase.auth.verifyOtp() directly
+    // (anon key) with the code the user received, which both confirms the
+    // email and returns the session in one step.
     res.status(201).json({
       success: true,
       data: {
         user,
-        access_token: sessionData.session.access_token,
-        refresh_token: sessionData.session.refresh_token,
+        email_verification_required: true,
       },
     })
   } catch (err) {
@@ -111,6 +118,10 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
       email: body.email,
       password: body.password,
     })
+
+    if (error?.code === 'email_not_confirmed') {
+      throw new AppError('Confirmá tu email antes de iniciar sesión', 403, 'EMAIL_NOT_CONFIRMED')
+    }
 
     if (error || !data.session) {
       throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS')
