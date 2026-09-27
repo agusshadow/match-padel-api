@@ -65,6 +65,8 @@ create table public.clubs (
   email         text,
   logo_url      text,
   cover_url     text,
+  lat           double precision, -- WGS84, for the map view (Trello card #49)
+  lng           double precision, -- WGS84, for the map view (Trello card #49)
   is_active     boolean not null default true,
   settings      jsonb not null default '{}',
   created_at    timestamptz not null default now(),

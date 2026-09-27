@@ -11,6 +11,8 @@ export interface ClubWithCourtsCount {
   cover_url: string | null
   email: string | null
   phone: string | null
+  lat: number | null
+  lng: number | null
   is_active: boolean
   created_at: string
   courts_count: number
@@ -27,6 +29,8 @@ export interface ClubWithCourts {
   cover_url: string | null
   email: string | null
   phone: string | null
+  lat: number | null
+  lng: number | null
   is_active: boolean
   created_at: string
   courts: CourtSummary[]
@@ -56,7 +60,7 @@ export async function findAll(
 
   let query = supabase
     .from('clubs')
-    .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, is_active, created_at', { count: 'exact' })
+    .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, lat, lng, is_active, created_at', { count: 'exact' })
     .eq('is_active', true)
     .order('name')
     .range(offset, offset + limit - 1)
@@ -104,7 +108,7 @@ export async function findAll(
 export async function findById(id: string): Promise<ClubWithCourts | null> {
   const { data: club, error } = await supabase
     .from('clubs')
-    .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, is_active, created_at')
+    .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, lat, lng, is_active, created_at')
     .eq('id', id)
     .eq('is_active', true)
     .single()
