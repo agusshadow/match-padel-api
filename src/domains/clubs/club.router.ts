@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getClubes, getClubById, getClubCourts } from './club.controller'
+import { getClubes, getClubById, getClubCourts, getClubAvailabilityHandler } from './club.controller'
 
 const router = Router()
 
@@ -12,6 +12,9 @@ router.get('/:id', getClubById)
 
 // GET /api/v1/clubs/:clubId/courts
 router.get('/:clubId/courts', getClubCourts)
+
+// GET /api/v1/clubs/:clubId/availability?date=YYYY-MM-DD
+router.get('/:clubId/availability', getClubAvailabilityHandler)
 
 
 export default router
