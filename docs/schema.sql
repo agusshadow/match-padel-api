@@ -24,6 +24,8 @@ create type tournament_format as enum ('round_robin', 'single_elimination', 'dou
 create type tournament_status as enum ('draft', 'open', 'in_progress', 'completed', 'cancelled');
 create type payment_status as enum ('pending', 'approved', 'rejected', 'cancelled', 'refunded');
 create type notification_type as enum ('match_invite', 'score_submitted', 'tournament_update', 'reservation_reminder', 'system');
+create type skill_level as enum ('beginner', 'intermediate', 'advanced');
+create type preferred_hand as enum ('drive', 'backhand');
 
 -- ============================================================
 -- CORE TABLES
@@ -31,17 +33,23 @@ create type notification_type as enum ('match_invite', 'score_submitted', 'tourn
 
 -- users: extends Supabase auth.users
 create table public.users (
-  id            uuid primary key references auth.users(id) on delete cascade,
-  username      text unique not null,
-  full_name     text not null,
-  avatar_url    text,
-  phone         text,
-  elo           integer not null default 1000,
-  role          user_role not null default 'player',
-  is_active     boolean not null default true,
-  fcm_token     text,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id              uuid primary key references auth.users(id) on delete cascade,
+  username        text unique not null,
+  first_name      text not null,
+  last_name       text not null,
+  full_name       text generated always as (
+                    trim(both ' ' from coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+                  ) stored,
+  avatar_url      text,
+  phone           text,
+  elo             integer not null default 1000,
+  role            user_role not null default 'player',
+  skill_level     skill_level,
+  preferred_hand  preferred_hand,
+  is_active       boolean not null default true,
+  fcm_token       text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
 );
 
 -- clubs
@@ -384,12 +392,15 @@ create trigger set_updated_at before update on tournaments for each row execute 
 create or replace function handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
-  insert into public.users (id, full_name, username, avatar_url)
+  insert into public.users (id, first_name, last_name, username, avatar_url, skill_level, preferred_hand)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', 'Usuario'),
+    coalesce(new.raw_user_meta_data->>'first_name', 'Usuario'),
+    coalesce(new.raw_user_meta_data->>'last_name', '-'),
     coalesce(new.raw_user_meta_data->>'username', 'user_' || substr(new.id::text, 1, 8)),
-    new.raw_user_meta_data->>'avatar_url'
+    new.raw_user_meta_data->>'avatar_url',
+    nullif(new.raw_user_meta_data->>'skill_level', '')::skill_level,
+    nullif(new.raw_user_meta_data->>'preferred_hand', '')::preferred_hand
   );
   return new;
 end;

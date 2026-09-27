@@ -7,8 +7,12 @@ import { AppError, NotFoundError } from '../../types/errors'
 const RegisterSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  full_name: z.string().min(2),
-  username: z.string().min(3).regex(/^[a-z0-9_]+$/),
+  first_name: z.string().min(2),
+  last_name: z.string().min(2),
+  username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
+  skill_level: z.enum(['beginner', 'intermediate', 'advanced']),
+  preferred_hand: z.enum(['drive', 'backhand']),
+  phone: z.string().min(6).max(20).optional(),
 })
 
 const LoginSchema = z.object({
@@ -38,8 +42,11 @@ export async function register(req: Request, res: Response, next: NextFunction):
       password: body.password,
       email_confirm: true,
       user_metadata: {
-        full_name: body.full_name,
+        first_name: body.first_name,
+        last_name: body.last_name,
         username: body.username,
+        skill_level: body.skill_level,
+        preferred_hand: body.preferred_hand,
       },
     })
 
@@ -48,10 +55,18 @@ export async function register(req: Request, res: Response, next: NextFunction):
     }
 
     // The DB trigger handle_new_user() already inserted public.users using user_metadata.
-    // Update the row to ensure full_name and username are correct.
+    // Update the row to ensure every field is correct (full_name is a generated
+    // column and is never written to directly).
     const { data: user, error: userError } = await supabase
       .from('users')
-      .update({ full_name: body.full_name, username: body.username })
+      .update({
+        first_name: body.first_name,
+        last_name: body.last_name,
+        username: body.username,
+        skill_level: body.skill_level,
+        preferred_hand: body.preferred_hand,
+        phone: body.phone ?? null,
+      })
       .eq('id', authData.user.id)
       .select()
       .single()
