@@ -16,18 +16,27 @@ Board: **match-padel** — https://trello.com/b/0tQ57s8T/match-padel (single boa
 - `Ready to release` cards move to `Done` only when the release that includes their PR is merged into `main`. The `release` skill's Phase 2 does this: for every PR bundled in the release, find its **Related Trello card** and move it to `Done`.
 
 ## Labels
-Trello's connector cannot rename labels, so they are used **by color**, not by name:
+Named labels (the connector cannot rename or create labels — these were named by hand in the Trello UI). Two dimensions, attach one from each that applies to every card:
 
-| Color | Meaning |
-|---|---|
-| green | Touches `match-padel-api` only |
-| blue | Touches `match-padel-web` only |
-| purple | Touches both repos (two PRs) |
-| yellow | Bug |
-| orange | Mejora (enhancement) |
-| red | Bloqueante / crítico de seguridad |
+**Area** (which repo(s) the card touches):
 
-Attach the color(s) that fit when creating or grooming a card.
+| Label | Color | Meaning |
+|---|---|---|
+| Backend | lime (dark) | Touches `match-padel-api` only |
+| Frontend | blue (dark) | Touches `match-padel-web` only |
+| Fullstack | purple | Touches both repos (two PRs) |
+
+**Type** (mirrors the conventional-commit type the card's PR will use):
+
+| Label | Color | Meaning |
+|---|---|---|
+| Bug | red | `fix` — something is broken (includes security/authorization gaps) |
+| Enhancement | green | `feat` — new or improved user-facing capability |
+| Chore | yellow (dark) | `chore` — CI, monitoring, migrations, cleanup, tooling, process/docs; internal work with no direct user impact |
+
+Attach the label(s) that fit when creating or grooming a card, matching by the label's `name` field (not color — colors here don't mean what they'd suggest at a glance, e.g. Bug is red, Enhancement is green).
+
+Deliberately **not** using: a separate "critical/blocking" severity label (dropped — rely on the card's own wording for urgency), and per-topic/initiative labels (Security, Payments, Tournaments, etc.) — card titles and descriptions already carry that context (many cite a `Riesgo Rx` from the product audit), and Trello's search covers filtering by keyword without the upkeep of a growing label taxonomy.
 
 # Card format — user story in Spanish
 
