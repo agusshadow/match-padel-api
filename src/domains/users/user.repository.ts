@@ -1,8 +1,10 @@
 import { supabase } from '../../lib/supabase'
+import { ConflictError } from '../../types/errors'
 
 export interface UpdateUserData {
   first_name?: string
   last_name?: string
+  username?: string
   phone?: string
   avatar_url?: string
   skill_level?: 'beginner' | 'intermediate' | 'advanced'
@@ -50,6 +52,19 @@ export const userRepository = {
   },
 
   async update(id: string, updateData: UpdateUserData) {
+    if (updateData.username) {
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', updateData.username)
+        .neq('id', id)
+        .maybeSingle()
+
+      if (existing) {
+        throw new ConflictError('Username already taken')
+      }
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update({
