@@ -1,16 +1,24 @@
 import { supabase } from '../../lib/supabase'
 
 export interface UpdateUserData {
-  full_name?: string
+  first_name?: string
+  last_name?: string
   phone?: string
   avatar_url?: string
+  skill_level?: 'beginner' | 'intermediate' | 'advanced'
+  preferred_hand?: 'drive' | 'backhand'
 }
+
+const PROFILE_COLUMNS =
+  'id, username, first_name, last_name, full_name, avatar_url, elo, skill_level, preferred_hand, created_at, role'
+const PROFILE_COLUMNS_FULL =
+  'id, username, first_name, last_name, full_name, avatar_url, elo, phone, skill_level, preferred_hand, role, created_at, updated_at, is_active'
 
 export const userRepository = {
   async findById(id: string) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, full_name, avatar_url, elo, created_at, role')
+      .select(PROFILE_COLUMNS)
       .eq('id', id)
       .single()
 
@@ -21,7 +29,7 @@ export const userRepository = {
   async findByIdFull(id: string) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, full_name, avatar_url, elo, phone, role, created_at, updated_at, is_active')
+      .select(PROFILE_COLUMNS_FULL)
       .eq('id', id)
       .single()
 
@@ -32,7 +40,7 @@ export const userRepository = {
   async findByUsername(username: string) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, full_name, avatar_url, elo, created_at, role')
+      .select(PROFILE_COLUMNS)
       .eq('username', username)
       .single()
 
@@ -48,7 +56,7 @@ export const userRepository = {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .select('id, username, full_name, avatar_url, elo, phone, role, created_at, updated_at')
+      .select(PROFILE_COLUMNS_FULL)
       .single()
 
     if (error) throw error

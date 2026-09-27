@@ -17,8 +17,11 @@ export class AuthRepository {
       password: dto.password,
       email_confirm: true,
       user_metadata: {
-        full_name: dto.full_name,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
         username: dto.username,
+        skill_level: dto.skill_level,
+        preferred_hand: dto.preferred_hand,
       },
     })
     if (error) throw error
