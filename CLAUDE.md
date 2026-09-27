@@ -154,7 +154,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 
 1. `planner` → plan + API contract
 2. **Checkpoint: the user approves the plan** (nothing is coded before that)
-3. `db-agent` (only if there are schema changes; Supabase dev only)
+3. `db-agent` (only if there are schema changes; there is no separate dev Supabase project — it applies directly to production, see below)
 4. `backend-dev` → implementation
 5. `tester` → tests
 6. `reviewer` → review (max. 2 rounds of fixes)
@@ -164,7 +164,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 |---|---|
 | `planner` | Plan and API contract. Read-only |
 | `backend-dev` | Code in `src/` (domains, middleware, payments, sockets, jobs) |
-| `db-agent` | Migrations, RLS, `docs/schema.sql`. Supabase dev only |
+| `db-agent` | Migrations, RLS, `docs/schema.sql`. Applies directly to production (no separate dev project) |
 | `tester` | Tests. Does not modify production code |
 | `reviewer` | Diff review. Does not modify code |
 | `pr-agent` | Git and `gh`: branches, commits, PR |
@@ -173,20 +173,20 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 
 ## Branches, environments and hard rules
 
-- `main` is **production** (Render `match-padel-api`, Supabase `match-padel`). `develop` is the working branch (Render `match-padel-api-dev`, Supabase `match-padel-dev`).
+- `main` is **production** (Render `match-padel-api`, Supabase `match-padel`). `develop` is the working branch. **There is no separate dev environment**: the dev Render service and dev Supabase project were decommissioned on 24/09/2026 — `develop` and local work both point at the same Render/Supabase production instances as `main`. This is acceptable for now because production holds no real user data yet; revisit if that changes.
 - **`main` and `develop` accept no direct commits or pushes.** Everything goes through a pull request. GitHub branch protection is not available for private repos on the free plan, so it is enforced locally: (1) a Claude Code hook (`.claude/hooks/guard-protected-branches.py`, registered in `.claude/settings.json`) that blocks agents, in every session on this repo; (2) git hooks in `.githooks/` for the human, enabled once per clone with `git config core.hooksPath .githooks`. Only the human may override the git hooks in an emergency (`ALLOW_PROTECTED_BRANCH=1`); agents must never bypass them.
 - **Day-to-day:** feature branch from `develop` → PR against `develop` → merged with **squash** by the human.
 - **Release** (`/release` skill): when `develop` has accumulated several commits, a `release/vX.Y.Z` branch is cut from `develop` with all of them plus **one** extra commit, `chore: version bump`, that only raises the version. It is merged into `main` with a **merge commit** (to keep traceability), then `main` is merged back into `develop` (PR, **merge commit**) so both branches are level again.
 - Never enable "automatically delete head branches" on the repository: the release flow uses `develop` and `main` as PR heads.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
-- **Never** touch production (database, services, variables) from an agent session. Schema changes are applied in dev and the SQL for production is documented in the PR.
+- Every schema change lands directly on production (no dev project to apply it to first) — `db-agent` applies it and reports what it did; there is no separate "document the SQL for prod" step anymore. Destructive changes still need explicit human go-ahead before `db-agent` applies them. Non-schema production actions (Render/Vercel config, env vars) still require the human to do them or explicitly direct an agent session to.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map
 
 - `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
 - `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".
-- `docs/schema.sql` — the full database schema (source of truth for dev; production may have drifted).
+- `docs/schema.sql` — the full database schema, source of truth for the single (production) Supabase project.
 
 ## Keeping documentation current
 

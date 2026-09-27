@@ -19,8 +19,26 @@ export async function getMe(req: Request, res: Response, next: NextFunction): Pr
 export async function updateMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { userId } = req as AuthenticatedRequest
-    const { full_name, phone, avatar_url } = req.body
-    const user = await userRepository.update(userId, { full_name, phone, avatar_url })
+    const {
+      first_name,
+      last_name,
+      username,
+      phone,
+      avatar_url,
+      skill_level,
+      preferred_hand,
+      onboarding_completed_at,
+    } = req.body
+    const user = await userRepository.update(userId, {
+      first_name,
+      last_name,
+      username,
+      phone,
+      avatar_url,
+      skill_level,
+      preferred_hand,
+      onboarding_completed_at,
+    })
     res.json({ success: true, data: user })
   } catch (err) {
     next(err)
