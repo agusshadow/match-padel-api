@@ -1,0 +1,135 @@
+# Endpoints — match-padel-api
+
+Inventory of every HTTP endpoint that is mounted today. Derived from `src/index.ts` and the `*.router.ts` files it imports. This is the **real** state, not the target: see "Real state vs. target" in `CLAUDE.md`.
+
+All API routes live under `/api/v1` (`v1` router in `src/index.ts`). Unless noted, successful responses use `{ success: true, data }`. Errors are produced by `errorHandler` in `src/middleware/error.middleware.ts`, which currently returns `{ error, message }` instead of the error envelope (see `docs/api-patterns.md`).
+
+Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or club-staff checks exist anywhere). Two versions of `requireAuth` are in use: `auth.ts` (throws `UnauthorizedError`, goes through the error handler) and `auth.middleware.ts` (canonical, answers 401 directly). Both set `req.userId` only.
+
+## Non-versioned
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/health` | none | Health check, returns `{ status, timestamp }` (no envelope) | inline in `src/index.ts` |
+
+## auth — `/api/v1/auth` (`auth.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/register` | none | Create a Supabase auth user and profile, return session tokens | `register` (`auth.controller.ts`) |
+| POST | `/api/v1/auth/login` | none | Sign in with email and password, return user and tokens | `login` |
+| POST | `/api/v1/auth/logout` | requireAuth | Acknowledge logout (no server-side session invalidation) | `logout` |
+| GET | `/api/v1/auth/me` | requireAuth | Current user profile | `me` |
+
+## users — `/api/v1/users` (`user.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/users/me` | requireAuth | Current user profile | `getMe` (`user.controller.ts`) |
+| PUT | `/api/v1/users/me` | requireAuth | Update current user profile | `updateMe` |
+| GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
+| GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
+
+## clubs — `/api/v1/clubs` (`club.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/clubs` | none | List clubs (paginated, `meta` with `totalPages`) | `getClubes` (`club.controller.ts`) |
+| GET | `/api/v1/clubs/:id` | none | Club detail with courts | `getClubById` |
+| GET | `/api/v1/clubs/:clubId/courts` | none | Courts of a club | `getClubCourts` |
+
+## courts — `/api/v1/courts` (`court.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/courts/:courtId/slots?date=YYYY-MM-DD` | none | Available time slots of a court for a date | `getAvailableSlots` (`reservations/reservation.controller.ts`) |
+
+## reservations — `/api/v1/reservations` (`reservation.router.ts`)
+
+`router.use(requireAuth)` (from `auth.middleware.ts`): every route requires auth.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/reservations` | requireAuth | My reservations (paginated) | `getMyReservations` (`reservation.controller.ts`) |
+| GET | `/api/v1/reservations/:id` | requireAuth | Reservation detail | `getReservationById` |
+| POST | `/api/v1/reservations` | requireAuth | Create a reservation (201) | `createReservation` |
+| DELETE | `/api/v1/reservations/:id` | requireAuth | Cancel a reservation | `cancelReservationHandler` |
+
+## matches — `/api/v1/matches` (`match.router.ts`)
+
+`router.use(requireAuth)` (from `auth.ts`): every route requires auth.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/matches` | requireAuth | My matches (filters `status`, `type`, `page`; no `meta`) | `getMyMatches` (`match.controller.ts`) |
+| GET | `/api/v1/matches/:id` | requireAuth | Match detail | `getMatch` |
+| POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
+| POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
+| PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
+| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches) | `acceptScore` |
+| DELETE | `/api/v1/matches/:id` | requireAuth | Cancel a match | `cancelMatch` |
+
+## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/tournaments` | none | List tournaments (`meta: { total }`) | `listTournaments` (`tournament.controller.ts`) |
+| GET | `/api/v1/tournaments/:id` | none | Tournament detail | `getTournament` |
+| POST | `/api/v1/tournaments` | requireAuth | Create a tournament (201) | `createTournament` |
+| POST | `/api/v1/tournaments/:id/teams` | requireAuth | Register my team (me + `partner_id`) (201) | `registerTeam` |
+| DELETE | `/api/v1/tournaments/:id/teams/me` | requireAuth | Withdraw my team | `withdrawTeam` |
+| POST | `/api/v1/tournaments/:id/start` | requireAuth | Start the tournament (only its creator, checked in the service) | `startTournament` |
+
+## notifications — `/api/v1/notifications` (`notification.router.ts`)
+
+`router.use(requireAuth)` (from `auth.ts`): every route requires auth.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/notifications` | requireAuth | My notifications (0-based `page`, `meta` with `hasMore`) | `getMyNotifications` (`notification.controller.ts`) |
+| GET | `/api/v1/notifications/unread-count` | requireAuth | Unread count | `getUnreadCount` |
+| PUT | `/api/v1/notifications/:id/read` | requireAuth | Mark one as read | `markAsRead` |
+| PUT | `/api/v1/notifications/read-all` | requireAuth | Mark all as read | `markAllAsRead` |
+
+## payments — `/api/v1/payments` (`payment.router.ts`)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
+| POST | `/api/v1/payments/webhook` | none | MercadoPago notification; responds 200 immediately, no signature check, no idempotency | `webhook` |
+
+## Unmounted routers
+
+Not imported by `src/index.ts`, so none of their routes exist:
+
+- Empty stubs with only a `TODO`: `clubs/clubs.router.ts`, `matches/matches.router.ts`, `reservations/reservations.router.ts`, `tournaments/tournaments.router.ts`, `users/users.router.ts`, `platform/platform.router.ts`.
+- The dead `src/app.ts` imports those stubs and would mount `/api/v1/platform`, but it is not the entry point (`npm run dev` and `npm start` run `src/index.ts` / `dist/index.js`).
+
+## Known gaps
+
+Verified by reading the code (`src/index.ts`, the routers and `match-padel-web`):
+
+- **No `/api/v1/platform/*` endpoints.** `docs/api-patterns.md` shows `super_admin` routes under `/platform/...`, but `platform.router.ts` is an empty stub and is not mounted. `requireRole` does not exist.
+- **No club management endpoints.** There is no route to create or update clubs or courts, and no club-staff routes (`requireClubStaff` does not exist). The admin app (`match-padel-web/apps/admin`) reads and writes `clubs`, `court_reservations` and other tables directly with the Supabase client instead of this API.
+- **No `GET /api/v1/clubs/:clubId/reservations`.** `src/app.ts` (dead) has the comment `/clubs/:clubId/reservations` next to a stub router; nothing serves it in `src/index.ts`.
+- **No Socket.io server and no chat endpoints.** `src/lib/socket.ts` is a no-op and socket.io is not in `package.json`, although `docs/api-patterns.md` lists `match:*`, `staff:*` and `chat:message` events (`match_chats` exists in `docs/schema.sql`).
+- Every call the player app makes today through `match-padel-web/apps/app` (`/auth/*`, `/clubs*`, `/courts/:id/slots`, `/reservations*`, `/payments/preference`, `/matches*`, `/users*`, `/tournaments*`, `/notifications*`) has a matching mounted route.
+
+## Domain file inventory
+
+Files present in `src/domains/<domain>/` (entity files use the singular name, e.g. `match.router.ts`). "yes" = exists and is used; "unused" = exists but nothing imports it.
+
+| Domain | Mounted at | router | controller | service | repository | validator |
+|---|---|---|---|---|---|---|
+| auth | `/api/v1/auth` | yes | yes (holds logic and Supabase queries) | unused | unused | unused (`auth.validator.ts`; the controller defines its own schemas) |
+| users | `/api/v1/users` | yes | yes | no | yes | no |
+| clubs | `/api/v1/clubs` | yes | yes | no | yes | no (schema inline in the controller) |
+| courts | `/api/v1/courts` | yes | no (reuses `reservation.controller.ts`) | no | no | no |
+| reservations | `/api/v1/reservations` | yes | yes | yes | yes | yes |
+| matches | `/api/v1/matches` | yes | yes | yes | yes | no |
+| tournaments | `/api/v1/tournaments` | yes | yes | yes | yes | no (schemas inline in the controller) |
+| notifications | `/api/v1/notifications` | yes | yes | yes | yes | no |
+| payments | `/api/v1/payments` | yes | yes | yes (holds Supabase queries) | no | no (schema inline in the controller) |
+| platform | not mounted | stub only | no | no | no | no |
+
+No domain has a `__tests__/` folder.

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Blocks pushes that update main or develop on the remote. Open a pull request instead.
+[ "$ALLOW_PROTECTED_BRANCH" = "1" ] && exit 0
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/develop)
+      echo "x Pushing to '${remote_ref#refs/heads/}' is blocked. Open a pull request against develop." >&2
+      echo "  Emergency override (human only): ALLOW_PROTECTED_BRANCH=1 git push ..." >&2
+      exit 1
+      ;;
+  esac
+done
+exit 0

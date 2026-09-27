@@ -1,12 +1,12 @@
-# Cómo implementar cosas — match-padel-api
+# How to implement things — match-padel-api
 
-## Agregar un endpoint nuevo
+## Adding a new endpoint
 
-Seguí estos pasos en orden. No saltear ninguno.
+Follow these steps in order. Do not skip any.
 
-### 1. Definir el schema de validación
+### 1. Define the validation schema
 
-En `src/domains/<dominio>/<dominio>.validators.ts`:
+In `src/domains/<domain>/<domain>.validator.ts` (`<domain>` is the singular entity name, e.g. `reservation`):
 
 ```typescript
 export const createReservationSchema = z.object({
@@ -17,9 +17,9 @@ export const createReservationSchema = z.object({
 export type CreateReservationInput = z.infer<typeof createReservationSchema>
 ```
 
-### 2. Agregar el método al repository
+### 2. Add the method to the repository
 
-En `src/domains/<dominio>/<dominio>.repository.ts`:
+In `src/domains/<domain>/<domain>.repository.ts`:
 
 ```typescript
 async create(input: CreateReservationInput & { userId: string }) {
@@ -28,69 +28,73 @@ async create(input: CreateReservationInput & { userId: string }) {
     .insert(input)
     .select()
     .single()
-  if (error) throw new AppError('DB_ERROR', error.message, 500)
+  if (error) throw new AppError(error.message, 500, 'DB_ERROR')
   return data
 }
 ```
 
-### 3. Agregar la lógica al service
+### 3. Add the logic to the service
 
-En `src/domains/<dominio>/<dominio>.service.ts`:
+In `src/domains/<domain>/<domain>.service.ts`:
 
 ```typescript
 async create(input: CreateReservationInput, userId: string) {
-  // 1. Verificar disponibilidad (llama al repository)
+  // 1. Check availability (calls the repository)
   const isAvailable = await this.repository.checkAvailability(input.courtId, input.startTime, input.endTime)
-  if (!isAvailable) throw new AppError('COURT_NOT_AVAILABLE', 'La cancha no está disponible en ese horario', 409)
+  if (!isAvailable) throw new AppError('The court is not available at that time', 409, 'COURT_NOT_AVAILABLE')
   
-  // 2. Crear la reserva
+  // 2. Create the reservation
   const reservation = await this.repository.create({ ...input, userId })
   
-  // 3. Iniciar pago en MercadoPago (si aplica)
+  // 3. Start payment in MercadoPago (if applicable)
   const paymentLink = await createMercadoPagoPreference(reservation)
   
   return { reservation, paymentLink }
 }
 ```
 
-### 4. Agregar el método al controller
+### 4. Add the method to the controller
 
-En `src/domains/<dominio>/<dominio>.controller.ts`:
+In `src/domains/<domain>/<domain>.controller.ts`:
 
 ```typescript
 async create(req: Request, res: Response) {
-  // Validar input
+  // Validate input
   const input = createReservationSchema.safeParse(req.body)
   if (!input.success) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Input inválido', details: input.error.flatten() }
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: input.error.flatten() }
     })
   }
   
-  // Llamar al service
+  // Call the service (target: req.user.id; today requireAuth only sets req.userId, see the note below)
   const result = await this.service.create(input.data, req.user.id)
   
-  // Devolver response
+  // Return response
   return res.status(201).json({ success: true, data: result })
 }
 ```
 
-### 5. Registrar la ruta
+Note: `requireAuth` (`src/middleware/auth.middleware.ts`) sets `req.userId`, not `req.user` (the `req.user` type in `src/types/express.d.ts` is never populated). Today controllers read it with `(req as AuthRequest).userId`. Existing controllers are exported functions with `try/catch` and `next(err)`, not classes; the class style above is illustrative.
 
-En `src/domains/<dominio>/<dominio>.routes.ts`:
+### 5. Register the route
+
+In `src/domains/<domain>/<domain>.router.ts`:
 
 ```typescript
 router.post('/', requireAuth, controller.create.bind(controller))
 ```
 
-### 6. Escribir el test
+Import `requireAuth` from `../../middleware/auth.middleware` (canonical). Routers export the router with `export default router`.
 
-En `src/domains/<dominio>/__tests__/<dominio>.test.ts`:
+### 6. Write the test (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md)
+
+Vitest and Supertest are not installed and there is no `npm test` script yet. The steps below are the target. In `src/domains/<domain>/__tests__/<domain>.test.ts`:
 
 ```typescript
 describe('POST /api/v1/reservations', () => {
-  it('crea una reserva cuando los datos son válidos', async () => {
+  it('creates a reservation when the data is valid', async () => {
     vi.mocked(reservationRepository.checkAvailability).mockResolvedValue(true)
     vi.mocked(reservationRepository.create).mockResolvedValue(mockReservation)
     
@@ -106,49 +110,58 @@ describe('POST /api/v1/reservations', () => {
 })
 ```
 
----
+### 7. Update the documentation
 
-## Agregar un dominio nuevo
-
-1. Crear carpeta `src/domains/<nombre>/`
-2. Crear los 5 archivos: `routes.ts`, `controller.ts`, `service.ts`, `repository.ts`, `validators.ts`
-3. Crear `__tests__/<nombre>.test.ts`
-4. Registrar el router en `src/app.ts`: `app.use('/api/v1/<nombre>', <nombre>Router)`
+Add the endpoint to `docs/endpoints.md` (method, path, auth, controller). If the change fixes or introduces a deviation from the target architecture, update the "Real state vs. target" table in `CLAUDE.md`. If you added an environment variable, update `.env.example`.
 
 ---
 
-## Agregar un middleware nuevo
+## Adding a new domain
 
-1. Crear `src/middleware/<nombre>.ts`
-2. Exportar una función con firma `(req, res, next) => void`
-3. Si es global, registrarlo en `src/app.ts` antes de los routers
-4. Si es por ruta, encadenarlo en el `routes.ts` del dominio correspondiente
-
----
-
-## Webhook de MercadoPago
-
-Los webhooks llegan a `POST /api/v1/payments/webhook`. El flujo es:
-
-1. Verificar firma del webhook (header `x-signature`)
-2. Buscar el `mp_event_id` en `mp_webhook_events` — si existe, responder 200 y no procesar (idempotencia)
-3. Insertar el evento en `mp_webhook_events`
-4. Procesar según `type`: `payment` → actualizar estado de la reserva/partido
-5. Responder 200 siempre (MercadoPago reintenta si recibe otro status)
+1. Create folder `src/domains/<name>/`
+2. Create the 5 files: `<entity>.router.ts`, `<entity>.controller.ts`, `<entity>.service.ts`, `<entity>.repository.ts`, `<entity>.validator.ts` (singular entity name, e.g. `match.router.ts`)
+3. Create `__tests__/<entity>.test.ts` (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md)
+4. Register the router in `src/index.ts` (`src/app.ts` is dead code): import it and add `v1.use('/<name>', <entity>Router)` next to the other `v1.use(...)` calls
+5. Run `npm run typecheck`
 
 ---
 
-## Cálculo de ELO (no modificar sin leer ELO-Algorithm.md)
+## Adding a new middleware
 
-El cálculo se dispara desde `MatchesService.acceptScore()` como una llamada async directa:
+1. Create `src/middleware/<name>.middleware.ts`
+2. Export a function with signature `(req, res, next) => void`
+3. If it is global, register it in `src/index.ts` before the routers
+4. If it is per-route, chain it in the corresponding domain's `<entity>.router.ts`
+
+---
+
+## MercadoPago webhook
+
+Webhooks arrive at `POST /api/v1/payments/webhook`. The flow is:
+
+1. Verify the webhook signature (header `x-signature`) (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md)
+2. Look up the `mp_event_id` in `mp_webhook_events` — if it exists, respond 200 and do not process (idempotency) (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md) (the `mp_webhook_events` table is not in `docs/schema.sql`)
+3. Insert the event into `mp_webhook_events` (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md)
+4. Process according to `type`: `payment` → update the reservation/match status
+5. Always respond 200 (MercadoPago retries if it receives any other status)
+
+Today (`payment.controller.ts` → `handleWebhook` in `payment.service.ts`): the controller responds 200 immediately with no signature check and no idempotency; then, for `type: 'payment'`, the service fetches the payment from the MercadoPago API, updates the `payments` row and moves the `court_reservations` row to `confirmed` (approved) or `cancelled` (rejected/cancelled). Matches are not updated.
+
+---
+
+## ELO calculation (do not modify without reading ELO-Algorithm.md — that file does not exist in the repo today)
+
+Target design (target — not implemented yet; see 'Real state vs. target' in CLAUDE.md). The calculation is triggered from `MatchesService.acceptScore()` as a direct async call:
 
 ```typescript
-// En MatchesService
+// In MatchesService
 async acceptScore(matchId: string) {
   await this.repository.updateStatus(matchId, 'finished')
-  await calculateAndPersistElo(matchId)   // función async, esperar su resolución
+  await calculateAndPersistElo(matchId)   // async function, await its resolution
   await notifyPlayersEloReady(matchId)    // push notification
 }
 ```
 
-`calculateAndPersistElo` vive en `src/domains/matches/matches.elo-worker.ts` y ejecuta todo en una transacción de Supabase.
+`calculateAndPersistElo` lives in `src/domains/matches/match.elo-worker.ts` and runs everything in a Supabase transaction.
+
+Today: `matchService.acceptScore` in `src/domains/matches/match.service.ts` applies a fixed +15/-15 delta (`ELO_WIN_DELTA` / `ELO_LOSS_DELTA`) to each player of a ranked match through `matchRepository` (updates `users.elo` and inserts into `elo_history`), without a transaction and without a worker file.
