@@ -25,3 +25,6 @@
 
 ## Related PR
 <!-- Link to the matching PR in the other repo (API merges first), or "None" -->
+
+## Related Trello card
+<!-- URL of the match-padel Trello card this implements, or "None" -->

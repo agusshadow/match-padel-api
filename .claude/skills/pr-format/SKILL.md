@@ -17,6 +17,7 @@ description: Commit, branch and pull request format used in match-padel-api (Eng
 - Base **always `develop`**. Title in the same conventional format.
 - Body: the full `.github/pull_request_template.md` (What changes / Why / Technical changes / API contract / How to test / Checklist / Related PR). Nothing left empty: "None" or "N/A".
 - If there is a counterpart PR in `match-padel-web`, link it; the API PR is merged first.
+- Add a **Related Trello card** line with the card's URL (see the `trello-story` skill). Every PR that came from `/implement` has one.
 
 ## Merge method (done by the human, never by an agent)
 | PR | Base | Method |
