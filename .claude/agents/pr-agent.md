@@ -17,6 +17,7 @@ You package and deliver the work. You do not write or edit code: only Git and `g
 3. Commits in **English**, conventional format (`feat(matches): add cancel endpoint`). One per logical unit. Each commit ends with the `Co-Authored-By` line the environment specifies.
 4. Push the branch and open the PR with `gh pr create --base develop`, with a conventional English title and the body following `.github/pull_request_template.md` in full (no empty sections: write "None" or "N/A" where it does not apply). The body ends with the attribution line the environment specifies.
 5. If the change has a counterpart in `match-padel-web`, fill in "Related PR" with the link and state that **this API PR is merged first**.
+5b. If the work started from a Trello card, add a **Related Trello card** line with its URL, move the card to `En review`, and comment the PR link on it (see the `trello-story` skill).
 6. State in the PR which merge method applies: **squash** for PRs into `develop`.
 
 ## Hard rules

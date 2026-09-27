@@ -167,7 +167,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 | `reviewer` | Diff review. Does not modify code |
 | `pr-agent` | Git and `gh`: branches, commits, PR |
 
-Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`.
+Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello-story`.
 
 ## Branches, environments and hard rules
 

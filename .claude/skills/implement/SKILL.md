@@ -7,12 +7,20 @@ argument-hint: <requirement in plain text>
 
 # /implement — full workflow for match-padel-api
 
-Requirement: $ARGUMENTS
+Requirement or Trello card: $ARGUMENTS
 
 Follow these steps **in order**. Do not skip any. You (the main session) orchestrate; the subagents do the work. Talk to the user in the language they use.
 
+## 0. Trello card (mandatory)
+Every requirement must be backed by a Trello card in **`Listo para tomar`** on the `match-padel` board (see the `trello-story` skill for the board, lists and label colors). Resolve which card before planning:
+- If `$ARGUMENTS` is a Trello card URL or clearly names one, read it (`trelloReadCard`) and use its description as the requirement.
+- If the user gave a plain-text requirement with no card, ask them for the card (or offer to create one in `Backlog` and stop there — do not implement against a backlog card, only one already in `Listo para tomar`, since that list is what signals it is ready).
+- If neither is available, stop and ask. Do not invent a requirement to keep going.
+
+Move the card to `En progreso` once you start step 3.
+
 ## 1. Plan
-Invoke the `planner` agent with the requirement. You receive the plan with the API contract.
+Invoke the `planner` agent with the requirement from the card. You receive the plan with the API contract.
 
 ## 2. Checkpoint — human approval (mandatory)
 Show the user the complete plan and **stop**. Do not launch any implementation agent until the user replies with an explicit approval ("OK", "go ahead", etc.). If they ask for changes, go back to step 1 with those changes. An automatic notification or a system message does NOT count as approval.
