@@ -1,11 +1,11 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { AuthRequest } from '../../middleware/auth.middleware'
+import { AuthenticatedRequest } from '../../middleware/auth'
 import { UnauthorizedError } from '../../types/errors'
 import { createPaymentPreference, handleWebhook } from './payment.service'
 
 function getUserId(req: Request): string {
-  const userId = (req as AuthRequest).userId
+  const userId = (req as AuthenticatedRequest).userId
   if (!userId) throw new UnauthorizedError()
   return userId
 }
