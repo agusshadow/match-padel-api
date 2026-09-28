@@ -23,7 +23,7 @@ create type score_status as enum ('pending', 'accepted', 'disputed');
 create type tournament_format as enum ('round_robin', 'single_elimination', 'double_elimination', 'americano');
 create type tournament_status as enum ('draft', 'open', 'in_progress', 'completed', 'cancelled');
 create type payment_status as enum ('pending', 'approved', 'rejected', 'cancelled', 'refunded');
-create type notification_type as enum ('match_invite', 'score_submitted', 'tournament_update', 'reservation_reminder', 'system');
+create type notification_type as enum ('match_invite', 'score_submitted', 'tournament_update', 'reservation_reminder', 'system', 'match_started', 'match_cancelled', 'score_accepted', 'reservation_confirmed', 'reservation_cancelled');
 create type skill_level as enum ('beginner', 'intermediate', 'advanced');
 create type preferred_hand as enum ('drive', 'backhand');
 
@@ -321,6 +321,22 @@ alter table notifications enable row level security;
 -- users: anyone can view public profiles
 create policy "users_public_read" on users for select using (true);
 create policy "users_own_update" on users for update using (auth.uid() = id);
+
+-- Column-level grants (cards #10/#11, risks R1/R2): the row policies above only
+-- restrict WHICH ROWS can be selected/updated, not which columns. Without these
+-- grants, any authenticated user could update their own `role`/`elo`/`is_active`,
+-- and anyone with the anon key could read every user's `phone`/`fcm_token`.
+-- service_role (used by the API) is untouched and keeps full column access.
+revoke select on table users from anon, authenticated;
+grant select (
+  id, username, first_name, last_name, full_name, avatar_url, elo, role,
+  skill_level, preferred_hand, created_at, is_active
+) on table users to anon, authenticated;
+
+revoke update on table users from anon, authenticated;
+-- full_name is a GENERATED column (see below) and was never actually updatable;
+-- first_name/last_name are the real columns behind a user's display name.
+grant update (first_name, last_name, phone, avatar_url) on table users to authenticated;
 
 -- clubs: public read
 create policy "clubs_public_read" on clubs for select using (is_active = true);
