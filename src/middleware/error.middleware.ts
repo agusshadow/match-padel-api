@@ -25,11 +25,24 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return
   }
 
-  // Supabase unique constraint violations
+  // Supabase/Postgres constraint violations
   if (err && typeof err === 'object' && 'code' in err) {
     const pgErr = err as { code: string; message?: string }
     if (pgErr.code === '23505') {
       res.status(409).json({ error: 'Conflict', message: 'Resource already exists' })
+      return
+    }
+    // Exclusion violation — e.g. court_reservations.no_overlap, when two people
+    // book the same court/time slot in a race. Without this it falls through to
+    // the generic 500 below instead of a clear "already booked" 409.
+    if (pgErr.code === '23P01') {
+      res.status(409).json({ error: 'Conflict', message: 'This time slot is no longer available' })
+      return
+    }
+    // Malformed input (e.g. a route param that isn't a valid uuid) — the client's
+    // fault, not the server's, so it should be a 400, not a 500.
+    if (pgErr.code === '22P02') {
+      res.status(400).json({ error: 'ValidationError', message: 'Invalid identifier or value' })
       return
     }
   }

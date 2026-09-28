@@ -1,4 +1,5 @@
 import { matchRepository, CreateMatchData, ScoreData } from './match.repository'
+import { logger } from '../../lib/logger'
 import { NotFoundError, ForbiddenError } from '../../types/errors'
 import { AppError } from '../../types/errors'
 import { notifications } from '../notifications/notification.service'
@@ -51,7 +52,7 @@ export const matchService = {
       await matchRepository.updateStatus(match.id, 'in_progress')
       // Notify all players that the match is ready
       const allPlayerIds = [...players.map((p: any) => p.user_id), userId]
-      notifications.matchStarted(allPlayerIds, match.id).catch(() => {})
+      notifications.matchStarted(allPlayerIds, match.id).catch((err) => logger.error(err, 'Failed to send matchStarted notification'))
     }
 
     return matchRepository.findById(match.id)
@@ -85,7 +86,7 @@ export const matchService = {
       .filter((p: any) => p.user_id !== userId)
       .map((p: any) => p.user_id)
     if (otherPlayerIds.length > 0) {
-      notifications.scoreSubmitted(otherPlayerIds, matchId).catch(() => {})
+      notifications.scoreSubmitted(otherPlayerIds, matchId).catch((err) => logger.error(err, 'Failed to send scoreSubmitted notification'))
     }
 
     return result
@@ -130,7 +131,7 @@ export const matchService = {
     const players = await matchRepository.getPlayers(matchId)
     const playerIds = players.map((p: any) => p.user_id)
     // ELO change differs per player; send generic notification
-    notifications.scoreAccepted(playerIds, matchId, 0).catch(() => {})
+    notifications.scoreAccepted(playerIds, matchId, 0).catch((err) => logger.error(err, 'Failed to send scoreAccepted notification'))
 
     return updatedMatch
   },
@@ -178,7 +179,7 @@ export const matchService = {
       .filter((p: any) => p.user_id !== userId)
       .map((p: any) => p.user_id)
     if (otherPlayerIds.length > 0) {
-      notifications.matchCancelled(otherPlayerIds, matchId).catch(() => {})
+      notifications.matchCancelled(otherPlayerIds, matchId).catch((err) => logger.error(err, 'Failed to send matchCancelled notification'))
     }
 
     return cancelledMatch

@@ -18,6 +18,11 @@ import paymentRouter from './domains/payments/payment.router'
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
+// Render sits in front of the API as a reverse proxy. Without this, express-rate-limit
+// (and req.ip in general) sees Render's proxy IP for every request instead of the
+// client's real IP, so all users share a single rate-limit bucket.
+app.set('trust proxy', 1)
+
 // Security middleware
 app.use(helmet())
 app.use(
@@ -27,11 +32,11 @@ app.use(
   }),
 )
 
-// Rate limiting
+// Rate limiting — global per-IP limit
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200,
+    windowMs: 60 * 1000, // 1 minute
+    max: 100,
     standardHeaders: true,
     legacyHeaders: false,
   }),
@@ -68,6 +73,18 @@ app.use(errorHandler)
 app.listen(PORT, () => {
   console.log(`[Server] Match Padel API running on http://localhost:${PORT}`)
   console.log(`[Server] Environment: ${process.env.NODE_ENV ?? 'development'}`)
+})
+
+// Last-resort safety net: log and keep the process alive instead of letting an
+// unhandled rejection or a truly uncaught exception crash the whole API for every
+// user. Individual routes should still catch/handle their own errors — this only
+// covers what slips through (e.g. a promise nobody awaited).
+process.on('unhandledRejection', (reason) => {
+  console.error('[UnhandledRejection]', reason)
+})
+
+process.on('uncaughtException', (err) => {
+  console.error('[UncaughtException]', err)
 })
 
 export default app
