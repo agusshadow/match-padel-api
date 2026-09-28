@@ -103,6 +103,10 @@ export async function findById(id: string): Promise<ReservationWithJoins | null>
   return data as unknown as ReservationWithJoins
 }
 
+// Club opening hours are stored in Argentina local time (no DST). Every club is
+// currently in Argentina, so a fixed offset is used instead of a per-club timezone.
+const ARGENTINA_UTC_OFFSET = '-03:00'
+
 export async function findAvailableSlots(courtId: string, date: string): Promise<TimeSlot[]> {
   // Get day of week (0 = Sunday, 6 = Saturday) from the date
   const dateObj = new Date(`${date}T00:00:00Z`)
@@ -138,8 +142,14 @@ export async function findAvailableSlots(courtId: string, date: string): Promise
     const endH = Math.floor(endMinutes / 60)
     const endMin = endMinutes % 60
 
-    const startTime = `${date}T${String(startH).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00.000Z`
-    const endTime = `${date}T${String(endH).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00.000Z`
+    // Interpret the wall-clock time as Argentina local time, then normalize to UTC
+    // (toISOString) so it compares correctly against reservation timestamps and `now`.
+    const startTime = new Date(
+      `${date}T${String(startH).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00${ARGENTINA_UTC_OFFSET}`,
+    ).toISOString()
+    const endTime = new Date(
+      `${date}T${String(endH).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00${ARGENTINA_UTC_OFFSET}`,
+    ).toISOString()
 
     slots.push({ start_time: startTime, end_time: endTime, available: true })
     currentMinutes += slotMinutes

@@ -14,6 +14,7 @@ import {
 } from './reservation.repository'
 import type { CreateReservationRequest } from './reservation.validator'
 import { notifications } from '../notifications/notification.service'
+import { logger } from '../../lib/logger'
 
 const MAX_ACTIVE_RESERVATIONS = 3
 
@@ -133,7 +134,7 @@ export async function cancelReservation(id: string, userId: string) {
   }
 
   // Notify user of cancellation
-  notifications.reservationCancelled(userId, id).catch(() => {})
+  notifications.reservationCancelled(userId, id).catch((err) => logger.error(err, 'Failed to send reservationCancelled notification'))
 
   return result
 }

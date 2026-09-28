@@ -134,13 +134,13 @@ This document describes the **target architecture**. The existing code does not 
 | File names | `.router.ts`, `.validator.ts` | Mostly correct; there are unused duplicate plural routers (`clubs.router.ts`, `matches.router.ts`, `reservations.router.ts`, `tournaments.router.ts`, `users.router.ts`) |
 | Middleware | One file per responsibility | Duplicates: `auth.ts` and `auth.middleware.ts`, `error.ts` and `error.middleware.ts` (10 files import each version of auth). **Canonical: `auth.middleware.ts` and `error.middleware.ts`** (the real rate limit is inline in `index.ts`; `rate-limiter.middleware.ts` is only used by the dead `app.ts`) |
 | Entry point | `index.ts` | A duplicate `app.ts` also exists and is unused |
-| Rate limiting | 100/min per IP, 1000/min per user, 5/min on sensitive endpoints | 200 requests per 15 min, global, and no `trust proxy` (behind Render everyone shares the same IP) |
+| Rate limiting | 100/min per IP, 1000/min per user, 5/min on sensitive endpoints | Met for IP (`trust proxy` set) and for `/auth/login`+`/auth/register` (5/min via `authLimiter`). Per-authenticated-user limit (1000/min) and the MercadoPago webhook limit are still not implemented |
 | Role-based auth | `requireRole`, `requireClubStaff` | They do not exist; only `requireAuth` |
 | DB types | Generated in `src/types/supabase.ts` | The file does not exist |
 | Tests | Vitest + Supertest, 70% in `src/domains/` | No framework and no tests |
 | Logs | Logger, no `console.log` | `src/lib/logger.ts` is a thin `console` wrapper that nothing imports; `index.ts` and the error handlers call `console.log`/`console.error` directly |
 | Push | Firebase Admin | Not installed |
-| Async error handling | Every error reaches the error handler | Unhandled promise rejections exist and crash the process. The MercadoPago webhook replies 200 and can then call `next(err)` (headers already sent) |
+| Async error handling | Every error reaches the error handler | All controllers (including tournaments, fixed) wrap handlers in try/catch → `next(err)`, and `index.ts` has `process.on('unhandledRejection'/'uncaughtException')` as a last-resort net. The MercadoPago webhook still replies 200 and can then call `next(err)` (headers already sent) — not fixed |
 | Error responses | The `{ success: false, error: { code, message, details } }` envelope | The mounted `error.middleware.ts`, `notFound` and `auth.middleware.ts` answer `{ error, message }`. `error.ts` has the envelope but is not mounted |
 | Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`; no role is available |
 | Auth domain files | Controller → service → repository | `auth.service.ts` is never imported (its repository and validator only by each other); `auth.controller.ts` does everything itself |
