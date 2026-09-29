@@ -152,6 +152,7 @@ create table public.matches (
   score_team1     integer[] default '{}',   -- [6,4,7] games won per set
   score_team2     integer[] default '{}',
   score_status    score_status not null default 'pending',
+  score_submitted_by uuid references users(id), -- card #51: who submitted the pending score, so they can't also accept/reject it
   winner_team     smallint check (winner_team in (1, 2)),
   is_ranked       boolean not null default false,
   lobby_url       text,               -- random UUID for invitations
