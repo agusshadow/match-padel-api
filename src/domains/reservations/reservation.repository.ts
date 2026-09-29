@@ -284,3 +284,21 @@ export async function countActiveByUser(userId: string): Promise<number> {
   if (error) throw error
   return count ?? 0
 }
+
+// Card #13/#50: a reservation that nobody pays for should free up the court
+// instead of blocking it indefinitely. Cancels 'pending' reservations created
+// more than `olderThanMinutes` ago — 'confirmed' ones (payment already
+// approved) are never touched.
+export async function expirePendingReservations(olderThanMinutes: number): Promise<string[]> {
+  const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString()
+
+  const { data, error } = await supabase
+    .from('court_reservations')
+    .update({ status: 'cancelled' })
+    .eq('status', 'pending')
+    .lt('created_at', cutoff)
+    .select('id')
+
+  if (error) throw error
+  return (data ?? []).map((r) => r.id as string)
+}
