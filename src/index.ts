@@ -14,6 +14,7 @@ import courtRouter from './domains/courts/court.router'
 import notificationRouter from './domains/notifications/notification.router'
 import tournamentRouter from './domains/tournaments/tournament.router'
 import paymentRouter from './domains/payments/payment.router'
+import achievementsRouter from './domains/achievements/achievements.router'
 import { expireReservationsJob } from './jobs/expire-reservations.job'
 
 const app = express()
@@ -64,6 +65,7 @@ v1.use('/courts', courtRouter)
 v1.use('/notifications', notificationRouter)
 v1.use('/tournaments', tournamentRouter)
 v1.use('/payments', paymentRouter)
+v1.use('/achievements', achievementsRouter)
 
 app.use('/api/v1', v1)
 

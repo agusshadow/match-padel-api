@@ -29,6 +29,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | PUT | `/api/v1/users/me` | requireAuth | Update current user profile | `updateMe` |
 | POST | `/api/v1/users/me/avatar` | requireAuth | Upload a profile picture (multipart field `avatar`, JPEG/PNG/WebP, max 5MB) to the `avatars` Storage bucket and set `avatar_url` | `uploadAvatar` |
 | GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
+| GET | `/api/v1/users/me/elo-history` | requireAuth | Current user's last 50 ELO changes, newest first | `getMyEloHistory` |
 | GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
 
 ## clubs — `/api/v1/clubs` (`club.router.ts`)
@@ -101,6 +102,15 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
 | POST | `/api/v1/payments/webhook` | none | MercadoPago notification; responds 200 immediately, no signature check, no idempotency | `webhook` |
 
+## achievements — `/api/v1/achievements` (`achievements.router.ts`)
+
+Card #54 — reads only; achievements are awarded from `accept_match_score` (see `docs/schema.sql`), not through this router.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/achievements` | none | Full achievement catalog | `getCatalog` |
+| GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned | `getMyAchievements` |
+
 ## Unmounted routers
 
 Not imported by `src/index.ts`, so none of their routes exist:
@@ -133,6 +143,7 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | tournaments | `/api/v1/tournaments` | yes | yes | yes | yes | no (schemas inline in the controller) |
 | notifications | `/api/v1/notifications` | yes | yes | yes | yes | no |
 | payments | `/api/v1/payments` | yes | yes | yes (holds Supabase queries) | no | no (schema inline in the controller) |
+| achievements | `/api/v1/achievements` | yes | yes | yes | yes | no |
 | platform | not mounted | stub only | no | no | no | no |
 
 No domain has a `__tests__/` folder.
