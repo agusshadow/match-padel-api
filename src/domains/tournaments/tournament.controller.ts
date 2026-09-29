@@ -6,7 +6,9 @@ import { AuthenticatedRequest } from '../../middleware/auth'
 const createTournamentSchema = z.object({
   name: z.string().min(3).max(100),
   description: z.string().max(500).optional(),
-  club_id: z.string().uuid().optional(),
+  // club_id is required — the tournaments table has it NOT NULL, and card #23
+  // needs it to check the creator is staff of that specific club.
+  club_id: z.string().uuid(),
   format: z.enum(['round_robin', 'single_elimination', 'double_elimination', 'americano']),
   max_teams: z.number().int().min(2).max(64),
   entry_fee: z.number().min(0).optional(),

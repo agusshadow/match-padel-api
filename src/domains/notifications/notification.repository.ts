@@ -9,6 +9,7 @@ export type NotificationType =
   | 'reservation_confirmed'
   | 'reservation_cancelled'
   | 'elo_updated'
+  | 'tournament_update'
 
 export interface CreateNotificationData {
   user_id: string
