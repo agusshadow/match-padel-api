@@ -96,4 +96,18 @@ export const notifications = {
       data: { reservation_id: reservationId },
     })
   },
+
+  // Card #23 (R14): a partner used to be registered into a tournament team
+  // without ever being told.
+  tournamentTeamRegistered(partnerId: string, tournamentId: string, teamName: string | null) {
+    return notificationRepository.create({
+      user_id: partnerId,
+      type: 'tournament_update' as NotificationType,
+      title: 'Te inscribieron en un torneo',
+      body: teamName
+        ? `Te sumaron al equipo "${teamName}" en un torneo.`
+        : 'Te sumaron a un equipo en un torneo.',
+      data: { tournament_id: tournamentId },
+    })
+  },
 }

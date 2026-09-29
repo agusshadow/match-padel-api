@@ -1,5 +1,7 @@
 import { tournamentRepository, CreateTournamentData } from './tournament.repository'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../../types/errors'
+import { notifications } from '../notifications/notification.service'
+import { logger } from '../../lib/logger'
 
 export const tournamentService = {
   async listTournaments(options: { status?: string; page?: number; limit?: number } = {}) {
@@ -12,7 +14,13 @@ export const tournamentService = {
     return tournament
   },
 
+  // Card #23 (R14): a player unrelated to a club could previously create a
+  // tournament "on behalf of" any club just by passing its id.
   async createTournament(data: Omit<CreateTournamentData, 'created_by'>, userId: string) {
+    const isStaff = await tournamentRepository.isClubStaff(data.club_id, userId)
+    if (!isStaff) {
+      throw new ForbiddenError('Only staff of this club can create a tournament for it')
+    }
     return tournamentRepository.create({ ...data, created_by: userId })
   },
 
@@ -49,7 +57,14 @@ export const tournamentService = {
       throw new AppError('Tournament is full', 400, 'TOURNAMENT_FULL')
     }
 
-    return tournamentRepository.registerTeam(tournamentId, userId, partner2Id, teamName)
+    const team = await tournamentRepository.registerTeam(tournamentId, userId, partner2Id, teamName)
+
+    // Card #23 (R14): the partner used to be registered without ever being told.
+    notifications
+      .tournamentTeamRegistered(partner2Id, tournamentId, teamName ?? null)
+      .catch((err) => logger.error(err, 'Failed to send tournamentTeamRegistered notification'))
+
+    return team
   },
 
   async withdrawTeam(tournamentId: string, userId: string) {

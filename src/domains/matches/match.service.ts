@@ -9,8 +9,22 @@ export const matchService = {
     return matchRepository.findByUser(userId, options)
   },
 
-  async getMatchById(id: string) {
-    return matchRepository.findById(id)
+  // Card #23 (R14): a match's detail — including the other players' info —
+  // was readable by anyone who knew its id, participant or not.
+  async getMatchById(id: string, userId: string) {
+    const match = await matchRepository.findById(id)
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    const players = (match as any).match_players ?? []
+    const isParticipant = players.some((p: any) => p.user_id === userId)
+    const isCreator = (match as any).created_by === userId
+    if (!isParticipant && !isCreator) {
+      throw new ForbiddenError('You can only view matches you participate in')
+    }
+
+    return match
   },
 
   async createMatch(data: CreateMatchData, createdBy: string) {

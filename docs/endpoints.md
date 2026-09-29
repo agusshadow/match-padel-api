@@ -65,7 +65,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/matches` | requireAuth | My matches (filters `status`, `type`, `page`; no `meta`) | `getMyMatches` (`match.controller.ts`) |
-| GET | `/api/v1/matches/:id` | requireAuth | Match detail | `getMatch` |
+| GET | `/api/v1/matches/:id` | requireAuth | Match detail (only participants or the creator, checked in the service) | `getMatch` |
 | POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
 | POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
@@ -79,8 +79,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 |---|---|---|---|---|
 | GET | `/api/v1/tournaments` | none | List tournaments (`meta: { total }`) | `listTournaments` (`tournament.controller.ts`) |
 | GET | `/api/v1/tournaments/:id` | none | Tournament detail | `getTournament` |
-| POST | `/api/v1/tournaments` | requireAuth | Create a tournament (201) | `createTournament` |
-| POST | `/api/v1/tournaments/:id/teams` | requireAuth | Register my team (me + `partner_id`) (201) | `registerTeam` |
+| POST | `/api/v1/tournaments` | requireAuth | Create a tournament (201); `club_id` is required, and the caller must be staff of that club (checked in the service) | `createTournament` |
+| POST | `/api/v1/tournaments/:id/teams` | requireAuth | Register my team (me + `partner_id`) (201); notifies the partner | `registerTeam` |
 | DELETE | `/api/v1/tournaments/:id/teams/me` | requireAuth | Withdraw my team | `withdrawTeam` |
 | POST | `/api/v1/tournaments/:id/start` | requireAuth | Start the tournament (only its creator, checked in the service) | `startTournament` |
 
