@@ -1,8 +1,23 @@
 -- ============================================================
--- Match Padel — Initial Supabase schema
+-- Match Padel — Baseline migration (card #26)
 -- ============================================================
--- Run in the Supabase SQL Editor (Settings → SQL Editor)
--- Order: extensions → enums → tables → indexes → RLS → functions
+-- This is a RETROFITTED baseline, not a historical replay: production
+-- already had this exact schema (built up through docs/schema.sql edits
+-- and mcp__supabase__apply_migration calls, never versioned as files
+-- before now). It captures the schema as of 2026-09-29 in one file so the
+-- project can be reconstructed from scratch — `supabase db reset` (local)
+-- or `supabase migration up` against a fresh project applies this and
+-- ends up at the same schema production is on.
+--
+-- IMPORTANT: never run this file against the existing production project
+-- — everything in it already exists there (that's the whole point). It's
+-- for a NEW, empty Postgres/Supabase instance only (local dev via the
+-- Supabase CLI, or a from-scratch project).
+--
+-- From here on, every schema change gets its own migration file in this
+-- same folder (see the db-migration skill) in addition to updating
+-- docs/schema.sql, which stays the human-readable source of truth this
+-- file is generated from.
 -- ============================================================
 
 -- EXTENSIONS

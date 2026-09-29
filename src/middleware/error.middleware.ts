@@ -1,8 +1,15 @@
 import { Request, Response, NextFunction } from 'express'
 import { ZodError } from 'zod'
+import { MulterError } from 'multer'
 import { AppError } from '../types/errors'
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+  // Multer upload errors (e.g. file too large) — the client's fault, not a 500.
+  if (err instanceof MulterError) {
+    res.status(400).json({ error: 'ValidationError', message: err.message })
+    return
+  }
+
   // Zod validation errors
   if (err instanceof ZodError) {
     res.status(400).json({

@@ -11,12 +11,14 @@ import {
   cancel,
   countActiveByUser,
   findAvailableSlots,
+  expirePendingReservations,
 } from './reservation.repository'
 import type { CreateReservationRequest } from './reservation.validator'
 import { notifications } from '../notifications/notification.service'
 import { logger } from '../../lib/logger'
 
 const MAX_ACTIVE_RESERVATIONS = 3
+export const PENDING_RESERVATION_EXPIRY_MINUTES = 15
 
 export async function validateAndCreateReservation(
   userId: string,
@@ -137,4 +139,10 @@ export async function cancelReservation(id: string, userId: string) {
   notifications.reservationCancelled(userId, id).catch((err) => logger.error(err, 'Failed to send reservationCancelled notification'))
 
   return result
+}
+
+// Called by the scheduled job (src/jobs/expire-reservations.job.ts). Returns
+// the ids that were cancelled, for logging.
+export async function expireUnpaidReservations(): Promise<string[]> {
+  return expirePendingReservations(PENDING_RESERVATION_EXPIRY_MINUTES)
 }

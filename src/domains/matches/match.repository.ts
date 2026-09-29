@@ -193,6 +193,7 @@ export const matchRepository = {
         score_team1: score.score_team1,
         score_team2: score.score_team2,
         score_status: 'pending',
+        score_submitted_by: userId,
         status: 'in_progress',
         updated_at: new Date().toISOString(),
       })
@@ -204,18 +205,37 @@ export const matchRepository = {
     return data
   },
 
-  async acceptScore(matchId: string, winnerTeam: number) {
+  // Card #51: a rejected score clears back to a clean slate — the submitter
+  // must load a fresh result instead of the disputed one lingering on screen.
+  async rejectScore(matchId: string) {
     const { data, error } = await supabase
       .from('matches')
       .update({
-        score_status: 'accepted',
-        winner_team: winnerTeam,
-        status: 'completed',
+        score_team1: [],
+        score_team2: [],
+        score_status: 'disputed',
+        score_submitted_by: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', matchId)
       .select()
       .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Card #21 (R12): the status update and, when the match is ranked, all 4
+  // players' ELO changes happen inside a single Postgres function call
+  // (accept_match_score) so they commit or roll back together — no more
+  // "completed but only 2 of 4 players got their ELO updated" if something
+  // fails partway through.
+  async acceptScore(matchId: string, winnerTeam: number, applyElo: boolean) {
+    const { data, error } = await supabase.rpc('accept_match_score', {
+      p_match_id: matchId,
+      p_winner_team: winnerTeam,
+      p_apply_elo: applyElo,
+    })
 
     if (error) throw error
     return data
@@ -261,29 +281,4 @@ export const matchRepository = {
     return data ?? []
   },
 
-  async getUserElo(userId: string): Promise<number> {
-    const { data } = await supabase
-      .from('users')
-      .select('elo')
-      .eq('id', userId)
-      .single()
-    return data?.elo ?? 1000
-  },
-
-  async updateUserElo(userId: string, newElo: number) {
-    await supabase
-      .from('users')
-      .update({ elo: newElo, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-  },
-
-  async insertEloHistory(entry: {
-    user_id: string
-    match_id: string
-    elo_before: number
-    elo_after: number
-    delta: number
-  }) {
-    await supabase.from('elo_history').insert(entry)
-  },
 }

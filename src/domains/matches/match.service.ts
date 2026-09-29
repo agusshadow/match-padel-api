@@ -4,16 +4,27 @@ import { NotFoundError, ForbiddenError } from '../../types/errors'
 import { AppError } from '../../types/errors'
 import { notifications } from '../notifications/notification.service'
 
-const ELO_WIN_DELTA = 15
-const ELO_LOSS_DELTA = -15
-
 export const matchService = {
   async getMyMatches(userId: string, options: { status?: string; type?: string; page?: number }) {
     return matchRepository.findByUser(userId, options)
   },
 
-  async getMatchById(id: string) {
-    return matchRepository.findById(id)
+  // Card #23 (R14): a match's detail — including the other players' info —
+  // was readable by anyone who knew its id, participant or not.
+  async getMatchById(id: string, userId: string) {
+    const match = await matchRepository.findById(id)
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    const players = (match as any).match_players ?? []
+    const isParticipant = players.some((p: any) => p.user_id === userId)
+    const isCreator = (match as any).created_by === userId
+    if (!isParticipant && !isCreator) {
+      throw new ForbiddenError('You can only view matches you participate in')
+    }
+
+    return match
   },
 
   async createMatch(data: CreateMatchData, createdBy: string) {
@@ -108,6 +119,10 @@ export const matchService = {
       throw new ForbiddenError('Not a player in this match')
     }
 
+    if (match.score_submitted_by === userId) {
+      throw new ForbiddenError('You cannot accept the score you submitted yourself')
+    }
+
     // Determine winner by comparing sets won
     const score1 = (match.score_team1 as number[]) ?? []
     const score2 = (match.score_team2 as number[]) ?? []
@@ -121,11 +136,9 @@ export const matchService = {
 
     const winnerTeam = sets1 > sets2 ? 1 : 2
 
-    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam)
-
-    if (match.is_ranked) {
-      await this._applyEloChanges(matchId, winnerTeam)
-    }
+    // Card #21 (R12): match status + all 4 players' ELO (when ranked) commit
+    // atomically in a single DB function call — see accept_match_score.
+    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam, match.is_ranked)
 
     // Notify all players that the score was accepted
     const players = await matchRepository.getPlayers(matchId)
@@ -136,24 +149,29 @@ export const matchService = {
     return updatedMatch
   },
 
-  async _applyEloChanges(matchId: string, winnerTeam: number) {
-    const players = await matchRepository.getPlayers(matchId)
+  // Card #51: the player on the other team rejects a score loaded wrong (or
+  // in bad faith) instead of it either being force-accepted or stuck forever.
+  async rejectScore(matchId: string, userId: string) {
+    const match = await matchRepository.findById(matchId)
 
-    for (const player of players) {
-      const isWinner = player.team === winnerTeam
-      const delta = isWinner ? ELO_WIN_DELTA : ELO_LOSS_DELTA
-      const eloBefore = await matchRepository.getUserElo(player.user_id)
-      const eloAfter = Math.max(0, eloBefore + delta)
-
-      await matchRepository.updateUserElo(player.user_id, eloAfter)
-      await matchRepository.insertEloHistory({
-        user_id: player.user_id,
-        match_id: matchId,
-        elo_before: eloBefore,
-        elo_after: eloAfter,
-        delta,
-      })
+    if (!match) {
+      throw new NotFoundError('Match')
     }
+
+    if (match.score_status !== 'pending') {
+      throw new AppError('No pending score to reject', 400, 'NO_PENDING_SCORE')
+    }
+
+    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
+    if (!userTeam) {
+      throw new ForbiddenError('Not a player in this match')
+    }
+
+    if (match.score_submitted_by === userId) {
+      throw new ForbiddenError('You cannot reject the score you submitted yourself')
+    }
+
+    return matchRepository.rejectScore(matchId)
   },
 
   async cancelMatch(matchId: string, userId: string) {

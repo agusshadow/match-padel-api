@@ -80,42 +80,71 @@ export const userRepository = {
   },
 
   async getStats(userId: string) {
-    // Total matches
-    const { count: totalMatches } = await supabase
-      .from('match_players')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
+    // Card #56: total_matches/wins/losses come from the user_stats counter-cache
+    // (kept up to date by a DB trigger when a match completes) instead of being
+    // recomputed from match_players/matches on every request.
+    const [{ data: stats }, { data: userData }] = await Promise.all([
+      supabase
+        .from('user_stats')
+        .select('total_matches, wins, losses')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase.from('users').select('elo').eq('id', userId).single(),
+    ])
 
-    // Wins: matches where this user's team is the winner
-    const { data: playerData } = await supabase
-      .from('match_players')
-      .select('team, match_id, matches!inner(winner_team, status, is_ranked)')
-      .eq('user_id', userId)
-      .eq('matches.status', 'completed')
-
-    const completedMatches = playerData ?? []
-    const wins = completedMatches.filter(
-      (p: any) => p.team === p.matches?.winner_team
-    ).length
-    const losses = completedMatches.length - wins
-
-    // ELO
-    const { data: userData } = await supabase
-      .from('users')
-      .select('elo')
-      .eq('id', userId)
-      .single()
-
+    const totalMatches = stats?.total_matches ?? 0
+    const wins = stats?.wins ?? 0
+    const losses = stats?.losses ?? 0
     const elo = userData?.elo ?? 1000
-    const total = totalMatches ?? 0
-    const winRate = total > 0 ? Math.round((wins / completedMatches.length) * 100) : 0
+    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0
 
     return {
-      total_matches: total,
+      total_matches: totalMatches,
       wins,
       losses,
       elo,
       win_rate: winRate,
     }
+  },
+
+  // Card #54: recent ELO deltas for the profile screen.
+  async getEloHistory(userId: string) {
+    const { data, error } = await supabase
+      .from('elo_history')
+      .select('id, match_id, elo_before, elo_after, delta, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (error) throw error
+    return data ?? []
+  },
+
+  // Card #53: fixed path per user (no extension) with upsert — re-uploading
+  // always replaces the same object, so switching formats never leaves an
+  // orphaned file behind in the bucket.
+  async uploadAvatar(userId: string, file: { buffer: Buffer; mimetype: string }) {
+    const path = `${userId}/avatar`
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file.buffer, { contentType: file.mimetype, upsert: true })
+
+    if (uploadError) throw uploadError
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path)
+    // Cache-bust: the path never changes, so without this the CDN/browser
+    // would keep serving the old image after a re-upload.
+    const avatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select(PROFILE_COLUMNS_FULL)
+      .single()
+
+    if (error) throw error
+    return data
   },
 }

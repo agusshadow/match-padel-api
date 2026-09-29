@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 export interface CreateTournamentData {
   name: string
   description?: string
-  club_id?: string
+  club_id: string
   format: 'round_robin' | 'single_elimination' | 'double_elimination' | 'americano'
   max_teams: number
   entry_fee?: number
@@ -15,6 +15,19 @@ export interface CreateTournamentData {
 }
 
 export const tournamentRepository = {
+  // Card #23 (R14): only club staff may create a tournament on behalf of a club.
+  async isClubStaff(clubId: string, userId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('club_staff')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) throw error
+    return data !== null
+  },
+
   async findAll(options: { status?: string; page?: number; limit?: number } = {}) {
     const { status, page = 0, limit = 20 } = options
     const from = page * limit

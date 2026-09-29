@@ -27,7 +27,9 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 |---|---|---|---|---|
 | GET | `/api/v1/users/me` | requireAuth | Current user profile | `getMe` (`user.controller.ts`) |
 | PUT | `/api/v1/users/me` | requireAuth | Update current user profile | `updateMe` |
+| POST | `/api/v1/users/me/avatar` | requireAuth | Upload a profile picture (multipart field `avatar`, JPEG/PNG/WebP, max 5MB) to the `avatars` Storage bucket and set `avatar_url` | `uploadAvatar` |
 | GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
+| GET | `/api/v1/users/me/elo-history` | requireAuth | Current user's last 50 ELO changes, newest first | `getMyEloHistory` |
 | GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
 
 ## clubs — `/api/v1/clubs` (`club.router.ts`)
@@ -63,11 +65,12 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/matches` | requireAuth | My matches (filters `status`, `type`, `page`; no `meta`) | `getMyMatches` (`match.controller.ts`) |
-| GET | `/api/v1/matches/:id` | requireAuth | Match detail | `getMatch` |
+| GET | `/api/v1/matches/:id` | requireAuth | Match detail (only participants or the creator, checked in the service) | `getMatch` |
 | POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
 | POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
-| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches) | `acceptScore` |
+| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches). Rejects if the caller submitted the score themselves | `acceptScore` |
+| PUT | `/api/v1/matches/:id/score/reject` | requireAuth | Reject the pending score, clearing it so it can be resubmitted. Rejects if the caller submitted the score themselves | `rejectScore` |
 | DELETE | `/api/v1/matches/:id` | requireAuth | Cancel a match | `cancelMatch` |
 
 ## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)
@@ -76,8 +79,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 |---|---|---|---|---|
 | GET | `/api/v1/tournaments` | none | List tournaments (`meta: { total }`) | `listTournaments` (`tournament.controller.ts`) |
 | GET | `/api/v1/tournaments/:id` | none | Tournament detail | `getTournament` |
-| POST | `/api/v1/tournaments` | requireAuth | Create a tournament (201) | `createTournament` |
-| POST | `/api/v1/tournaments/:id/teams` | requireAuth | Register my team (me + `partner_id`) (201) | `registerTeam` |
+| POST | `/api/v1/tournaments` | requireAuth | Create a tournament (201); `club_id` is required, and the caller must be staff of that club (checked in the service) | `createTournament` |
+| POST | `/api/v1/tournaments/:id/teams` | requireAuth | Register my team (me + `partner_id`) (201); notifies the partner | `registerTeam` |
 | DELETE | `/api/v1/tournaments/:id/teams/me` | requireAuth | Withdraw my team | `withdrawTeam` |
 | POST | `/api/v1/tournaments/:id/start` | requireAuth | Start the tournament (only its creator, checked in the service) | `startTournament` |
 
@@ -98,6 +101,15 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 |---|---|---|---|---|
 | POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
 | POST | `/api/v1/payments/webhook` | none | MercadoPago notification; responds 200 immediately, no signature check, no idempotency | `webhook` |
+
+## achievements — `/api/v1/achievements` (`achievements.router.ts`)
+
+Card #54 — reads only; achievements are awarded from `accept_match_score` (see `docs/schema.sql`), not through this router.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/achievements` | none | Full achievement catalog | `getCatalog` |
+| GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned | `getMyAchievements` |
 
 ## Unmounted routers
 
@@ -131,6 +143,7 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | tournaments | `/api/v1/tournaments` | yes | yes | yes | yes | no (schemas inline in the controller) |
 | notifications | `/api/v1/notifications` | yes | yes | yes | yes | no |
 | payments | `/api/v1/payments` | yes | yes | yes (holds Supabase queries) | no | no (schema inline in the controller) |
+| achievements | `/api/v1/achievements` | yes | yes | yes | yes | no |
 | platform | not mounted | stub only | no | no | no | no |
 
 No domain has a `__tests__/` folder.

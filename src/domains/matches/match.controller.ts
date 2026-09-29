@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { matchService } from './match.service'
 import { AuthenticatedRequest } from '../../middleware/auth'
-import { ForbiddenError, NotFoundError, ValidationError } from '../../types/errors'
+import { ValidationError } from '../../types/errors'
 
 export async function getMyMatches(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -20,10 +20,8 @@ export async function getMyMatches(req: Request, res: Response, next: NextFuncti
 
 export async function getMatch(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const match = await matchService.getMatchById(req.params.id)
-    if (!match) {
-      throw new NotFoundError('Match')
-    }
+    const { userId } = req as AuthenticatedRequest
+    const match = await matchService.getMatchById(req.params.id, userId)
     res.json({ success: true, data: match })
   } catch (err) {
     next(err)
@@ -79,6 +77,17 @@ export async function acceptScore(req: Request, res: Response, next: NextFunctio
     const { userId } = req as AuthenticatedRequest
     const { id } = req.params
     const match = await matchService.acceptScore(id, userId)
+    res.json({ success: true, data: match })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function rejectScore(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = req as AuthenticatedRequest
+    const { id } = req.params
+    const match = await matchService.rejectScore(id, userId)
     res.json({ success: true, data: match })
   } catch (err) {
     next(err)
