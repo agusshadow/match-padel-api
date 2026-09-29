@@ -69,6 +69,16 @@ export async function getMyStats(req: Request, res: Response, next: NextFunction
   }
 }
 
+export async function getMyEloHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = req as AuthenticatedRequest
+    const history = await userRepository.getEloHistory(userId)
+    res.json({ success: true, data: history })
+  } catch (err) {
+    next(err)
+  }
+}
+
 export async function getUserByUsername(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { username } = req.params

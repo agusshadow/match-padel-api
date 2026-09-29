@@ -107,6 +107,19 @@ export const userRepository = {
     }
   },
 
+  // Card #54: recent ELO deltas for the profile screen.
+  async getEloHistory(userId: string) {
+    const { data, error } = await supabase
+      .from('elo_history')
+      .select('id, match_id, elo_before, elo_after, delta, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (error) throw error
+    return data ?? []
+  },
+
   // Card #53: fixed path per user (no extension) with upsert — re-uploading
   // always replaces the same object, so switching formats never leaves an
   // orphaned file behind in the bucket.
