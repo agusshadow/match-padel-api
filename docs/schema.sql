@@ -423,6 +423,69 @@ create trigger set_updated_at before update on matches for each row execute func
 create trigger set_updated_at before update on tournaments for each row execute function update_updated_at();
 
 -- ============================================================
+-- FUNCTION: accept_match_score (card #21, atomic score+ELO)
+-- ============================================================
+-- Accepting a score and, on a ranked match, applying +15/-15 ELO to all 4
+-- players used to be several separate API calls with no transaction — a
+-- failure partway could leave a match "completed" with only some players'
+-- ELO updated. This runs as one Postgres function call, so it all commits or
+-- rolls back together. Only service_role may call it (see grants below) —
+-- the app-level ownership/self-accept checks live in match.service.ts.
+create or replace function accept_match_score(
+  p_match_id uuid,
+  p_winner_team smallint,
+  p_apply_elo boolean
+)
+returns matches
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_match matches;
+  mp record;
+  v_elo_before integer;
+  v_elo_after integer;
+  v_delta integer;
+begin
+  select * into v_match from matches where id = p_match_id for update;
+  if not found then
+    raise exception 'MATCH_NOT_FOUND';
+  end if;
+
+  if v_match.score_status <> 'pending' then
+    raise exception 'NO_PENDING_SCORE';
+  end if;
+
+  update matches
+  set score_status = 'accepted',
+      winner_team = p_winner_team,
+      status = 'completed',
+      updated_at = now()
+  where id = p_match_id
+  returning * into v_match;
+
+  if p_apply_elo then
+    for mp in select user_id, team from match_players where match_id = p_match_id loop
+      v_delta := case when mp.team = p_winner_team then 15 else -15 end;
+
+      select elo into v_elo_before from users where id = mp.user_id for update;
+      v_elo_after := greatest(0, v_elo_before + v_delta);
+
+      update users set elo = v_elo_after, updated_at = now() where id = mp.user_id;
+
+      insert into elo_history (user_id, match_id, elo_before, elo_after, delta)
+      values (mp.user_id, p_match_id, v_elo_before, v_elo_after, v_delta);
+    end loop;
+  end if;
+
+  return v_match;
+end;
+$$;
+
+revoke all on function accept_match_score(uuid, smallint, boolean) from public, anon, authenticated;
+grant execute on function accept_match_score(uuid, smallint, boolean) to service_role;
+
+-- ============================================================
 -- TRIGGER: keep user_stats in sync (card #56, counter-cache)
 -- ============================================================
 create or replace function update_user_stats_on_match_completed()
