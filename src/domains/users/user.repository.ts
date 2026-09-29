@@ -106,4 +106,32 @@ export const userRepository = {
       win_rate: winRate,
     }
   },
+
+  // Card #53: fixed path per user (no extension) with upsert — re-uploading
+  // always replaces the same object, so switching formats never leaves an
+  // orphaned file behind in the bucket.
+  async uploadAvatar(userId: string, file: { buffer: Buffer; mimetype: string }) {
+    const path = `${userId}/avatar`
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file.buffer, { contentType: file.mimetype, upsert: true })
+
+    if (uploadError) throw uploadError
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path)
+    // Cache-bust: the path never changes, so without this the CDN/browser
+    // would keep serving the old image after a re-upload.
+    const avatarUrl = `${publicUrlData.publicUrl}?v=${Date.now()}`
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select(PROFILE_COLUMNS_FULL)
+      .single()
+
+    if (error) throw error
+    return data
+  },
 }

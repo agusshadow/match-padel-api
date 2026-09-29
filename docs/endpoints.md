@@ -27,6 +27,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 |---|---|---|---|---|
 | GET | `/api/v1/users/me` | requireAuth | Current user profile | `getMe` (`user.controller.ts`) |
 | PUT | `/api/v1/users/me` | requireAuth | Update current user profile | `updateMe` |
+| POST | `/api/v1/users/me/avatar` | requireAuth | Upload a profile picture (multipart field `avatar`, JPEG/PNG/WebP, max 5MB) to the `avatars` Storage bucket and set `avatar_url` | `uploadAvatar` |
 | GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
 | GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
 

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { userRepository } from './user.repository'
 import { AuthenticatedRequest } from '../../middleware/auth'
-import { NotFoundError } from '../../types/errors'
+import { NotFoundError, ValidationError } from '../../types/errors'
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -39,6 +39,20 @@ export async function updateMe(req: Request, res: Response, next: NextFunction):
       preferred_hand,
       onboarding_completed_at,
     })
+    res.json({ success: true, data: user })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function uploadAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = req as AuthenticatedRequest
+    const file = req.file
+    if (!file) {
+      throw new ValidationError('No file uploaded (expected multipart field "avatar")')
+    }
+    const user = await userRepository.uploadAvatar(userId, file)
     res.json({ success: true, data: user })
   } catch (err) {
     next(err)
