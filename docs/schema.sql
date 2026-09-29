@@ -258,6 +258,18 @@ create table public.points_transactions (
   created_at  timestamptz not null default now()
 );
 
+-- user_stats: counter-cache for the profile (card #56). Kept up to date by
+-- trg_update_user_stats (fires when a match transitions to 'completed');
+-- never written to directly. getStats reads this instead of recomputing from
+-- match_players/matches on every request.
+create table public.user_stats (
+  user_id       uuid primary key references users(id) on delete cascade,
+  total_matches integer not null default 0,
+  wins          integer not null default 0,
+  losses        integer not null default 0,
+  updated_at    timestamptz not null default now()
+);
+
 -- notifications
 create table public.notifications (
   id          uuid primary key default uuid_generate_v4(),
@@ -315,6 +327,7 @@ alter table achievements enable row level security;
 alter table user_achievements enable row level security;
 alter table points_transactions enable row level security;
 alter table notifications enable row level security;
+alter table user_stats enable row level security;
 
 -- Basic access policies from the frontend (anon key)
 
@@ -386,6 +399,9 @@ create policy "payments_own_read" on payments for select using (auth.uid() = use
 -- points_transactions: owner only
 create policy "points_own_read" on points_transactions for select using (auth.uid() = user_id);
 
+-- user_stats: public (same visibility as elo/achievements — part of a public profile)
+create policy "user_stats_public_read" on user_stats for select using (true);
+
 -- ============================================================
 -- TRIGGER: automatic updated_at
 -- ============================================================
@@ -404,6 +420,44 @@ create trigger set_updated_at before update on court_reservations for each row e
 create trigger set_updated_at before update on payments for each row execute function update_updated_at();
 create trigger set_updated_at before update on matches for each row execute function update_updated_at();
 create trigger set_updated_at before update on tournaments for each row execute function update_updated_at();
+
+-- ============================================================
+-- TRIGGER: keep user_stats in sync (card #56, counter-cache)
+-- ============================================================
+create or replace function update_user_stats_on_match_completed()
+returns trigger language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  mp record;
+  is_win boolean;
+begin
+  if new.status = 'completed'
+     and (old.status is distinct from 'completed')
+     and new.winner_team is not null then
+    for mp in select user_id, team from match_players where match_id = new.id loop
+      is_win := (mp.team = new.winner_team);
+      insert into user_stats (user_id, total_matches, wins, losses, updated_at)
+      values (
+        mp.user_id, 1,
+        case when is_win then 1 else 0 end,
+        case when is_win then 0 else 1 end,
+        now()
+      )
+      on conflict (user_id) do update set
+        total_matches = user_stats.total_matches + 1,
+        wins = user_stats.wins + excluded.wins,
+        losses = user_stats.losses + excluded.losses,
+        updated_at = now();
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_update_user_stats
+after update on matches
+for each row execute function update_user_stats_on_match_completed();
 
 -- ============================================================
 -- TRIGGER: create user profile on sign-up
