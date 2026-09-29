@@ -67,7 +67,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
 | POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
-| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches) | `acceptScore` |
+| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches). Rejects if the caller submitted the score themselves | `acceptScore` |
+| PUT | `/api/v1/matches/:id/score/reject` | requireAuth | Reject the pending score, clearing it so it can be resubmitted. Rejects if the caller submitted the score themselves | `rejectScore` |
 | DELETE | `/api/v1/matches/:id` | requireAuth | Cancel a match | `cancelMatch` |
 
 ## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)

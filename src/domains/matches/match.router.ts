@@ -7,6 +7,7 @@ import {
   joinByLobbyUrl,
   submitScore,
   acceptScore,
+  rejectScore,
   cancelMatch,
 } from './match.controller'
 
@@ -26,6 +27,8 @@ router.post('/join/:lobbyUrl', joinByLobbyUrl)
 router.put('/:id/score', submitScore)
 // PUT /api/v1/matches/:id/score/accept — accept score
 router.put('/:id/score/accept', acceptScore)
+// PUT /api/v1/matches/:id/score/reject — reject score
+router.put('/:id/score/reject', rejectScore)
 // DELETE /api/v1/matches/:id — cancel match
 router.delete('/:id', cancelMatch)
 

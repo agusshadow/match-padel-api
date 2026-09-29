@@ -108,6 +108,10 @@ export const matchService = {
       throw new ForbiddenError('Not a player in this match')
     }
 
+    if (match.score_submitted_by === userId) {
+      throw new ForbiddenError('You cannot accept the score you submitted yourself')
+    }
+
     // Determine winner by comparing sets won
     const score1 = (match.score_team1 as number[]) ?? []
     const score2 = (match.score_team2 as number[]) ?? []
@@ -134,6 +138,31 @@ export const matchService = {
     notifications.scoreAccepted(playerIds, matchId, 0).catch((err) => logger.error(err, 'Failed to send scoreAccepted notification'))
 
     return updatedMatch
+  },
+
+  // Card #51: the player on the other team rejects a score loaded wrong (or
+  // in bad faith) instead of it either being force-accepted or stuck forever.
+  async rejectScore(matchId: string, userId: string) {
+    const match = await matchRepository.findById(matchId)
+
+    if (!match) {
+      throw new NotFoundError('Match')
+    }
+
+    if (match.score_status !== 'pending') {
+      throw new AppError('No pending score to reject', 400, 'NO_PENDING_SCORE')
+    }
+
+    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
+    if (!userTeam) {
+      throw new ForbiddenError('Not a player in this match')
+    }
+
+    if (match.score_submitted_by === userId) {
+      throw new ForbiddenError('You cannot reject the score you submitted yourself')
+    }
+
+    return matchRepository.rejectScore(matchId)
   },
 
   async _applyEloChanges(matchId: string, winnerTeam: number) {

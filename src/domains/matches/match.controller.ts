@@ -85,6 +85,17 @@ export async function acceptScore(req: Request, res: Response, next: NextFunctio
   }
 }
 
+export async function rejectScore(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = req as AuthenticatedRequest
+    const { id } = req.params
+    const match = await matchService.rejectScore(id, userId)
+    res.json({ success: true, data: match })
+  } catch (err) {
+    next(err)
+  }
+}
+
 export async function cancelMatch(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { userId } = req as AuthenticatedRequest

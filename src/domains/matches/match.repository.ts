@@ -193,7 +193,28 @@ export const matchRepository = {
         score_team1: score.score_team1,
         score_team2: score.score_team2,
         score_status: 'pending',
+        score_submitted_by: userId,
         status: 'in_progress',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', matchId)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data
+  },
+
+  // Card #51: a rejected score clears back to a clean slate — the submitter
+  // must load a fresh result instead of the disputed one lingering on screen.
+  async rejectScore(matchId: string) {
+    const { data, error } = await supabase
+      .from('matches')
+      .update({
+        score_team1: [],
+        score_team2: [],
+        score_status: 'disputed',
+        score_submitted_by: null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', matchId)
