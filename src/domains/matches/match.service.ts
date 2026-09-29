@@ -4,9 +4,6 @@ import { NotFoundError, ForbiddenError } from '../../types/errors'
 import { AppError } from '../../types/errors'
 import { notifications } from '../notifications/notification.service'
 
-const ELO_WIN_DELTA = 15
-const ELO_LOSS_DELTA = -15
-
 export const matchService = {
   async getMyMatches(userId: string, options: { status?: string; type?: string; page?: number }) {
     return matchRepository.findByUser(userId, options)
@@ -125,11 +122,9 @@ export const matchService = {
 
     const winnerTeam = sets1 > sets2 ? 1 : 2
 
-    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam)
-
-    if (match.is_ranked) {
-      await this._applyEloChanges(matchId, winnerTeam)
-    }
+    // Card #21 (R12): match status + all 4 players' ELO (when ranked) commit
+    // atomically in a single DB function call — see accept_match_score.
+    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam, match.is_ranked)
 
     // Notify all players that the score was accepted
     const players = await matchRepository.getPlayers(matchId)
@@ -163,26 +158,6 @@ export const matchService = {
     }
 
     return matchRepository.rejectScore(matchId)
-  },
-
-  async _applyEloChanges(matchId: string, winnerTeam: number) {
-    const players = await matchRepository.getPlayers(matchId)
-
-    for (const player of players) {
-      const isWinner = player.team === winnerTeam
-      const delta = isWinner ? ELO_WIN_DELTA : ELO_LOSS_DELTA
-      const eloBefore = await matchRepository.getUserElo(player.user_id)
-      const eloAfter = Math.max(0, eloBefore + delta)
-
-      await matchRepository.updateUserElo(player.user_id, eloAfter)
-      await matchRepository.insertEloHistory({
-        user_id: player.user_id,
-        match_id: matchId,
-        elo_before: eloBefore,
-        elo_after: eloAfter,
-        delta,
-      })
-    }
   },
 
   async cancelMatch(matchId: string, userId: string) {
