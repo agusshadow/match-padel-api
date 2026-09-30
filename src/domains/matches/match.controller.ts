@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { matchService } from './match.service'
 import { AuthenticatedRequest } from '../../middleware/auth'
-import { ValidationError } from '../../types/errors'
+import { CreateMatchSchema, SubmitScoreSchema } from './match.validator'
 
 export async function getMyMatches(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -31,14 +31,10 @@ export async function getMatch(req: Request, res: Response, next: NextFunction):
 export async function createMatch(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { userId } = req as AuthenticatedRequest
-    const { type, is_ranked, club_id } = req.body
+    const data = CreateMatchSchema.parse(req.body)
 
-    if (!type) {
-      throw new ValidationError('Match type is required')
-    }
-
-    const match = await matchService.createMatch({ type, is_ranked: !!is_ranked, club_id }, userId)
-    res.status(201).json({ success: true, data: match })
+    const result = await matchService.createMatch(data, userId)
+    res.status(201).json({ success: true, data: result })
   } catch (err) {
     next(err)
   }
@@ -59,13 +55,9 @@ export async function submitScore(req: Request, res: Response, next: NextFunctio
   try {
     const { userId } = req as AuthenticatedRequest
     const { id } = req.params
-    const { score_team1, score_team2 } = req.body
+    const score = SubmitScoreSchema.parse(req.body)
 
-    if (!Array.isArray(score_team1) || !Array.isArray(score_team2)) {
-      throw new ValidationError('score_team1 and score_team2 must be arrays')
-    }
-
-    const match = await matchService.submitScore(id, { score_team1, score_team2 }, userId)
+    const match = await matchService.submitScore(id, score, userId)
     res.json({ success: true, data: match })
   } catch (err) {
     next(err)
@@ -100,6 +92,17 @@ export async function cancelMatch(req: Request, res: Response, next: NextFunctio
     const { id } = req.params
     const match = await matchService.cancelMatch(id, userId)
     res.json({ success: true, data: match })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function leaveMatch(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { userId } = req as AuthenticatedRequest
+    const { id } = req.params
+    const result = await matchService.leaveMatch(id, userId)
+    res.json({ success: true, data: result })
   } catch (err) {
     next(err)
   }

@@ -9,6 +9,7 @@ import {
   acceptScore,
   rejectScore,
   cancelMatch,
+  leaveMatch,
 } from './match.controller'
 
 const router = Router()
@@ -29,7 +30,9 @@ router.put('/:id/score', submitScore)
 router.put('/:id/score/accept', acceptScore)
 // PUT /api/v1/matches/:id/score/reject — reject score
 router.put('/:id/score/reject', rejectScore)
-// DELETE /api/v1/matches/:id — cancel match
+// DELETE /api/v1/matches/:id — cancel match (creator only)
 router.delete('/:id', cancelMatch)
+// DELETE /api/v1/matches/:id/leave — leave a match you joined
+router.delete('/:id/leave', leaveMatch)
 
 export default router
