@@ -51,6 +51,26 @@ export const userRepository = {
     return data
   },
 
+  // Card #60: best-to-worst ELO ranking. Only active players, same public
+  // column set as a public profile lookup (no email/phone/etc.).
+  async findLeaderboard(page: number, limit: number) {
+    const offset = (page - 1) * limit
+
+    const { data, error, count } = await supabase
+      .from('users')
+      .select(PROFILE_COLUMNS, { count: 'exact' })
+      .eq('is_active', true)
+      .order('elo', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (error) throw error
+
+    return {
+      data: data ?? [],
+      total: count ?? 0,
+    }
+  },
+
   async update(id: string, updateData: UpdateUserData) {
     if (updateData.username) {
       const { data: existing } = await supabase
