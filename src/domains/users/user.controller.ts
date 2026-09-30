@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { userRepository } from './user.repository'
 import { AuthenticatedRequest } from '../../middleware/auth'
 import { NotFoundError, ValidationError } from '../../types/errors'
+import { GetLeaderboardQuerySchema } from './user.validator'
 
 export async function getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -74,6 +75,20 @@ export async function getMyEloHistory(req: Request, res: Response, next: NextFun
     const { userId } = req as AuthenticatedRequest
     const history = await userRepository.getEloHistory(userId)
     res.json({ success: true, data: history })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function getLeaderboard(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { page, limit } = GetLeaderboardQuerySchema.parse(req.query)
+    const { data, total } = await userRepository.findLeaderboard(page, limit)
+    res.json({
+      success: true,
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    })
   } catch (err) {
     next(err)
   }

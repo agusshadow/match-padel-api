@@ -13,9 +13,9 @@ export interface UpdateUserData {
 }
 
 const PROFILE_COLUMNS =
-  'id, username, first_name, last_name, full_name, avatar_url, elo, skill_level, preferred_hand, created_at, role'
+  'id, username, first_name, last_name, full_name, avatar_url, elo, xp, level, skill_level, preferred_hand, created_at, role'
 const PROFILE_COLUMNS_FULL =
-  'id, username, first_name, last_name, full_name, avatar_url, elo, phone, skill_level, preferred_hand, onboarding_completed_at, role, created_at, updated_at, is_active'
+  'id, username, first_name, last_name, full_name, avatar_url, elo, xp, level, phone, skill_level, preferred_hand, onboarding_completed_at, role, created_at, updated_at, is_active'
 
 export const userRepository = {
   async findById(id: string) {
@@ -49,6 +49,26 @@ export const userRepository = {
 
     if (error) throw error
     return data
+  },
+
+  // Card #60: best-to-worst ELO ranking. Only active players, same public
+  // column set as a public profile lookup (no email/phone/etc.).
+  async findLeaderboard(page: number, limit: number) {
+    const offset = (page - 1) * limit
+
+    const { data, error, count } = await supabase
+      .from('users')
+      .select(PROFILE_COLUMNS, { count: 'exact' })
+      .eq('is_active', true)
+      .order('elo', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (error) throw error
+
+    return {
+      data: data ?? [],
+      total: count ?? 0,
+    }
   },
 
   async update(id: string, updateData: UpdateUserData) {

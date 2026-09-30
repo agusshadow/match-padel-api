@@ -20,6 +20,10 @@ create type reservation_status as enum ('pending', 'confirmed', 'cancelled', 'co
 create type match_type as enum ('friendly', 'ranked', 'tournament');
 create type match_status as enum ('waiting', 'in_progress', 'completed', 'cancelled');
 create type score_status as enum ('pending', 'accepted', 'disputed');
+create type challenge_cadence as enum ('daily', 'weekly', 'monthly', 'one_time'); -- card #62
+create type challenge_action as enum ('play_matches', 'win_matches'); -- card #62
+create type user_challenge_status as enum ('active', 'completed', 'expired'); -- card #62
+create type cosmetic_type as enum ('palette_skin', 'avatar', 'emblem'); -- card #63
 create type tournament_format as enum ('round_robin', 'single_elimination', 'double_elimination', 'americano');
 create type tournament_status as enum ('draft', 'open', 'in_progress', 'completed', 'cancelled');
 create type payment_status as enum ('pending', 'approved', 'rejected', 'cancelled', 'refunded');
@@ -42,7 +46,13 @@ create table public.users (
                   ) stored,
   avatar_url      text,
   phone           text,
-  elo             integer not null default 1000,
+  elo             integer not null default 1000,          -- skill, ranked matches only
+  xp              integer not null default 0,              -- card #61: engagement, separate from elo
+  level           integer not null default 1,              -- derived from xp via level_for_xp()
+  points_balance  integer not null default 0,              -- card #63: internal currency balance
+  equipped_palette_cosmetic_id uuid,                        -- card #63: FK added after cosmetics table below
+  equipped_avatar_cosmetic_id  uuid,
+  equipped_emblem_cosmetic_id  uuid,
   role            user_role not null default 'player',
   skill_level     skill_level,
   preferred_hand  preferred_hand,
@@ -149,10 +159,13 @@ create table public.matches (
   tournament_id   uuid,                -- FK added later (circular)
   type            match_type not null default 'friendly',
   status          match_status not null default 'waiting',
-  score_team1     integer[] default '{}',   -- [6,4,7] games won per set
+  score_team1     integer[] default '{}',   -- [6,4,7] games won per set — set only once both teams' drafts agree
   score_team2     integer[] default '{}',
   score_status    score_status not null default 'pending',
-  score_submitted_by uuid references users(id), -- card #51: who submitted the pending score, so they can't also accept/reject it
+  score_submitted_by uuid references users(id), -- unused since card #58 (independent submission replaced submit/accept-reject) — kept, not dropped
+  pending_score_team1 jsonb,          -- card #58: team 1's claimed {"score_team1":[...],"score_team2":[...]} until both drafts match
+  pending_score_team2 jsonb,          -- team 2's claimed result, same shape
+  score_dispute_attempts integer not null default 0, -- mismatched draft pairs; 3 permanently sets score_status to disputed
   winner_team     smallint check (winner_team in (1, 2)),
   is_ranked       boolean not null default false,
   lobby_url       text,               -- random UUID for invitations
@@ -249,6 +262,84 @@ create table public.user_achievements (
   unique(user_id, achievement_id)
 );
 
+-- challenges (card #62): rotating catalog, distinct from the fixed one-time
+-- achievements above. Deliberately minimal — same "not the full
+-- condition-engine card #55 would need" call as achievements: only two
+-- action types for now.
+create table public.challenges (
+  id              uuid primary key default uuid_generate_v4(),
+  code            text unique not null,
+  name            text not null,
+  description     text not null,
+  cadence         challenge_cadence not null,
+  action_type     challenge_action not null,
+  target_count    integer not null check (target_count > 0),
+  reward_xp       integer not null default 0,
+  reward_currency integer not null default 0, -- card #63: paid out once the internal currency exists
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- user_challenges: per-user, per-period progress
+create table public.user_challenges (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references users(id),
+  challenge_id  uuid not null references challenges(id),
+  period_start  timestamptz not null,
+  period_end    timestamptz not null,
+  progress      integer not null default 0,
+  status        user_challenge_status not null default 'active',
+  completed_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  unique (user_id, challenge_id, period_start)
+);
+
+-- cosmetics (card #63): marketplace catalog — palette skins, avatar frames,
+-- emblems, bought with the internal currency below.
+create table public.cosmetics (
+  id              uuid primary key default uuid_generate_v4(),
+  code            text unique not null,
+  name            text not null,
+  description     text not null,
+  type            cosmetic_type not null,
+  image_url       text not null,
+  price_currency  integer not null check (price_currency >= 0),
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- user_cosmetics: ownership
+create table public.user_cosmetics (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references users(id),
+  cosmetic_id   uuid not null references cosmetics(id),
+  acquired_at   timestamptz not null default now(),
+  unique (user_id, cosmetic_id)
+);
+
+-- users.equipped_*_cosmetic_id FKs — added here, after cosmetics exists.
+alter table public.users
+  add constraint users_equipped_palette_fkey foreign key (equipped_palette_cosmetic_id) references cosmetics(id),
+  add constraint users_equipped_avatar_fkey foreign key (equipped_avatar_cosmetic_id) references cosmetics(id),
+  add constraint users_equipped_emblem_fkey foreign key (equipped_emblem_cosmetic_id) references cosmetics(id);
+
+-- currency_purchases (card #63): real-money top-ups of the internal currency.
+-- Kept separate from `payments` (shaped around court_reservations) rather
+-- than overloading that table's semantics — the webhook tells the two apart
+-- by a 'currency:' prefix on external_reference (see payment.service.ts).
+create table public.currency_purchases (
+  id              uuid primary key default uuid_generate_v4(),
+  user_id         uuid not null references users(id),
+  amount_ars      numeric(10,2) not null,
+  currency_amount integer not null,
+  status          payment_status not null default 'pending',
+  mp_payment_id   text unique,
+  mp_event_id     text unique,
+  metadata        jsonb not null default '{}',
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
 -- points_transactions: points store
 create table public.points_transactions (
   id          uuid primary key default uuid_generate_v4(),
@@ -299,6 +390,9 @@ create index on elo_history(user_id, created_at desc);
 create index on notifications(user_id, is_read, created_at desc);
 create index on payments(mp_event_id);
 create index on users(elo desc) where is_active = true;
+create index on user_challenges(user_id, status); -- card #62
+create index on user_cosmetics(user_id); -- card #63
+create index on currency_purchases(user_id); -- card #63
 
 -- ============================================================
 -- SUPABASE REALTIME (court_reservations only)
@@ -329,6 +423,11 @@ alter table user_achievements enable row level security;
 alter table points_transactions enable row level security;
 alter table notifications enable row level security;
 alter table user_stats enable row level security;
+alter table challenges enable row level security; -- card #62
+alter table user_challenges enable row level security; -- card #62
+alter table cosmetics enable row level security; -- card #63
+alter table user_cosmetics enable row level security; -- card #63
+alter table currency_purchases enable row level security; -- card #63
 
 -- Basic access policies from the frontend (anon key)
 
@@ -389,6 +488,21 @@ create policy "user_achievements_public_read" on user_achievements for select us
 
 -- elo_history: public
 create policy "elo_history_public_read" on elo_history for select using (true);
+
+-- challenges: public catalog (card #62)
+create policy "challenges_public_read" on challenges for select using (is_active = true);
+
+-- user_challenges: own progress only
+create policy "user_challenges_own_read" on user_challenges for select using (user_id = auth.uid());
+
+-- cosmetics: public catalog (card #63)
+create policy "cosmetics_public_read" on cosmetics for select using (is_active = true);
+
+-- user_cosmetics: own ownership rows only
+create policy "user_cosmetics_own_read" on user_cosmetics for select using (user_id = auth.uid());
+
+-- currency_purchases: own purchases only
+create policy "currency_purchases_own_read" on currency_purchases for select using (user_id = auth.uid());
 
 -- notifications: owner only
 create policy "notifications_own_read" on notifications for select using (auth.uid() = user_id);
@@ -499,7 +613,16 @@ begin
       select mp.user_id, id from achievements where code = 'five_wins'
       on conflict (user_id, achievement_id) do nothing;
     end if;
+
+    -- Card #62: challenge progress, independent of ranked/friendly.
+    perform increment_challenge_progress(mp.user_id, 'play_matches', 1);
+    if mp.team = p_winner_team then
+      perform increment_challenge_progress(mp.user_id, 'win_matches', 1);
+    end if;
   end loop;
+
+  -- Card #61: XP/level for playing, independent of whether the match was ranked.
+  perform award_match_xp(p_match_id, p_winner_team);
 
   return v_match;
 end;
@@ -507,6 +630,314 @@ $$;
 
 revoke all on function accept_match_score(uuid, smallint, boolean) from public, anon, authenticated;
 grant execute on function accept_match_score(uuid, smallint, boolean) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: level_for_xp, award_match_xp (card #61)
+-- ============================================================
+-- Level/XP is separate from ELO: ELO reflects skill (ranked match outcomes
+-- only), level reflects app engagement and rises with XP from playing any
+-- match (later also from completing challenges, card #62). Curve: level L
+-- requires cumulative XP of 50*L*(L-1) — level 1->2 needs 100 XP, 2->3 needs
+-- 200 more, 3->4 needs 300 more, etc. Adjustable later; only the mechanism
+-- matters now.
+create or replace function level_for_xp(p_xp integer)
+returns integer
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select greatest(1, floor((1 + sqrt(1 + 0.08 * p_xp::numeric)) / 2)::integer);
+$$;
+
+revoke all on function level_for_xp(integer) from public, anon, authenticated;
+grant execute on function level_for_xp(integer) to service_role;
+
+-- Awards participation XP to all 4 players of a match (20 XP) plus a bonus
+-- to the winning team (+10 XP, i.e. 30 total) whenever a result is
+-- confirmed. Called from inside accept_match_score so it commits atomically
+-- with the ELO/stats/achievements it already handles.
+create or replace function award_match_xp(p_match_id uuid, p_winner_team smallint)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  mp record;
+  v_gain integer;
+  v_new_xp integer;
+begin
+  for mp in select user_id, team from match_players where match_id = p_match_id loop
+    v_gain := case when mp.team = p_winner_team then 30 else 20 end;
+
+    update users
+    set xp = xp + v_gain,
+        level = level_for_xp(xp + v_gain),
+        updated_at = now()
+    where id = mp.user_id
+    returning xp into v_new_xp;
+  end loop;
+end;
+$$;
+
+revoke all on function award_match_xp(uuid, smallint) from public, anon, authenticated;
+grant execute on function award_match_xp(uuid, smallint) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: assign_and_expire_challenges, increment_challenge_progress (card #62)
+-- ============================================================
+-- Assigns each active user a fresh row per active challenge for the current
+-- period (idempotent — the unique constraint on user_challenges makes
+-- ON CONFLICT DO NOTHING safe to call repeatedly), and expires rows whose
+-- period has ended. Called from a scheduled job, same pattern as
+-- expire-reservations/auto-cancel-unfilled-matches.
+create or replace function assign_and_expire_challenges()
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  update user_challenges
+  set status = 'expired'
+  where status = 'active' and period_end <= now();
+
+  insert into user_challenges (user_id, challenge_id, period_start, period_end)
+  select
+    u.id,
+    c.id,
+    case c.cadence
+      when 'daily' then date_trunc('day', now())
+      when 'weekly' then date_trunc('week', now())
+      when 'monthly' then date_trunc('month', now())
+      when 'one_time' then 'epoch'::timestamptz
+    end as period_start,
+    case c.cadence
+      when 'daily' then date_trunc('day', now()) + interval '1 day'
+      when 'weekly' then date_trunc('week', now()) + interval '7 days'
+      when 'monthly' then date_trunc('month', now()) + interval '1 month'
+      when 'one_time' then 'infinity'::timestamptz
+    end as period_end
+  from users u
+  cross join challenges c
+  where u.is_active and c.is_active
+  on conflict (user_id, challenge_id, period_start) do nothing;
+end;
+$$;
+
+revoke all on function assign_and_expire_challenges() from public, anon, authenticated;
+grant execute on function assign_and_expire_challenges() to service_role;
+
+-- Increments progress on the caller's active challenges matching p_action,
+-- awarding reward_xp (and leveling up, via level_for_xp from card #61) the
+-- moment a challenge's target is reached.
+create or replace function increment_challenge_progress(p_user_id uuid, p_action challenge_action, p_amount integer default 1)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  uc record;
+  v_new_progress integer;
+begin
+  for uc in
+    select ucg.id, ucg.progress, c.target_count, c.reward_xp, c.reward_currency
+    from user_challenges ucg
+    join challenges c on c.id = ucg.challenge_id
+    where ucg.user_id = p_user_id
+      and ucg.status = 'active'
+      and c.action_type = p_action
+      and now() >= ucg.period_start and now() < ucg.period_end
+  loop
+    v_new_progress := uc.progress + p_amount;
+
+    if v_new_progress >= uc.target_count then
+      update user_challenges
+      set progress = v_new_progress, status = 'completed', completed_at = now()
+      where id = uc.id;
+
+      update users
+      set xp = xp + uc.reward_xp,
+          level = level_for_xp(xp + uc.reward_xp),
+          updated_at = now()
+      where id = p_user_id;
+
+      -- Card #63: pay out the currency reward too, now that it exists.
+      perform credit_currency(p_user_id, uc.reward_currency, 'challenge_completed');
+    else
+      update user_challenges set progress = v_new_progress where id = uc.id;
+    end if;
+  end loop;
+end;
+$$;
+
+revoke all on function increment_challenge_progress(uuid, challenge_action, integer) from public, anon, authenticated;
+grant execute on function increment_challenge_progress(uuid, challenge_action, integer) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: credit_currency, purchase_cosmetic (card #63)
+-- ============================================================
+-- Credits currency to a user (positive delta only — negative deltas are
+-- spends, handled directly inside purchase_cosmetic's own transaction).
+create or replace function credit_currency(p_user_id uuid, p_amount integer, p_reason text)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if p_amount <= 0 then
+    return;
+  end if;
+
+  insert into points_transactions (user_id, delta, reason)
+  values (p_user_id, p_amount, p_reason);
+
+  update users set points_balance = points_balance + p_amount, updated_at = now()
+  where id = p_user_id;
+end;
+$$;
+
+revoke all on function credit_currency(uuid, integer, text) from public, anon, authenticated;
+grant execute on function credit_currency(uuid, integer, text) to service_role;
+
+-- Atomic purchase: checks balance and prior ownership, deducts, records the
+-- ledger entry and the ownership row together so nothing can go out of sync.
+create or replace function purchase_cosmetic(p_user_id uuid, p_cosmetic_id uuid)
+returns user_cosmetics
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_balance integer;
+  v_price integer;
+  v_already_owned boolean;
+  v_result user_cosmetics;
+begin
+  select points_balance into v_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'USER_NOT_FOUND';
+  end if;
+
+  select price_currency into v_price from cosmetics where id = p_cosmetic_id and is_active;
+  if not found then
+    raise exception 'COSMETIC_NOT_FOUND';
+  end if;
+
+  select exists(select 1 from user_cosmetics where user_id = p_user_id and cosmetic_id = p_cosmetic_id) into v_already_owned;
+  if v_already_owned then
+    raise exception 'ALREADY_OWNED';
+  end if;
+
+  if v_balance < v_price then
+    raise exception 'INSUFFICIENT_BALANCE';
+  end if;
+
+  update users set points_balance = points_balance - v_price, updated_at = now() where id = p_user_id;
+
+  insert into points_transactions (user_id, delta, reason, metadata)
+  values (p_user_id, -v_price, 'cosmetic_purchase', jsonb_build_object('cosmetic_id', p_cosmetic_id));
+
+  insert into user_cosmetics (user_id, cosmetic_id) values (p_user_id, p_cosmetic_id)
+  returning * into v_result;
+
+  return v_result;
+end;
+$$;
+
+revoke all on function purchase_cosmetic(uuid, uuid) from public, anon, authenticated;
+grant execute on function purchase_cosmetic(uuid, uuid) to service_role;
+
+-- ============================================================
+-- FUNCTION: submit_match_score_draft (card #58)
+-- ============================================================
+-- Replaces "one team submits, the other accepts/rejects" (exploitable — a
+-- losing team can reject forever with no way to verify what really
+-- happened). Each team submits their own claimed score as a draft; once both
+-- teams' drafts exist and match exactly, the match confirms automatically
+-- (calling accept_match_score for the same atomic ELO/stats/achievements
+-- handling). A mismatch clears both drafts and bumps score_dispute_attempts;
+-- reaching 3 permanently sets score_status to 'disputed' — no ELO, no stats,
+-- for either ranked or friendly matches (only ELO application itself is
+-- ranked-only). Only service_role may call it — team ownership/self checks
+-- live in match.service.ts.
+create or replace function submit_match_score_draft(
+  p_match_id uuid,
+  p_team smallint,
+  p_draft jsonb
+)
+returns matches
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_match matches;
+  v_score1 integer[];
+  v_score2 integer[];
+  v_sets1 int := 0;
+  v_sets2 int := 0;
+  v_winner smallint;
+  i int;
+begin
+  select * into v_match from matches where id = p_match_id for update;
+  if not found then
+    raise exception 'MATCH_NOT_FOUND';
+  end if;
+
+  if v_match.score_status = 'disputed' then
+    raise exception 'MATCH_PERMANENTLY_DISPUTED';
+  end if;
+  if v_match.score_status = 'accepted' then
+    raise exception 'SCORE_ALREADY_ACCEPTED';
+  end if;
+
+  if p_team = 1 then
+    update matches set pending_score_team1 = p_draft, updated_at = now()
+    where id = p_match_id returning * into v_match;
+  else
+    update matches set pending_score_team2 = p_draft, updated_at = now()
+    where id = p_match_id returning * into v_match;
+  end if;
+
+  if v_match.pending_score_team1 is null or v_match.pending_score_team2 is null then
+    return v_match; -- waiting on the other team's draft
+  end if;
+
+  if v_match.pending_score_team1 = v_match.pending_score_team2 then
+    select array(select jsonb_array_elements_text(v_match.pending_score_team1->'score_team1'))::integer[] into v_score1;
+    select array(select jsonb_array_elements_text(v_match.pending_score_team1->'score_team2'))::integer[] into v_score2;
+
+    for i in 1..least(coalesce(array_length(v_score1,1),0), coalesce(array_length(v_score2,1),0)) loop
+      if v_score1[i] > v_score2[i] then v_sets1 := v_sets1 + 1;
+      elsif v_score2[i] > v_score1[i] then v_sets2 := v_sets2 + 1;
+      end if;
+    end loop;
+    v_winner := case when v_sets1 > v_sets2 then 1 else 2 end;
+
+    update matches
+    set score_team1 = v_score1,
+        score_team2 = v_score2,
+        pending_score_team1 = null,
+        pending_score_team2 = null,
+        score_dispute_attempts = 0,
+        updated_at = now()
+    where id = p_match_id;
+
+    return accept_match_score(p_match_id, v_winner, v_match.is_ranked);
+  else
+    update matches
+    set pending_score_team1 = null,
+        pending_score_team2 = null,
+        score_dispute_attempts = score_dispute_attempts + 1,
+        score_status = case when score_dispute_attempts + 1 >= 3 then 'disputed'::score_status else 'pending'::score_status end,
+        updated_at = now()
+    where id = p_match_id
+    returning * into v_match;
+
+    return v_match;
+  end if;
+end;
+$$;
+
+revoke all on function submit_match_score_draft(uuid, smallint, jsonb) from public, anon, authenticated;
+grant execute on function submit_match_score_draft(uuid, smallint, jsonb) to service_role;
 
 -- Card #54 seed data: a deliberately small starter catalog (not the full
 -- gamification system from card #55) that turns on the previously-dormant
@@ -516,6 +947,29 @@ values
   ('first_match', 'Primer partido', 'Jugaste tu primer partido', 'trophy', 10, '{"type": "matches_played", "count": 1}'),
   ('first_win', 'Primera victoria', 'Ganaste tu primer partido', 'medal', 20, '{"type": "wins", "count": 1}'),
   ('five_wins', 'Racha ganadora', 'Ganaste 5 partidos', 'flame', 50, '{"type": "wins", "count": 5}')
+on conflict (code) do nothing;
+
+-- Card #62 seed data: one example per cadence, matching the examples given
+-- when this feature was scoped.
+insert into challenges (code, name, description, cadence, action_type, target_count, reward_xp) values
+  ('daily_play_1', 'Jugá un partido', 'Jugá 1 partido hoy', 'daily', 'play_matches', 1, 20),
+  ('weekly_win_3', 'Ganador de la semana', 'Ganá 3 partidos esta semana', 'weekly', 'win_matches', 3, 100),
+  ('monthly_play_10', 'Jugador constante', 'Jugá 10 partidos este mes', 'monthly', 'play_matches', 10, 300),
+  ('onboarding_first_match', 'Primeros pasos', 'Jugá tu primer partido', 'one_time', 'play_matches', 1, 50)
+on conflict (code) do nothing;
+
+-- Card #63: these two challenges now also pay out some currency, now that
+-- the internal currency exists.
+update challenges set reward_currency = 50 where code = 'weekly_win_3';
+update challenges set reward_currency = 100 where code = 'monthly_play_10';
+
+-- Card #63 seed data: one cosmetic per type, per the examples given when
+-- this was scoped.
+insert into cosmetics (code, name, description, type, image_url, price_currency) values
+  ('palette_classic_red', 'Paleta Roja Clásica', 'Skin roja para tu paleta', 'palette_skin', 'https://placehold.co/200x200/ef4444/ffffff?text=Paleta', 100),
+  ('palette_neon_blue', 'Paleta Azul Neón', 'Skin azul neón para tu paleta', 'palette_skin', 'https://placehold.co/200x200/3b82f6/ffffff?text=Paleta', 150),
+  ('avatar_frame_gold', 'Marco Dorado', 'Marco dorado para tu foto de perfil', 'avatar', 'https://placehold.co/200x200/eab308/ffffff?text=Marco', 200),
+  ('emblem_fire', 'Emblema de Fuego', 'Emblema de fuego junto a tu nombre', 'emblem', 'https://placehold.co/200x200/f97316/ffffff?text=Emblema', 120)
 on conflict (code) do nothing;
 
 -- ============================================================

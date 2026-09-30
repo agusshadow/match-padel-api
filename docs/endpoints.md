@@ -23,6 +23,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 ## users — `/api/v1/users` (`user.router.ts`)
 
+Card #61: `users.xp`/`users.level` (engagement, separate from `elo` which is skill/ranked-only) ride along in every profile response below (`PROFILE_COLUMNS`/`PROFILE_COLUMNS_FULL`) — no separate endpoint. XP is awarded by `award_match_xp` inside `accept_match_score` whenever a result is confirmed (20 XP for playing, 30 for winning, ranked or friendly); level is derived from cumulative XP via `level_for_xp`.
+
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/users/me` | requireAuth | Current user profile | `getMe` (`user.controller.ts`) |
@@ -30,6 +32,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | POST | `/api/v1/users/me/avatar` | requireAuth | Upload a profile picture (multipart field `avatar`, JPEG/PNG/WebP, max 5MB) to the `avatars` Storage bucket and set `avatar_url` | `uploadAvatar` |
 | GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
 | GET | `/api/v1/users/me/elo-history` | requireAuth | Current user's last 50 ELO changes, newest first | `getMyEloHistory` |
+| GET | `/api/v1/users/leaderboard` | none | Card #60: active players ranked by `elo` descending, paginated (`page`, `limit` up to 50), same public column set as a profile lookup. Registered before `/:username` so it isn't swallowed by it | `getLeaderboard` |
 | GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
 
 ## clubs — `/api/v1/clubs` (`club.router.ts`)
@@ -62,16 +65,21 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 `router.use(requireAuth)` (from `auth.ts`): every route requires auth.
 
+Card #57: a match is tied to a real court reservation (`matches.reservation_id`) and its price is split 4 ways. Creating a match or joining one never adds a `match_players` row directly — both return a MercadoPago checkout link for that player's 1/4 share, and the player is only added once the webhook confirms the payment (see `payment.service.ts`). A match auto-cancels with full refunds if its court time passes without reaching 4 confirmed players (`src/jobs/auto-cancel-unfilled-matches.job.ts`).
+
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/matches` | requireAuth | My matches (filters `status`, `type`, `page`; no `meta`) | `getMyMatches` (`match.controller.ts`) |
 | GET | `/api/v1/matches/:id` | requireAuth | Match detail (only participants or the creator, checked in the service) | `getMatch` |
-| POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
-| POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
-| PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
-| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches). Rejects if the caller submitted the score themselves | `acceptScore` |
-| PUT | `/api/v1/matches/:id/score/reject` | requireAuth | Reject the pending score, clearing it so it can be resubmitted. Rejects if the caller submitted the score themselves | `rejectScore` |
-| DELETE | `/api/v1/matches/:id` | requireAuth | Cancel a match | `cancelMatch` |
+| POST | `/api/v1/matches` | requireAuth | Create a match tied to a court/time slot (`type`, `is_ranked`, `court_id`, `start_time`, `end_time`); returns `{ match, payment }` — `payment` is a checkout link for the creator's 1/4 share (201) | `createMatch` |
+| POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL; returns a checkout link for the caller's 1/4 share, not the match itself | `joinByLobbyUrl` |
+| PUT | `/api/v1/matches/:id/score` | requireAuth | Card #58: submit the caller's team's claimed result (`score_team1`, `score_team2`); confirms automatically once both teams' drafts match exactly (applies ELO on ranked matches via `submit_match_score_draft`/`accept_match_score`), clears both drafts and counts a mismatch otherwise, permanently `disputed` after 3 mismatches. Replaces the old submit→accept/reject flow (cards #21/#51) | `submitScore` |
+| DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start; under 24h, credits half each share back as internal currency instead (card #63) | `cancelMatch` |
+| DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h window as `cancelMatch` (real refund ≥24h, half-share currency credit under 24h). If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
+| GET | `/api/v1/matches/:id/chat` | requireAuth | Card #59: chat messages for this match, oldest first (participants only) | `getMessages` (`chats/chat.controller.ts`) |
+| POST | `/api/v1/matches/:id/chat` | requireAuth | Post a chat message (participants only) | `sendMessage` |
+
+Card #59: `match_chats` already existed in the schema (unused until now). Plain REST, polled by the client — Socket.io isn't wired up in this deployment (`src/lib/socket.ts` is a no-op), so there's no push/realtime delivery yet.
 
 ## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)
 
@@ -99,8 +107,10 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
-| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, checks the paid amount against the reservation, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after | `webhook` |
+| POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a plain reservation (`reservation_id`), full price, caller must own it | `createPreference` (`payment.controller.ts`) |
+| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, resolves the exact `payments` row by id (`external_reference`), checks the paid amount against it, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after. Card #63: an `external_reference` prefixed `currency:` is a `currency_purchases` row instead (top-up of the internal currency), handled by a separate branch | `webhook` |
+
+Card #57: `createMatchPaymentPreference(matchId, userId)` (not exposed directly — called from `match.service.ts`) creates a preference for a player's 1/4 share of a match's reservation. Every preference, single-payer or split, is created against a `payments` row inserted first so its id becomes the MercadoPago `external_reference` — the webhook always resolves the specific row by id, never by `reservation_id` alone. `refundPayment(paymentId)` calls MercadoPago's refund API and marks the row `refunded` on success.
 
 ## achievements — `/api/v1/achievements` (`achievements.router.ts`)
 
@@ -110,6 +120,29 @@ Card #54 — reads only; achievements are awarded from `accept_match_score` (see
 |---|---|---|---|---|
 | GET | `/api/v1/achievements` | none | Full achievement catalog | `getCatalog` |
 | GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned | `getMyAchievements` |
+
+## challenges — `/api/v1/challenges` (`challenges.router.ts`)
+
+Card #62 — reads only; assignment/expiration runs from `assign_and_expire_challenges` via `src/jobs/assign-and-expire-challenges.job.ts` (every 15 min), progress increments from `increment_challenge_progress` inside `accept_match_score`. Distinct from `achievements` (fixed one-time unlocks) — challenges rotate by cadence (`daily`/`weekly`/`monthly`/`one_time`) with per-user progress. Only two action types exist today (`play_matches`, `win_matches`); `reach_level`/`complete_profile`-style challenges aren't implemented (documented gap, not built). `reward_currency` is now paid out too (card #63).
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/challenges` | none | Full active challenge catalog | `getCatalog` (`challenges.controller.ts`) |
+| GET | `/api/v1/challenges/me` | requireAuth | Current user's active + completed challenges with progress | `getMyChallenges` |
+
+## marketplace — `/api/v1/marketplace` (`marketplace.router.ts`)
+
+Card #63: cosmetics (palette skins, avatar frames, emblems) bought with an internal currency (`users.points_balance`, ledgered in `points_transactions`, reactivating that previously-dormant table). Currency is earned via challenge rewards (card #62) or bought with real money — one fixed pack for now (100 currency for $500 ARS, `CURRENCY_PACK` in `payment.service.ts`). A late (<24h) match cancellation (card #57) also credits half the share back as currency instead of a real refund.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/marketplace/cosmetics` | none | Full active cosmetics catalog | `getCatalog` (`marketplace.controller.ts`) |
+| GET | `/api/v1/marketplace/cosmetics/me` | requireAuth | Cosmetics the current user owns | `getMyCosmetics` |
+| GET | `/api/v1/marketplace/equipped` | requireAuth | The 3 equip slots (`equipped_palette_cosmetic_id`/`equipped_avatar_cosmetic_id`/`equipped_emblem_cosmetic_id`) | `getMyEquipped` |
+| GET | `/api/v1/marketplace/balance` | requireAuth | Current currency balance | `getMyBalance` |
+| POST | `/api/v1/marketplace/cosmetics/:id/purchase` | requireAuth | Spend currency on an item (atomic via `purchase_cosmetic`); 409 if already owned, 400 if insufficient balance | `purchaseCosmetic` |
+| POST | `/api/v1/marketplace/cosmetics/:id/equip` | requireAuth | Equip an owned item; 403 if not owned | `equipCosmetic` |
+| POST | `/api/v1/marketplace/currency/purchase` | requireAuth | MercadoPago checkout link for the currency pack; confirmed by the same `POST /payments/webhook`, resolved via a `currency:` prefix on `external_reference` since it isn't reservation-shaped | `purchaseCurrency` |
 
 ## Unmounted routers
 
