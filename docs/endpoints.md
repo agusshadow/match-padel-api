@@ -73,6 +73,10 @@ Card #57: a match is tied to a real court reservation (`matches.reservation_id`)
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Card #58: submit the caller's team's claimed result (`score_team1`, `score_team2`); confirms automatically once both teams' drafts match exactly (applies ELO on ranked matches via `submit_match_score_draft`/`accept_match_score`), clears both drafts and counts a mismatch otherwise, permanently `disputed` after 3 mismatches. Replaces the old submit→accept/reject flow (cards #21/#51) | `submitScore` |
 | DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start, refunds nobody otherwise | `cancelMatch` |
 | DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h refund window as `cancelMatch`. If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
+| GET | `/api/v1/matches/:id/chat` | requireAuth | Card #59: chat messages for this match, oldest first (participants only) | `getMessages` (`chats/chat.controller.ts`) |
+| POST | `/api/v1/matches/:id/chat` | requireAuth | Post a chat message (participants only) | `sendMessage` |
+
+Card #59: `match_chats` already existed in the schema (unused until now). Plain REST, polled by the client — Socket.io isn't wired up in this deployment (`src/lib/socket.ts` is a no-op), so there's no push/realtime delivery yet.
 
 ## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)
 

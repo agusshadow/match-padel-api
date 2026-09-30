@@ -9,6 +9,7 @@ import {
   cancelMatch,
   leaveMatch,
 } from './match.controller'
+import chatRouter from '../chats/chat.router'
 
 const router = Router()
 
@@ -29,5 +30,7 @@ router.put('/:id/score', submitScore)
 router.delete('/:id', cancelMatch)
 // DELETE /api/v1/matches/:id/leave — leave a match you joined
 router.delete('/:id/leave', leaveMatch)
+// GET/POST /api/v1/matches/:id/chat — card #59, chat scoped to this match's players
+router.use('/:id/chat', chatRouter)
 
 export default router
