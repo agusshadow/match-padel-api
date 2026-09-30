@@ -147,7 +147,7 @@ This document describes the **target architecture**. The existing code does not 
 | Input validation | Zod in every controller | `users` controller reads `req.body` without a schema; `matches` now validates `createMatch`/`submitScore` (card #57) but the rest of its handlers don't yet; `auth`, `reservations` and (inline) `tournaments` validate |
 | Webhook safety | Signature check + idempotency via `mp_webhook_events` | Met via `payment.service.ts` (`verifyWebhookSignature`, amount check, idempotency via the existing `payments.mp_event_id` column instead of a separate table — no `mp_webhook_events` table exists) |
 | Domain boundaries (rule 5) | A domain's service imports only the other domain's repository, never its service | `payments` has no `payment.repository.ts` (documented above), so `match.service.ts` (card #57) imports functions straight from `payment.service.ts` for match payment preferences/refunds — the alternative (duplicating MercadoPago preference/refund logic inside the matches domain) was judged worse. `payment.service.ts` itself imports `matchRepository` (a real repository) to insert confirmed players and check the 4-player count on webhook approval, which does follow the rule |
-| ELO | Worker computing ELO | `match.service.ts` applies a fixed ±15 on accepted ranked scores, non-transactional; there are no scheduled jobs |
+| ELO | Worker computing ELO | Fixed ±15 delta (not a true ELO formula weighted by rating difference), applied atomically inside `submit_match_score_draft`/`accept_match_score` (card #58/#21) when both teams' independently-submitted score drafts agree on a ranked match; no scheduled worker |
 
 ## Agent workflow
 

@@ -70,9 +70,7 @@ Card #57: a match is tied to a real court reservation (`matches.reservation_id`)
 | GET | `/api/v1/matches/:id` | requireAuth | Match detail (only participants or the creator, checked in the service) | `getMatch` |
 | POST | `/api/v1/matches` | requireAuth | Create a match tied to a court/time slot (`type`, `is_ranked`, `court_id`, `start_time`, `end_time`); returns `{ match, payment }` — `payment` is a checkout link for the creator's 1/4 share (201) | `createMatch` |
 | POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL; returns a checkout link for the caller's 1/4 share, not the match itself | `joinByLobbyUrl` |
-| PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
-| PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches). Rejects if the caller submitted the score themselves | `acceptScore` |
-| PUT | `/api/v1/matches/:id/score/reject` | requireAuth | Reject the pending score, clearing it so it can be resubmitted. Rejects if the caller submitted the score themselves | `rejectScore` |
+| PUT | `/api/v1/matches/:id/score` | requireAuth | Card #58: submit the caller's team's claimed result (`score_team1`, `score_team2`); confirms automatically once both teams' drafts match exactly (applies ELO on ranked matches via `submit_match_score_draft`/`accept_match_score`), clears both drafts and counts a mismatch otherwise, permanently `disputed` after 3 mismatches. Replaces the old submit→accept/reject flow (cards #21/#51) | `submitScore` |
 | DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start, refunds nobody otherwise | `cancelMatch` |
 | DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h refund window as `cancelMatch`. If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
 

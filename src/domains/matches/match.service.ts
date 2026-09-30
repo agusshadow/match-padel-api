@@ -121,6 +121,12 @@ export const matchService = {
     return createMatchPaymentPreference(match.id, userId)
   },
 
+  // Card #58: replaces the old submit → accept/reject flow. Each team submits
+  // its own claimed score independently; the DB function
+  // (submit_match_score_draft) confirms it automatically once both teams'
+  // drafts agree exactly, or clears both and counts a mismatch otherwise.
+  // Ranked and friendly matches go through the exact same flow — the only
+  // difference is whether the confirmed result touches ELO (is_ranked).
   async submitScore(matchId: string, score: ScoreData, userId: string) {
     const match = await matchRepository.findById(matchId)
 
@@ -132,98 +138,49 @@ export const matchService = {
       throw new AppError('Match is cancelled', 400, 'MATCH_CANCELLED')
     }
 
-    if (match.score_status === 'accepted') {
-      throw new AppError('Score already accepted', 400, 'SCORE_ACCEPTED')
-    }
-
     const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
     if (!userTeam) {
       throw new ForbiddenError('Not a player in this match')
     }
 
-    const result = await matchRepository.submitScore(matchId, score, userId)
+    let result
+    try {
+      result = await matchRepository.submitScoreDraft(matchId, userTeam, score)
+    } catch (err) {
+      const message = (err as Error).message ?? ''
+      if (message.includes('MATCH_PERMANENTLY_DISPUTED')) {
+        throw new AppError(
+          'This match is permanently disputed after repeated mismatched results',
+          400,
+          'MATCH_PERMANENTLY_DISPUTED',
+        )
+      }
+      if (message.includes('SCORE_ALREADY_ACCEPTED')) {
+        throw new AppError('Score already accepted', 400, 'SCORE_ACCEPTED')
+      }
+      throw err
+    }
 
-    // Notify other players that a score was submitted
     const players = await matchRepository.getPlayers(matchId)
     const otherPlayerIds = players
       .filter((p: any) => p.user_id !== userId)
       .map((p: any) => p.user_id)
-    if (otherPlayerIds.length > 0) {
-      notifications.scoreSubmitted(otherPlayerIds, matchId).catch((err) => logger.error(err, 'Failed to send scoreSubmitted notification'))
+
+    if (result.score_status === 'accepted') {
+      const playerIds = players.map((p: any) => p.user_id)
+      notifications.scoreAccepted(playerIds, matchId, 0).catch((err) =>
+        logger.error(err, 'Failed to send scoreAccepted notification'),
+      )
+    } else if (otherPlayerIds.length > 0) {
+      // Covers both "waiting on the other team's draft" and "drafts didn't
+      // match, try again" — the response body's score_status/dispute count
+      // already tells the client which one it is.
+      notifications.scoreSubmitted(otherPlayerIds, matchId).catch((err) =>
+        logger.error(err, 'Failed to send scoreSubmitted notification'),
+      )
     }
 
     return result
-  },
-
-  async acceptScore(matchId: string, userId: string) {
-    const match = await matchRepository.findById(matchId)
-
-    if (!match) {
-      throw new NotFoundError('Match')
-    }
-
-    if (match.score_status !== 'pending') {
-      throw new AppError('No pending score to accept', 400, 'NO_PENDING_SCORE')
-    }
-
-    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
-    if (!userTeam) {
-      throw new ForbiddenError('Not a player in this match')
-    }
-
-    if (match.score_submitted_by === userId) {
-      throw new ForbiddenError('You cannot accept the score you submitted yourself')
-    }
-
-    // Determine winner by comparing sets won
-    const score1 = (match.score_team1 as number[]) ?? []
-    const score2 = (match.score_team2 as number[]) ?? []
-
-    let sets1 = 0
-    let sets2 = 0
-    for (let i = 0; i < Math.min(score1.length, score2.length); i++) {
-      if (score1[i] > score2[i]) sets1++
-      else if (score2[i] > score1[i]) sets2++
-    }
-
-    const winnerTeam = sets1 > sets2 ? 1 : 2
-
-    // Card #21 (R12): match status + all 4 players' ELO (when ranked) commit
-    // atomically in a single DB function call — see accept_match_score.
-    const updatedMatch = await matchRepository.acceptScore(matchId, winnerTeam, match.is_ranked)
-
-    // Notify all players that the score was accepted
-    const players = await matchRepository.getPlayers(matchId)
-    const playerIds = players.map((p: any) => p.user_id)
-    // ELO change differs per player; send generic notification
-    notifications.scoreAccepted(playerIds, matchId, 0).catch((err) => logger.error(err, 'Failed to send scoreAccepted notification'))
-
-    return updatedMatch
-  },
-
-  // Card #51: the player on the other team rejects a score loaded wrong (or
-  // in bad faith) instead of it either being force-accepted or stuck forever.
-  async rejectScore(matchId: string, userId: string) {
-    const match = await matchRepository.findById(matchId)
-
-    if (!match) {
-      throw new NotFoundError('Match')
-    }
-
-    if (match.score_status !== 'pending') {
-      throw new AppError('No pending score to reject', 400, 'NO_PENDING_SCORE')
-    }
-
-    const userTeam = await matchRepository.getPlayerTeam(matchId, userId)
-    if (!userTeam) {
-      throw new ForbiddenError('Not a player in this match')
-    }
-
-    if (match.score_submitted_by === userId) {
-      throw new ForbiddenError('You cannot reject the score you submitted yourself')
-    }
-
-    return matchRepository.rejectScore(matchId)
   },
 
   // Card #57: the creator cancelling the whole match now also releases the
