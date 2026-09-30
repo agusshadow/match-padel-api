@@ -20,6 +20,9 @@ create type reservation_status as enum ('pending', 'confirmed', 'cancelled', 'co
 create type match_type as enum ('friendly', 'ranked', 'tournament');
 create type match_status as enum ('waiting', 'in_progress', 'completed', 'cancelled');
 create type score_status as enum ('pending', 'accepted', 'disputed');
+create type challenge_cadence as enum ('daily', 'weekly', 'monthly', 'one_time'); -- card #62
+create type challenge_action as enum ('play_matches', 'win_matches'); -- card #62
+create type user_challenge_status as enum ('active', 'completed', 'expired'); -- card #62
 create type tournament_format as enum ('round_robin', 'single_elimination', 'double_elimination', 'americano');
 create type tournament_status as enum ('draft', 'open', 'in_progress', 'completed', 'cancelled');
 create type payment_status as enum ('pending', 'approved', 'rejected', 'cancelled', 'refunded');
@@ -254,6 +257,38 @@ create table public.user_achievements (
   unique(user_id, achievement_id)
 );
 
+-- challenges (card #62): rotating catalog, distinct from the fixed one-time
+-- achievements above. Deliberately minimal — same "not the full
+-- condition-engine card #55 would need" call as achievements: only two
+-- action types for now.
+create table public.challenges (
+  id              uuid primary key default uuid_generate_v4(),
+  code            text unique not null,
+  name            text not null,
+  description     text not null,
+  cadence         challenge_cadence not null,
+  action_type     challenge_action not null,
+  target_count    integer not null check (target_count > 0),
+  reward_xp       integer not null default 0,
+  reward_currency integer not null default 0, -- card #63: paid out once the internal currency exists
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- user_challenges: per-user, per-period progress
+create table public.user_challenges (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references users(id),
+  challenge_id  uuid not null references challenges(id),
+  period_start  timestamptz not null,
+  period_end    timestamptz not null,
+  progress      integer not null default 0,
+  status        user_challenge_status not null default 'active',
+  completed_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  unique (user_id, challenge_id, period_start)
+);
+
 -- points_transactions: points store
 create table public.points_transactions (
   id          uuid primary key default uuid_generate_v4(),
@@ -304,6 +339,7 @@ create index on elo_history(user_id, created_at desc);
 create index on notifications(user_id, is_read, created_at desc);
 create index on payments(mp_event_id);
 create index on users(elo desc) where is_active = true;
+create index on user_challenges(user_id, status); -- card #62
 
 -- ============================================================
 -- SUPABASE REALTIME (court_reservations only)
@@ -334,6 +370,8 @@ alter table user_achievements enable row level security;
 alter table points_transactions enable row level security;
 alter table notifications enable row level security;
 alter table user_stats enable row level security;
+alter table challenges enable row level security; -- card #62
+alter table user_challenges enable row level security; -- card #62
 
 -- Basic access policies from the frontend (anon key)
 
@@ -394,6 +432,12 @@ create policy "user_achievements_public_read" on user_achievements for select us
 
 -- elo_history: public
 create policy "elo_history_public_read" on elo_history for select using (true);
+
+-- challenges: public catalog (card #62)
+create policy "challenges_public_read" on challenges for select using (is_active = true);
+
+-- user_challenges: own progress only
+create policy "user_challenges_own_read" on user_challenges for select using (user_id = auth.uid());
 
 -- notifications: owner only
 create policy "notifications_own_read" on notifications for select using (auth.uid() = user_id);
@@ -504,6 +548,12 @@ begin
       select mp.user_id, id from achievements where code = 'five_wins'
       on conflict (user_id, achievement_id) do nothing;
     end if;
+
+    -- Card #62: challenge progress, independent of ranked/friendly.
+    perform increment_challenge_progress(mp.user_id, 'play_matches', 1);
+    if mp.team = p_winner_team then
+      perform increment_challenge_progress(mp.user_id, 'win_matches', 1);
+    end if;
   end loop;
 
   -- Card #61: XP/level for playing, independent of whether the match was ranked.
@@ -566,6 +616,93 @@ $$;
 
 revoke all on function award_match_xp(uuid, smallint) from public, anon, authenticated;
 grant execute on function award_match_xp(uuid, smallint) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: assign_and_expire_challenges, increment_challenge_progress (card #62)
+-- ============================================================
+-- Assigns each active user a fresh row per active challenge for the current
+-- period (idempotent — the unique constraint on user_challenges makes
+-- ON CONFLICT DO NOTHING safe to call repeatedly), and expires rows whose
+-- period has ended. Called from a scheduled job, same pattern as
+-- expire-reservations/auto-cancel-unfilled-matches.
+create or replace function assign_and_expire_challenges()
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  update user_challenges
+  set status = 'expired'
+  where status = 'active' and period_end <= now();
+
+  insert into user_challenges (user_id, challenge_id, period_start, period_end)
+  select
+    u.id,
+    c.id,
+    case c.cadence
+      when 'daily' then date_trunc('day', now())
+      when 'weekly' then date_trunc('week', now())
+      when 'monthly' then date_trunc('month', now())
+      when 'one_time' then 'epoch'::timestamptz
+    end as period_start,
+    case c.cadence
+      when 'daily' then date_trunc('day', now()) + interval '1 day'
+      when 'weekly' then date_trunc('week', now()) + interval '7 days'
+      when 'monthly' then date_trunc('month', now()) + interval '1 month'
+      when 'one_time' then 'infinity'::timestamptz
+    end as period_end
+  from users u
+  cross join challenges c
+  where u.is_active and c.is_active
+  on conflict (user_id, challenge_id, period_start) do nothing;
+end;
+$$;
+
+revoke all on function assign_and_expire_challenges() from public, anon, authenticated;
+grant execute on function assign_and_expire_challenges() to service_role;
+
+-- Increments progress on the caller's active challenges matching p_action,
+-- awarding reward_xp (and leveling up, via level_for_xp from card #61) the
+-- moment a challenge's target is reached.
+create or replace function increment_challenge_progress(p_user_id uuid, p_action challenge_action, p_amount integer default 1)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  uc record;
+  v_new_progress integer;
+begin
+  for uc in
+    select ucg.id, ucg.progress, c.target_count, c.reward_xp
+    from user_challenges ucg
+    join challenges c on c.id = ucg.challenge_id
+    where ucg.user_id = p_user_id
+      and ucg.status = 'active'
+      and c.action_type = p_action
+      and now() >= ucg.period_start and now() < ucg.period_end
+  loop
+    v_new_progress := uc.progress + p_amount;
+
+    if v_new_progress >= uc.target_count then
+      update user_challenges
+      set progress = v_new_progress, status = 'completed', completed_at = now()
+      where id = uc.id;
+
+      update users
+      set xp = xp + uc.reward_xp,
+          level = level_for_xp(xp + uc.reward_xp),
+          updated_at = now()
+      where id = p_user_id;
+    else
+      update user_challenges set progress = v_new_progress where id = uc.id;
+    end if;
+  end loop;
+end;
+$$;
+
+revoke all on function increment_challenge_progress(uuid, challenge_action, integer) from public, anon, authenticated;
+grant execute on function increment_challenge_progress(uuid, challenge_action, integer) to service_role;
 
 -- ============================================================
 -- FUNCTION: submit_match_score_draft (card #58)
@@ -669,6 +806,15 @@ values
   ('first_match', 'Primer partido', 'Jugaste tu primer partido', 'trophy', 10, '{"type": "matches_played", "count": 1}'),
   ('first_win', 'Primera victoria', 'Ganaste tu primer partido', 'medal', 20, '{"type": "wins", "count": 1}'),
   ('five_wins', 'Racha ganadora', 'Ganaste 5 partidos', 'flame', 50, '{"type": "wins", "count": 5}')
+on conflict (code) do nothing;
+
+-- Card #62 seed data: one example per cadence, matching the examples given
+-- when this feature was scoped.
+insert into challenges (code, name, description, cadence, action_type, target_count, reward_xp) values
+  ('daily_play_1', 'Jugá un partido', 'Jugá 1 partido hoy', 'daily', 'play_matches', 1, 20),
+  ('weekly_win_3', 'Ganador de la semana', 'Ganá 3 partidos esta semana', 'weekly', 'win_matches', 3, 100),
+  ('monthly_play_10', 'Jugador constante', 'Jugá 10 partidos este mes', 'monthly', 'play_matches', 10, 300),
+  ('onboarding_first_match', 'Primeros pasos', 'Jugá tu primer partido', 'one_time', 'play_matches', 1, 50)
 on conflict (code) do nothing;
 
 -- ============================================================

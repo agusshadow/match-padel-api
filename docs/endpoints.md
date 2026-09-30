@@ -121,6 +121,15 @@ Card #54 — reads only; achievements are awarded from `accept_match_score` (see
 | GET | `/api/v1/achievements` | none | Full achievement catalog | `getCatalog` |
 | GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned | `getMyAchievements` |
 
+## challenges — `/api/v1/challenges` (`challenges.router.ts`)
+
+Card #62 — reads only; assignment/expiration runs from `assign_and_expire_challenges` via `src/jobs/assign-and-expire-challenges.job.ts` (every 15 min), progress increments from `increment_challenge_progress` inside `accept_match_score`. Distinct from `achievements` (fixed one-time unlocks) — challenges rotate by cadence (`daily`/`weekly`/`monthly`/`one_time`) with per-user progress. Only two action types exist today (`play_matches`, `win_matches`); `reach_level`/`complete_profile`-style challenges aren't implemented (documented gap, not built). `reward_currency` on the catalog exists but isn't paid out yet — waits on card #63's internal currency.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/challenges` | none | Full active challenge catalog | `getCatalog` (`challenges.controller.ts`) |
+| GET | `/api/v1/challenges/me` | requireAuth | Current user's active + completed challenges with progress | `getMyChallenges` |
+
 ## Unmounted routers
 
 Not imported by `src/index.ts`, so none of their routes exist:
