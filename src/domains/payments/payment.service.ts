@@ -1,9 +1,12 @@
+import crypto from 'crypto'
 import { supabase } from '../../lib/supabase'
 import { preference } from '../../lib/mercadopago'
+import { logger } from '../../lib/logger'
 import { NotFoundError, ForbiddenError, AppError } from '../../types/errors'
 
 const APP_URL = process.env.APP_URL ?? 'https://match-padel-web.vercel.app'
 const API_URL = process.env.API_URL ?? 'https://match-padel-api.railway.app'
+const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET ?? ''
 
 export async function createPaymentPreference(
   reservationId: string,
@@ -69,13 +72,62 @@ export async function createPaymentPreference(
   }
 }
 
-export async function handleWebhook(body: Record<string, unknown>) {
+export class WebhookSignatureError extends AppError {
+  constructor(message = 'Invalid webhook signature') {
+    super(message, 401, 'INVALID_SIGNATURE')
+  }
+}
+
+/**
+ * Verifies the `x-signature` header per MercadoPago's HMAC-SHA256 scheme.
+ * Manifest format: `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
+ * Ref: https://www.mercadopago.com.ar/developers/es/docs/your-integrations/notifications/webhooks
+ */
+export function verifyWebhookSignature(
+  xSignature: string | undefined,
+  xRequestId: string | undefined,
+  dataId: string | undefined,
+): boolean {
+  if (!MP_WEBHOOK_SECRET) {
+    // No secret configured yet (e.g. webhook not set up in the MP panel) — fail closed.
+    logger.error({}, 'MP_WEBHOOK_SECRET is not configured; rejecting webhook')
+    return false
+  }
+  if (!xSignature || !dataId) return false
+
+  const parts = Object.fromEntries(
+    xSignature.split(',').map((part) => {
+      const [key, value] = part.split('=')
+      return [key?.trim(), value?.trim()]
+    }),
+  )
+  const ts = parts.ts
+  const hash = parts.v1
+  if (!ts || !hash) return false
+
+  const manifest = `id:${dataId.toLowerCase()};request-id:${xRequestId ?? ''};ts:${ts};`
+  const expectedHash = crypto
+    .createHmac('sha256', MP_WEBHOOK_SECRET)
+    .update(manifest)
+    .digest('hex')
+
+  if (expectedHash.length !== hash.length) return false
+  return crypto.timingSafeEqual(Buffer.from(expectedHash), Buffer.from(hash))
+}
+
+export async function handleWebhook(
+  body: Record<string, unknown>,
+  dataIdFromQuery: string | undefined,
+) {
   // Only handle payment notifications
   if (body.type !== 'payment') return { handled: false }
 
   const data = body.data as Record<string, unknown> | undefined
-  const paymentId = data?.id ? String(data.id) : ''
+  const paymentId = data?.id ? String(data.id) : dataIdFromQuery ? String(dataIdFromQuery) : ''
   if (!paymentId) return { handled: false }
+
+  // Notification-level id, used for idempotency (distinct from the payment id above)
+  const eventId = body.id !== undefined ? String(body.id) : paymentId
 
   // Get payment details from MP
   const mpResponse = await fetch(
@@ -87,15 +139,51 @@ export async function handleWebhook(body: Record<string, unknown>) {
     },
   )
 
-  if (!mpResponse.ok) return { handled: false }
+  if (!mpResponse.ok) {
+    logger.error(
+      { paymentId, status: mpResponse.status },
+      'Failed to fetch payment details from MercadoPago',
+    )
+    return { handled: false }
+  }
 
   const mpPayment = (await mpResponse.json()) as Record<string, unknown>
   const reservationId = mpPayment.external_reference as string
   const mpStatus = mpPayment.status as string
+  const mpAmount = Number(mpPayment.transaction_amount)
 
   if (!reservationId) return { handled: false }
 
-  // Update payment record
+  // Idempotency: skip if this notification was already processed for this reservation.
+  const { data: existingPayment } = await supabase
+    .from('payments')
+    .select('id, mp_event_id, reservation_id, amount')
+    .eq('reservation_id', reservationId)
+    .maybeSingle()
+
+  if (!existingPayment) {
+    logger.error({ reservationId, paymentId }, 'Webhook received for unknown reservation')
+    return { handled: false }
+  }
+
+  if (existingPayment.mp_event_id === eventId) {
+    return { handled: true, status: mpStatus, deduped: true }
+  }
+
+  // Amount check: the paid amount must match what the reservation actually costs.
+  const expectedAmount = Number(existingPayment.amount)
+  if (Number.isFinite(expectedAmount) && Math.abs(mpAmount - expectedAmount) > 0.01) {
+    logger.error(
+      { reservationId, paymentId, mpAmount, expectedAmount },
+      'MercadoPago webhook amount mismatch — refusing to confirm reservation',
+    )
+    await supabase
+      .from('payments')
+      .update({ mp_payment_id: paymentId, mp_event_id: eventId, metadata: { amount_mismatch: true, mpAmount, expectedAmount } })
+      .eq('reservation_id', reservationId)
+    return { handled: false, reason: 'amount_mismatch' }
+  }
+
   const paymentStatus =
     mpStatus === 'approved' ? 'approved' :
     mpStatus === 'rejected' ? 'rejected' :
@@ -104,7 +192,7 @@ export async function handleWebhook(body: Record<string, unknown>) {
 
   await supabase
     .from('payments')
-    .update({ status: paymentStatus, mp_payment_id: paymentId })
+    .update({ status: paymentStatus, mp_payment_id: paymentId, mp_event_id: eventId })
     .eq('reservation_id', reservationId)
     .eq('status', 'pending')
 

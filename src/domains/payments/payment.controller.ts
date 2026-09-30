@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { AuthenticatedRequest } from '../../middleware/auth'
 import { UnauthorizedError } from '../../types/errors'
-import { createPaymentPreference, handleWebhook } from './payment.service'
+import { logger } from '../../lib/logger'
+import { createPaymentPreference, handleWebhook, verifyWebhookSignature } from './payment.service'
 
 function getUserId(req: Request): string {
   const userId = (req as AuthenticatedRequest).userId
@@ -33,14 +34,29 @@ export async function createPreference(
 export async function webhook(
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> {
-  try {
-    // Respond 200 immediately so MP doesn't retry
-    res.sendStatus(200)
+  const dataId = typeof req.query['data.id'] === 'string' ? req.query['data.id'] : undefined
+  const isValid = verifyWebhookSignature(
+    req.headers['x-signature'] as string | undefined,
+    req.headers['x-request-id'] as string | undefined,
+    dataId,
+  )
 
-    await handleWebhook(req.body as Record<string, unknown>)
+  if (!isValid) {
+    logger.warn({ dataId }, 'Rejected MercadoPago webhook: invalid or missing signature')
+    res.sendStatus(401)
+    return
+  }
+
+  // Respond 200 immediately so MP doesn't retry; the actual processing happens after.
+  res.sendStatus(200)
+
+  try {
+    await handleWebhook(req.body as Record<string, unknown>, dataId)
   } catch (err) {
-    next(err)
+    // Headers are already sent — this can't reach the error middleware, so log it directly
+    // instead of letting it disappear silently.
+    logger.error({ err, body: req.body }, 'Unhandled error processing MercadoPago webhook')
   }
 }
