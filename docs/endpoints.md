@@ -23,6 +23,8 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 ## users — `/api/v1/users` (`user.router.ts`)
 
+Card #61: `users.xp`/`users.level` (engagement, separate from `elo` which is skill/ranked-only) ride along in every profile response below (`PROFILE_COLUMNS`/`PROFILE_COLUMNS_FULL`) — no separate endpoint. XP is awarded by `award_match_xp` inside `accept_match_score` whenever a result is confirmed (20 XP for playing, 30 for winning, ranked or friendly); level is derived from cumulative XP via `level_for_xp`.
+
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/users/me` | requireAuth | Current user profile | `getMe` (`user.controller.ts`) |

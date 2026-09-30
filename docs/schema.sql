@@ -42,7 +42,9 @@ create table public.users (
                   ) stored,
   avatar_url      text,
   phone           text,
-  elo             integer not null default 1000,
+  elo             integer not null default 1000,          -- skill, ranked matches only
+  xp              integer not null default 0,              -- card #61: engagement, separate from elo
+  level           integer not null default 1,              -- derived from xp via level_for_xp()
   role            user_role not null default 'player',
   skill_level     skill_level,
   preferred_hand  preferred_hand,
@@ -504,12 +506,66 @@ begin
     end if;
   end loop;
 
+  -- Card #61: XP/level for playing, independent of whether the match was ranked.
+  perform award_match_xp(p_match_id, p_winner_team);
+
   return v_match;
 end;
 $$;
 
 revoke all on function accept_match_score(uuid, smallint, boolean) from public, anon, authenticated;
 grant execute on function accept_match_score(uuid, smallint, boolean) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: level_for_xp, award_match_xp (card #61)
+-- ============================================================
+-- Level/XP is separate from ELO: ELO reflects skill (ranked match outcomes
+-- only), level reflects app engagement and rises with XP from playing any
+-- match (later also from completing challenges, card #62). Curve: level L
+-- requires cumulative XP of 50*L*(L-1) — level 1->2 needs 100 XP, 2->3 needs
+-- 200 more, 3->4 needs 300 more, etc. Adjustable later; only the mechanism
+-- matters now.
+create or replace function level_for_xp(p_xp integer)
+returns integer
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select greatest(1, floor((1 + sqrt(1 + 0.08 * p_xp::numeric)) / 2)::integer);
+$$;
+
+revoke all on function level_for_xp(integer) from public, anon, authenticated;
+grant execute on function level_for_xp(integer) to service_role;
+
+-- Awards participation XP to all 4 players of a match (20 XP) plus a bonus
+-- to the winning team (+10 XP, i.e. 30 total) whenever a result is
+-- confirmed. Called from inside accept_match_score so it commits atomically
+-- with the ELO/stats/achievements it already handles.
+create or replace function award_match_xp(p_match_id uuid, p_winner_team smallint)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  mp record;
+  v_gain integer;
+  v_new_xp integer;
+begin
+  for mp in select user_id, team from match_players where match_id = p_match_id loop
+    v_gain := case when mp.team = p_winner_team then 30 else 20 end;
+
+    update users
+    set xp = xp + v_gain,
+        level = level_for_xp(xp + v_gain),
+        updated_at = now()
+    where id = mp.user_id
+    returning xp into v_new_xp;
+  end loop;
+end;
+$$;
+
+revoke all on function award_match_xp(uuid, smallint) from public, anon, authenticated;
+grant execute on function award_match_xp(uuid, smallint) to service_role;
 
 -- ============================================================
 -- FUNCTION: submit_match_score_draft (card #58)
