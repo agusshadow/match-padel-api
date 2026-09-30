@@ -30,6 +30,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | POST | `/api/v1/users/me/avatar` | requireAuth | Upload a profile picture (multipart field `avatar`, JPEG/PNG/WebP, max 5MB) to the `avatars` Storage bucket and set `avatar_url` | `uploadAvatar` |
 | GET | `/api/v1/users/me/stats` | requireAuth | Current user stats | `getMyStats` |
 | GET | `/api/v1/users/me/elo-history` | requireAuth | Current user's last 50 ELO changes, newest first | `getMyEloHistory` |
+| GET | `/api/v1/users/leaderboard` | none | Card #60: active players ranked by `elo` descending, paginated (`page`, `limit` up to 50), same public column set as a profile lookup. Registered before `/:username` so it isn't swallowed by it | `getLeaderboard` |
 | GET | `/api/v1/users/:username` | none | Public profile by username | `getUserByUsername` |
 
 ## clubs — `/api/v1/clubs` (`club.router.ts`)
