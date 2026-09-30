@@ -23,6 +23,7 @@ create type score_status as enum ('pending', 'accepted', 'disputed');
 create type challenge_cadence as enum ('daily', 'weekly', 'monthly', 'one_time'); -- card #62
 create type challenge_action as enum ('play_matches', 'win_matches'); -- card #62
 create type user_challenge_status as enum ('active', 'completed', 'expired'); -- card #62
+create type cosmetic_type as enum ('palette_skin', 'avatar', 'emblem'); -- card #63
 create type tournament_format as enum ('round_robin', 'single_elimination', 'double_elimination', 'americano');
 create type tournament_status as enum ('draft', 'open', 'in_progress', 'completed', 'cancelled');
 create type payment_status as enum ('pending', 'approved', 'rejected', 'cancelled', 'refunded');
@@ -48,6 +49,10 @@ create table public.users (
   elo             integer not null default 1000,          -- skill, ranked matches only
   xp              integer not null default 0,              -- card #61: engagement, separate from elo
   level           integer not null default 1,              -- derived from xp via level_for_xp()
+  points_balance  integer not null default 0,              -- card #63: internal currency balance
+  equipped_palette_cosmetic_id uuid,                        -- card #63: FK added after cosmetics table below
+  equipped_avatar_cosmetic_id  uuid,
+  equipped_emblem_cosmetic_id  uuid,
   role            user_role not null default 'player',
   skill_level     skill_level,
   preferred_hand  preferred_hand,
@@ -289,6 +294,52 @@ create table public.user_challenges (
   unique (user_id, challenge_id, period_start)
 );
 
+-- cosmetics (card #63): marketplace catalog — palette skins, avatar frames,
+-- emblems, bought with the internal currency below.
+create table public.cosmetics (
+  id              uuid primary key default uuid_generate_v4(),
+  code            text unique not null,
+  name            text not null,
+  description     text not null,
+  type            cosmetic_type not null,
+  image_url       text not null,
+  price_currency  integer not null check (price_currency >= 0),
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- user_cosmetics: ownership
+create table public.user_cosmetics (
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references users(id),
+  cosmetic_id   uuid not null references cosmetics(id),
+  acquired_at   timestamptz not null default now(),
+  unique (user_id, cosmetic_id)
+);
+
+-- users.equipped_*_cosmetic_id FKs — added here, after cosmetics exists.
+alter table public.users
+  add constraint users_equipped_palette_fkey foreign key (equipped_palette_cosmetic_id) references cosmetics(id),
+  add constraint users_equipped_avatar_fkey foreign key (equipped_avatar_cosmetic_id) references cosmetics(id),
+  add constraint users_equipped_emblem_fkey foreign key (equipped_emblem_cosmetic_id) references cosmetics(id);
+
+-- currency_purchases (card #63): real-money top-ups of the internal currency.
+-- Kept separate from `payments` (shaped around court_reservations) rather
+-- than overloading that table's semantics — the webhook tells the two apart
+-- by a 'currency:' prefix on external_reference (see payment.service.ts).
+create table public.currency_purchases (
+  id              uuid primary key default uuid_generate_v4(),
+  user_id         uuid not null references users(id),
+  amount_ars      numeric(10,2) not null,
+  currency_amount integer not null,
+  status          payment_status not null default 'pending',
+  mp_payment_id   text unique,
+  mp_event_id     text unique,
+  metadata        jsonb not null default '{}',
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
 -- points_transactions: points store
 create table public.points_transactions (
   id          uuid primary key default uuid_generate_v4(),
@@ -340,6 +391,8 @@ create index on notifications(user_id, is_read, created_at desc);
 create index on payments(mp_event_id);
 create index on users(elo desc) where is_active = true;
 create index on user_challenges(user_id, status); -- card #62
+create index on user_cosmetics(user_id); -- card #63
+create index on currency_purchases(user_id); -- card #63
 
 -- ============================================================
 -- SUPABASE REALTIME (court_reservations only)
@@ -372,6 +425,9 @@ alter table notifications enable row level security;
 alter table user_stats enable row level security;
 alter table challenges enable row level security; -- card #62
 alter table user_challenges enable row level security; -- card #62
+alter table cosmetics enable row level security; -- card #63
+alter table user_cosmetics enable row level security; -- card #63
+alter table currency_purchases enable row level security; -- card #63
 
 -- Basic access policies from the frontend (anon key)
 
@@ -438,6 +494,15 @@ create policy "challenges_public_read" on challenges for select using (is_active
 
 -- user_challenges: own progress only
 create policy "user_challenges_own_read" on user_challenges for select using (user_id = auth.uid());
+
+-- cosmetics: public catalog (card #63)
+create policy "cosmetics_public_read" on cosmetics for select using (is_active = true);
+
+-- user_cosmetics: own ownership rows only
+create policy "user_cosmetics_own_read" on user_cosmetics for select using (user_id = auth.uid());
+
+-- currency_purchases: own purchases only
+create policy "currency_purchases_own_read" on currency_purchases for select using (user_id = auth.uid());
 
 -- notifications: owner only
 create policy "notifications_own_read" on notifications for select using (auth.uid() = user_id);
@@ -674,7 +739,7 @@ declare
   v_new_progress integer;
 begin
   for uc in
-    select ucg.id, ucg.progress, c.target_count, c.reward_xp
+    select ucg.id, ucg.progress, c.target_count, c.reward_xp, c.reward_currency
     from user_challenges ucg
     join challenges c on c.id = ucg.challenge_id
     where ucg.user_id = p_user_id
@@ -694,6 +759,9 @@ begin
           level = level_for_xp(xp + uc.reward_xp),
           updated_at = now()
       where id = p_user_id;
+
+      -- Card #63: pay out the currency reward too, now that it exists.
+      perform credit_currency(p_user_id, uc.reward_currency, 'challenge_completed');
     else
       update user_challenges set progress = v_new_progress where id = uc.id;
     end if;
@@ -703,6 +771,79 @@ $$;
 
 revoke all on function increment_challenge_progress(uuid, challenge_action, integer) from public, anon, authenticated;
 grant execute on function increment_challenge_progress(uuid, challenge_action, integer) to service_role;
+
+-- ============================================================
+-- FUNCTIONS: credit_currency, purchase_cosmetic (card #63)
+-- ============================================================
+-- Credits currency to a user (positive delta only — negative deltas are
+-- spends, handled directly inside purchase_cosmetic's own transaction).
+create or replace function credit_currency(p_user_id uuid, p_amount integer, p_reason text)
+returns void
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if p_amount <= 0 then
+    return;
+  end if;
+
+  insert into points_transactions (user_id, delta, reason)
+  values (p_user_id, p_amount, p_reason);
+
+  update users set points_balance = points_balance + p_amount, updated_at = now()
+  where id = p_user_id;
+end;
+$$;
+
+revoke all on function credit_currency(uuid, integer, text) from public, anon, authenticated;
+grant execute on function credit_currency(uuid, integer, text) to service_role;
+
+-- Atomic purchase: checks balance and prior ownership, deducts, records the
+-- ledger entry and the ownership row together so nothing can go out of sync.
+create or replace function purchase_cosmetic(p_user_id uuid, p_cosmetic_id uuid)
+returns user_cosmetics
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_balance integer;
+  v_price integer;
+  v_already_owned boolean;
+  v_result user_cosmetics;
+begin
+  select points_balance into v_balance from users where id = p_user_id for update;
+  if not found then
+    raise exception 'USER_NOT_FOUND';
+  end if;
+
+  select price_currency into v_price from cosmetics where id = p_cosmetic_id and is_active;
+  if not found then
+    raise exception 'COSMETIC_NOT_FOUND';
+  end if;
+
+  select exists(select 1 from user_cosmetics where user_id = p_user_id and cosmetic_id = p_cosmetic_id) into v_already_owned;
+  if v_already_owned then
+    raise exception 'ALREADY_OWNED';
+  end if;
+
+  if v_balance < v_price then
+    raise exception 'INSUFFICIENT_BALANCE';
+  end if;
+
+  update users set points_balance = points_balance - v_price, updated_at = now() where id = p_user_id;
+
+  insert into points_transactions (user_id, delta, reason, metadata)
+  values (p_user_id, -v_price, 'cosmetic_purchase', jsonb_build_object('cosmetic_id', p_cosmetic_id));
+
+  insert into user_cosmetics (user_id, cosmetic_id) values (p_user_id, p_cosmetic_id)
+  returning * into v_result;
+
+  return v_result;
+end;
+$$;
+
+revoke all on function purchase_cosmetic(uuid, uuid) from public, anon, authenticated;
+grant execute on function purchase_cosmetic(uuid, uuid) to service_role;
 
 -- ============================================================
 -- FUNCTION: submit_match_score_draft (card #58)
@@ -815,6 +956,20 @@ insert into challenges (code, name, description, cadence, action_type, target_co
   ('weekly_win_3', 'Ganador de la semana', 'Ganá 3 partidos esta semana', 'weekly', 'win_matches', 3, 100),
   ('monthly_play_10', 'Jugador constante', 'Jugá 10 partidos este mes', 'monthly', 'play_matches', 10, 300),
   ('onboarding_first_match', 'Primeros pasos', 'Jugá tu primer partido', 'one_time', 'play_matches', 1, 50)
+on conflict (code) do nothing;
+
+-- Card #63: these two challenges now also pay out some currency, now that
+-- the internal currency exists.
+update challenges set reward_currency = 50 where code = 'weekly_win_3';
+update challenges set reward_currency = 100 where code = 'monthly_play_10';
+
+-- Card #63 seed data: one cosmetic per type, per the examples given when
+-- this was scoped.
+insert into cosmetics (code, name, description, type, image_url, price_currency) values
+  ('palette_classic_red', 'Paleta Roja Clásica', 'Skin roja para tu paleta', 'palette_skin', 'https://placehold.co/200x200/ef4444/ffffff?text=Paleta', 100),
+  ('palette_neon_blue', 'Paleta Azul Neón', 'Skin azul neón para tu paleta', 'palette_skin', 'https://placehold.co/200x200/3b82f6/ffffff?text=Paleta', 150),
+  ('avatar_frame_gold', 'Marco Dorado', 'Marco dorado para tu foto de perfil', 'avatar', 'https://placehold.co/200x200/eab308/ffffff?text=Marco', 200),
+  ('emblem_fire', 'Emblema de Fuego', 'Emblema de fuego junto a tu nombre', 'emblem', 'https://placehold.co/200x200/f97316/ffffff?text=Emblema', 120)
 on conflict (code) do nothing;
 
 -- ============================================================

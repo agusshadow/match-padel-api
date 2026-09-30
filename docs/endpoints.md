@@ -74,8 +74,8 @@ Card #57: a match is tied to a real court reservation (`matches.reservation_id`)
 | POST | `/api/v1/matches` | requireAuth | Create a match tied to a court/time slot (`type`, `is_ranked`, `court_id`, `start_time`, `end_time`); returns `{ match, payment }` — `payment` is a checkout link for the creator's 1/4 share (201) | `createMatch` |
 | POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL; returns a checkout link for the caller's 1/4 share, not the match itself | `joinByLobbyUrl` |
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Card #58: submit the caller's team's claimed result (`score_team1`, `score_team2`); confirms automatically once both teams' drafts match exactly (applies ELO on ranked matches via `submit_match_score_draft`/`accept_match_score`), clears both drafts and counts a mismatch otherwise, permanently `disputed` after 3 mismatches. Replaces the old submit→accept/reject flow (cards #21/#51) | `submitScore` |
-| DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start, refunds nobody otherwise | `cancelMatch` |
-| DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h refund window as `cancelMatch`. If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
+| DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start; under 24h, credits half each share back as internal currency instead (card #63) | `cancelMatch` |
+| DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h window as `cancelMatch` (real refund ≥24h, half-share currency credit under 24h). If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
 | GET | `/api/v1/matches/:id/chat` | requireAuth | Card #59: chat messages for this match, oldest first (participants only) | `getMessages` (`chats/chat.controller.ts`) |
 | POST | `/api/v1/matches/:id/chat` | requireAuth | Post a chat message (participants only) | `sendMessage` |
 
@@ -108,7 +108,7 @@ Card #59: `match_chats` already existed in the schema (unused until now). Plain 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a plain reservation (`reservation_id`), full price, caller must own it | `createPreference` (`payment.controller.ts`) |
-| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, resolves the exact `payments` row by id (`external_reference`), checks the paid amount against it, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after | `webhook` |
+| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, resolves the exact `payments` row by id (`external_reference`), checks the paid amount against it, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after. Card #63: an `external_reference` prefixed `currency:` is a `currency_purchases` row instead (top-up of the internal currency), handled by a separate branch | `webhook` |
 
 Card #57: `createMatchPaymentPreference(matchId, userId)` (not exposed directly — called from `match.service.ts`) creates a preference for a player's 1/4 share of a match's reservation. Every preference, single-payer or split, is created against a `payments` row inserted first so its id becomes the MercadoPago `external_reference` — the webhook always resolves the specific row by id, never by `reservation_id` alone. `refundPayment(paymentId)` calls MercadoPago's refund API and marks the row `refunded` on success.
 
@@ -123,12 +123,26 @@ Card #54 — reads only; achievements are awarded from `accept_match_score` (see
 
 ## challenges — `/api/v1/challenges` (`challenges.router.ts`)
 
-Card #62 — reads only; assignment/expiration runs from `assign_and_expire_challenges` via `src/jobs/assign-and-expire-challenges.job.ts` (every 15 min), progress increments from `increment_challenge_progress` inside `accept_match_score`. Distinct from `achievements` (fixed one-time unlocks) — challenges rotate by cadence (`daily`/`weekly`/`monthly`/`one_time`) with per-user progress. Only two action types exist today (`play_matches`, `win_matches`); `reach_level`/`complete_profile`-style challenges aren't implemented (documented gap, not built). `reward_currency` on the catalog exists but isn't paid out yet — waits on card #63's internal currency.
+Card #62 — reads only; assignment/expiration runs from `assign_and_expire_challenges` via `src/jobs/assign-and-expire-challenges.job.ts` (every 15 min), progress increments from `increment_challenge_progress` inside `accept_match_score`. Distinct from `achievements` (fixed one-time unlocks) — challenges rotate by cadence (`daily`/`weekly`/`monthly`/`one_time`) with per-user progress. Only two action types exist today (`play_matches`, `win_matches`); `reach_level`/`complete_profile`-style challenges aren't implemented (documented gap, not built). `reward_currency` is now paid out too (card #63).
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/challenges` | none | Full active challenge catalog | `getCatalog` (`challenges.controller.ts`) |
 | GET | `/api/v1/challenges/me` | requireAuth | Current user's active + completed challenges with progress | `getMyChallenges` |
+
+## marketplace — `/api/v1/marketplace` (`marketplace.router.ts`)
+
+Card #63: cosmetics (palette skins, avatar frames, emblems) bought with an internal currency (`users.points_balance`, ledgered in `points_transactions`, reactivating that previously-dormant table). Currency is earned via challenge rewards (card #62) or bought with real money — one fixed pack for now (100 currency for $500 ARS, `CURRENCY_PACK` in `payment.service.ts`). A late (<24h) match cancellation (card #57) also credits half the share back as currency instead of a real refund.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/marketplace/cosmetics` | none | Full active cosmetics catalog | `getCatalog` (`marketplace.controller.ts`) |
+| GET | `/api/v1/marketplace/cosmetics/me` | requireAuth | Cosmetics the current user owns | `getMyCosmetics` |
+| GET | `/api/v1/marketplace/equipped` | requireAuth | The 3 equip slots (`equipped_palette_cosmetic_id`/`equipped_avatar_cosmetic_id`/`equipped_emblem_cosmetic_id`) | `getMyEquipped` |
+| GET | `/api/v1/marketplace/balance` | requireAuth | Current currency balance | `getMyBalance` |
+| POST | `/api/v1/marketplace/cosmetics/:id/purchase` | requireAuth | Spend currency on an item (atomic via `purchase_cosmetic`); 409 if already owned, 400 if insufficient balance | `purchaseCosmetic` |
+| POST | `/api/v1/marketplace/cosmetics/:id/equip` | requireAuth | Equip an owned item; 403 if not owned | `equipCosmetic` |
+| POST | `/api/v1/marketplace/currency/purchase` | requireAuth | MercadoPago checkout link for the currency pack; confirmed by the same `POST /payments/webhook`, resolved via a `currency:` prefix on `external_reference` since it isn't reservation-shaped | `purchaseCurrency` |
 
 ## Unmounted routers
 

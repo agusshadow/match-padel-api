@@ -6,6 +6,7 @@ import {
   refundPayment,
   findApprovedPayment,
   findApprovedPaymentsForReservation,
+  creditLateCancellationCurrency,
 } from '../payments/payment.service'
 import { logger } from '../../lib/logger'
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../../types/errors'
@@ -208,11 +209,18 @@ export const matchService = {
         const hoursUntilStart =
           (new Date(reservation.start_time).getTime() - Date.now()) / (1000 * 60 * 60)
 
+        const approvedPayments = await findApprovedPaymentsForReservation(match.reservation_id)
         if (hoursUntilStart >= REFUND_CUTOFF_HOURS) {
-          const approvedPayments = await findApprovedPaymentsForReservation(match.reservation_id)
           for (const payment of approvedPayments) {
             await refundPayment(payment.id).catch((err) =>
               logger.error(err, `Failed to refund payment ${payment.id} on match cancel`),
+            )
+          }
+        } else {
+          // Card #63: no real refund this late, half each share back as currency.
+          for (const payment of approvedPayments) {
+            await creditLateCancellationCurrency(payment.user_id, Number(payment.amount)).catch((err) =>
+              logger.error(err, `Failed to credit currency for payment ${payment.id} on match cancel`),
             )
           }
         }
@@ -258,6 +266,7 @@ export const matchService = {
     }
 
     let refunded = false
+    let currencyCredited = 0
 
     if (match.reservation_id) {
       const reservation = await reservationRepository.findById(match.reservation_id)
@@ -266,8 +275,14 @@ export const matchService = {
           (new Date(reservation.start_time).getTime() - Date.now()) / (1000 * 60 * 60)
 
         const payment = await findApprovedPayment(match.reservation_id, userId)
-        if (payment && hoursUntilStart >= REFUND_CUTOFF_HOURS) {
-          refunded = await refundPayment(payment.id)
+        if (payment) {
+          if (hoursUntilStart >= REFUND_CUTOFF_HOURS) {
+            refunded = await refundPayment(payment.id)
+          } else {
+            // Card #63: no real refund this late, but half the share back as
+            // internal currency instead of nothing.
+            currencyCredited = await creditLateCancellationCurrency(userId, Number(payment.amount))
+          }
         }
       }
     }
@@ -291,7 +306,7 @@ export const matchService = {
       )
     }
 
-    return { refunded }
+    return { refunded, currencyCredited }
   },
 
   // Called by the scheduled job (src/jobs/auto-cancel-unfilled-matches.job.ts).

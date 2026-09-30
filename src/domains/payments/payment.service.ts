@@ -153,6 +153,70 @@ export async function createMatchPaymentPreference(matchId: string, userId: stri
   )
 }
 
+// Card #63: the one currency top-up pack for now (a fixed rate — 1 currency
+// unit = $5 ARS — also used to convert the late-cancellation partial credit
+// in match.service.ts). Multiple tiers would be a natural follow-up, not
+// built here to keep this card's scope tight.
+export const CURRENCY_PACK = { amountArs: 500, currencyAmount: 100 }
+export const ARS_PER_CURRENCY_UNIT = CURRENCY_PACK.amountArs / CURRENCY_PACK.currencyAmount
+
+// Real-money top-up of the internal currency — kept in its own table
+// (currency_purchases) rather than the reservation-shaped `payments` table.
+// The webhook below tells the two apart by a 'currency:' prefix on
+// external_reference.
+export async function createCurrencyPreference(userId: string): Promise<PreferenceResult> {
+  const { data: purchaseRow, error: insertErr } = await supabase
+    .from('currency_purchases')
+    .insert({
+      user_id: userId,
+      amount_ars: CURRENCY_PACK.amountArs,
+      currency_amount: CURRENCY_PACK.currencyAmount,
+      status: 'pending',
+    })
+    .select('id')
+    .single()
+
+  if (insertErr) throw insertErr
+
+  let pref
+  try {
+    pref = await preference.create({
+      body: {
+        items: [
+          {
+            id: purchaseRow.id,
+            title: `${CURRENCY_PACK.currencyAmount} monedas`,
+            quantity: 1,
+            unit_price: CURRENCY_PACK.amountArs,
+            currency_id: 'ARS',
+          },
+        ],
+        external_reference: `currency:${purchaseRow.id}`,
+        back_urls: {
+          success: `${APP_URL}/marketplace?payment=success`,
+          failure: `${APP_URL}/marketplace?payment=failure`,
+          pending: `${APP_URL}/marketplace?payment=pending`,
+        },
+        auto_return: 'approved',
+        notification_url: `${API_URL}/api/v1/payments/webhook`,
+      },
+    })
+  } catch (err) {
+    await supabase.from('currency_purchases').delete().eq('id', purchaseRow.id)
+    throw err
+  }
+
+  const result: PreferenceResult = {
+    preference_id: pref.id!,
+    init_point: pref.init_point!,
+    sandbox_init_point: pref.sandbox_init_point!,
+  }
+
+  await supabase.from('currency_purchases').update({ metadata: result }).eq('id', purchaseRow.id)
+
+  return result
+}
+
 export class WebhookSignatureError extends AppError {
   constructor(message = 'Invalid webhook signature') {
     super(message, 401, 'INVALID_SIGNATURE')
@@ -249,6 +313,65 @@ async function confirmMatchPayment(reservationId: string, userId: string): Promi
   }
 }
 
+// Card #63: confirms (or rejects) a currency top-up. Mirrors handleWebhook's
+// idempotency/amount-check logic but against currency_purchases instead of
+// payments — kept separate rather than shoehorning a third shape into that
+// function's branching.
+async function handleCurrencyWebhook(
+  purchaseId: string,
+  eventId: string,
+  mpPaymentId: string,
+  mpStatus: string,
+  mpAmount: number,
+) {
+  const { data: purchase } = await supabase
+    .from('currency_purchases')
+    .select('id, user_id, amount_ars, currency_amount, mp_event_id')
+    .eq('id', purchaseId)
+    .maybeSingle()
+
+  if (!purchase) {
+    logger.error({ purchaseId }, 'Webhook received for unknown currency purchase')
+    return { handled: false }
+  }
+
+  if (purchase.mp_event_id === eventId) {
+    return { handled: true, status: mpStatus, deduped: true }
+  }
+
+  const expectedAmount = Number(purchase.amount_ars)
+  if (Math.abs(mpAmount - expectedAmount) > 0.01) {
+    logger.error(
+      { purchaseId, mpAmount, expectedAmount },
+      'MercadoPago currency webhook amount mismatch — refusing to credit',
+    )
+    return { handled: false, reason: 'amount_mismatch' }
+  }
+
+  const status =
+    mpStatus === 'approved' ? 'approved' :
+    mpStatus === 'rejected' ? 'rejected' :
+    mpStatus === 'cancelled' ? 'cancelled' :
+    'pending'
+
+  await supabase
+    .from('currency_purchases')
+    .update({ status, mp_payment_id: mpPaymentId, mp_event_id: eventId })
+    .eq('id', purchaseId)
+    .eq('status', 'pending')
+
+  if (mpStatus === 'approved') {
+    const { error } = await supabase.rpc('credit_currency', {
+      p_user_id: purchase.user_id,
+      p_amount: purchase.currency_amount,
+      p_reason: 'currency_top_up',
+    })
+    if (error) throw error
+  }
+
+  return { handled: true, status: mpStatus }
+}
+
 export async function handleWebhook(
   body: Record<string, unknown>,
   dataIdFromQuery: string | undefined,
@@ -282,11 +405,20 @@ export async function handleWebhook(
   }
 
   const mpPayment = (await mpResponse.json()) as Record<string, unknown>
-  const ourPaymentId = mpPayment.external_reference as string
+  const externalReference = mpPayment.external_reference as string
   const mpStatus = mpPayment.status as string
   const mpAmount = Number(mpPayment.transaction_amount)
 
-  if (!ourPaymentId) return { handled: false }
+  if (!externalReference) return { handled: false }
+
+  // Card #63: currency top-ups live in their own table, tagged with a
+  // 'currency:' prefix on external_reference so they never collide with a
+  // real payments.id (both are plain UUIDs otherwise).
+  if (externalReference.startsWith('currency:')) {
+    return handleCurrencyWebhook(externalReference.slice('currency:'.length), eventId, paymentId, mpStatus, mpAmount)
+  }
+
+  const ourPaymentId = externalReference
 
   // Resolve the exact payment row by its own id (set as external_reference at
   // preference creation) — works the same whether a reservation has one payer
@@ -395,7 +527,7 @@ export async function refundPayment(paymentId: string): Promise<boolean> {
 export async function findApprovedPayment(reservationId: string, userId: string) {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, status')
+    .select('id, status, amount')
     .eq('reservation_id', reservationId)
     .eq('user_id', userId)
     .eq('status', 'approved')
@@ -405,10 +537,30 @@ export async function findApprovedPayment(reservationId: string, userId: string)
   return data
 }
 
+// Card #63: a player leaving <24h before the match gets no real refund, but
+// half their share back as internal currency instead — softens the penalty
+// without undoing the deterrent, and nudges them toward spending it in the
+// marketplace instead of just losing it outright.
+const LATE_CANCELLATION_CREDIT_RATE = 0.5
+
+export async function creditLateCancellationCurrency(userId: string, paymentAmountArs: number): Promise<number> {
+  const currencyAmount = Math.round((paymentAmountArs * LATE_CANCELLATION_CREDIT_RATE) / ARS_PER_CURRENCY_UNIT)
+  if (currencyAmount <= 0) return 0
+
+  const { error } = await supabase.rpc('credit_currency', {
+    p_user_id: userId,
+    p_amount: currencyAmount,
+    p_reason: 'late_cancellation_credit',
+  })
+  if (error) throw error
+
+  return currencyAmount
+}
+
 export async function findApprovedPaymentsForReservation(reservationId: string) {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, user_id, status')
+    .select('id, user_id, status, amount')
     .eq('reservation_id', reservationId)
     .eq('status', 'approved')
 
