@@ -140,12 +140,12 @@ This document describes the **target architecture**. The existing code does not 
 | Tests | Vitest + Supertest, 70% in `src/domains/` | No framework and no tests |
 | Logs | Logger, no `console.log` | `src/lib/logger.ts` is a thin `console` wrapper that nothing imports; `index.ts` and the error handlers call `console.log`/`console.error` directly |
 | Push | Firebase Admin | Not installed |
-| Async error handling | Every error reaches the error handler | All controllers (including tournaments, fixed) wrap handlers in try/catch → `next(err)`, and `index.ts` has `process.on('unhandledRejection'/'uncaughtException')` as a last-resort net. The MercadoPago webhook still replies 200 and can then call `next(err)` (headers already sent) — not fixed |
+| Async error handling | Every error reaches the error handler | All controllers (including tournaments, fixed) wrap handlers in try/catch → `next(err)`, and `index.ts` has `process.on('unhandledRejection'/'uncaughtException')` as a last-resort net. The MercadoPago webhook replies 200 and then processes async — since headers are already sent it can't call `next(err)`, so it logs the error directly with `logger.error` instead |
 | Error responses | The `{ success: false, error: { code, message, details } }` envelope | The mounted `error.middleware.ts`, `notFound` and `auth.middleware.ts` answer `{ error, message }`. `error.ts` has the envelope but is not mounted |
 | Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`; no role is available |
 | Auth domain files | Controller → service → repository | `auth.service.ts` is never imported (its repository and validator only by each other); `auth.controller.ts` does everything itself |
 | Input validation | Zod in every controller | `matches` and `users` controllers read `req.body` without a schema; only `auth`, `reservations` and (inline) `tournaments` validate |
-| Webhook safety | Signature check + idempotency via `mp_webhook_events` | No signature verification and no idempotency; the `mp_webhook_events` table is not in `schema.sql` |
+| Webhook safety | Signature check + idempotency via `mp_webhook_events` | Met via `payment.service.ts` (`verifyWebhookSignature`, amount check, idempotency via the existing `payments.mp_event_id` column instead of a separate table — no `mp_webhook_events` table exists) |
 | ELO | Worker computing ELO | `match.service.ts` applies a fixed ±15 on accepted ranked scores, non-transactional; there are no scheduled jobs |
 
 ## Agent workflow
