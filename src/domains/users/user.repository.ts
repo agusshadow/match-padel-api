@@ -13,9 +13,9 @@ export interface UpdateUserData {
 }
 
 const PROFILE_COLUMNS =
-  'id, username, first_name, last_name, full_name, avatar_url, elo, skill_level, preferred_hand, created_at, role'
+  'id, username, first_name, last_name, full_name, avatar_url, elo, xp, level, skill_level, preferred_hand, created_at, role'
 const PROFILE_COLUMNS_FULL =
-  'id, username, first_name, last_name, full_name, avatar_url, elo, phone, skill_level, preferred_hand, onboarding_completed_at, role, created_at, updated_at, is_active'
+  'id, username, first_name, last_name, full_name, avatar_url, elo, xp, level, phone, skill_level, preferred_hand, onboarding_completed_at, role, created_at, updated_at, is_active'
 
 export const userRepository = {
   async findById(id: string) {
