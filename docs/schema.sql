@@ -149,10 +149,13 @@ create table public.matches (
   tournament_id   uuid,                -- FK added later (circular)
   type            match_type not null default 'friendly',
   status          match_status not null default 'waiting',
-  score_team1     integer[] default '{}',   -- [6,4,7] games won per set
+  score_team1     integer[] default '{}',   -- [6,4,7] games won per set — set only once both teams' drafts agree
   score_team2     integer[] default '{}',
   score_status    score_status not null default 'pending',
-  score_submitted_by uuid references users(id), -- card #51: who submitted the pending score, so they can't also accept/reject it
+  score_submitted_by uuid references users(id), -- unused since card #58 (independent submission replaced submit/accept-reject) — kept, not dropped
+  pending_score_team1 jsonb,          -- card #58: team 1's claimed {"score_team1":[...],"score_team2":[...]} until both drafts match
+  pending_score_team2 jsonb,          -- team 2's claimed result, same shape
+  score_dispute_attempts integer not null default 0, -- mismatched draft pairs; 3 permanently sets score_status to disputed
   winner_team     smallint check (winner_team in (1, 2)),
   is_ranked       boolean not null default false,
   lobby_url       text,               -- random UUID for invitations
@@ -507,6 +510,100 @@ $$;
 
 revoke all on function accept_match_score(uuid, smallint, boolean) from public, anon, authenticated;
 grant execute on function accept_match_score(uuid, smallint, boolean) to service_role;
+
+-- ============================================================
+-- FUNCTION: submit_match_score_draft (card #58)
+-- ============================================================
+-- Replaces "one team submits, the other accepts/rejects" (exploitable — a
+-- losing team can reject forever with no way to verify what really
+-- happened). Each team submits their own claimed score as a draft; once both
+-- teams' drafts exist and match exactly, the match confirms automatically
+-- (calling accept_match_score for the same atomic ELO/stats/achievements
+-- handling). A mismatch clears both drafts and bumps score_dispute_attempts;
+-- reaching 3 permanently sets score_status to 'disputed' — no ELO, no stats,
+-- for either ranked or friendly matches (only ELO application itself is
+-- ranked-only). Only service_role may call it — team ownership/self checks
+-- live in match.service.ts.
+create or replace function submit_match_score_draft(
+  p_match_id uuid,
+  p_team smallint,
+  p_draft jsonb
+)
+returns matches
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  v_match matches;
+  v_score1 integer[];
+  v_score2 integer[];
+  v_sets1 int := 0;
+  v_sets2 int := 0;
+  v_winner smallint;
+  i int;
+begin
+  select * into v_match from matches where id = p_match_id for update;
+  if not found then
+    raise exception 'MATCH_NOT_FOUND';
+  end if;
+
+  if v_match.score_status = 'disputed' then
+    raise exception 'MATCH_PERMANENTLY_DISPUTED';
+  end if;
+  if v_match.score_status = 'accepted' then
+    raise exception 'SCORE_ALREADY_ACCEPTED';
+  end if;
+
+  if p_team = 1 then
+    update matches set pending_score_team1 = p_draft, updated_at = now()
+    where id = p_match_id returning * into v_match;
+  else
+    update matches set pending_score_team2 = p_draft, updated_at = now()
+    where id = p_match_id returning * into v_match;
+  end if;
+
+  if v_match.pending_score_team1 is null or v_match.pending_score_team2 is null then
+    return v_match; -- waiting on the other team's draft
+  end if;
+
+  if v_match.pending_score_team1 = v_match.pending_score_team2 then
+    select array(select jsonb_array_elements_text(v_match.pending_score_team1->'score_team1'))::integer[] into v_score1;
+    select array(select jsonb_array_elements_text(v_match.pending_score_team1->'score_team2'))::integer[] into v_score2;
+
+    for i in 1..least(coalesce(array_length(v_score1,1),0), coalesce(array_length(v_score2,1),0)) loop
+      if v_score1[i] > v_score2[i] then v_sets1 := v_sets1 + 1;
+      elsif v_score2[i] > v_score1[i] then v_sets2 := v_sets2 + 1;
+      end if;
+    end loop;
+    v_winner := case when v_sets1 > v_sets2 then 1 else 2 end;
+
+    update matches
+    set score_team1 = v_score1,
+        score_team2 = v_score2,
+        pending_score_team1 = null,
+        pending_score_team2 = null,
+        score_dispute_attempts = 0,
+        updated_at = now()
+    where id = p_match_id;
+
+    return accept_match_score(p_match_id, v_winner, v_match.is_ranked);
+  else
+    update matches
+    set pending_score_team1 = null,
+        pending_score_team2 = null,
+        score_dispute_attempts = score_dispute_attempts + 1,
+        score_status = case when score_dispute_attempts + 1 >= 3 then 'disputed'::score_status else 'pending'::score_status end,
+        updated_at = now()
+    where id = p_match_id
+    returning * into v_match;
+
+    return v_match;
+  end if;
+end;
+$$;
+
+revoke all on function submit_match_score_draft(uuid, smallint, jsonb) from public, anon, authenticated;
+grant execute on function submit_match_score_draft(uuid, smallint, jsonb) to service_role;
 
 -- Card #54 seed data: a deliberately small starter catalog (not the full
 -- gamification system from card #55) that turns on the previously-dormant

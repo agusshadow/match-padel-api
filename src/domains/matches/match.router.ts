@@ -6,8 +6,6 @@ import {
   createMatch,
   joinByLobbyUrl,
   submitScore,
-  acceptScore,
-  rejectScore,
   cancelMatch,
   leaveMatch,
 } from './match.controller'
@@ -24,12 +22,9 @@ router.get('/:id', getMatch)
 router.post('/', createMatch)
 // POST /api/v1/matches/join/:lobbyUrl — join by lobby URL
 router.post('/join/:lobbyUrl', joinByLobbyUrl)
-// PUT /api/v1/matches/:id/score — submit score
+// PUT /api/v1/matches/:id/score — submit your team's claimed result; confirms
+// automatically once both teams' drafts agree (card #58)
 router.put('/:id/score', submitScore)
-// PUT /api/v1/matches/:id/score/accept — accept score
-router.put('/:id/score/accept', acceptScore)
-// PUT /api/v1/matches/:id/score/reject — reject score
-router.put('/:id/score/reject', rejectScore)
 // DELETE /api/v1/matches/:id — cancel match (creator only)
 router.delete('/:id', cancelMatch)
 // DELETE /api/v1/matches/:id/leave — leave a match you joined
