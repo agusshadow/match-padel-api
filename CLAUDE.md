@@ -144,8 +144,9 @@ This document describes the **target architecture**. The existing code does not 
 | Error responses | The `{ success: false, error: { code, message, details } }` envelope | The mounted `error.middleware.ts`, `notFound` and `auth.middleware.ts` answer `{ error, message }`. `error.ts` has the envelope but is not mounted |
 | Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`; no role is available |
 | Auth domain files | Controller → service → repository | `auth.service.ts` is never imported (its repository and validator only by each other); `auth.controller.ts` does everything itself |
-| Input validation | Zod in every controller | `matches` and `users` controllers read `req.body` without a schema; only `auth`, `reservations` and (inline) `tournaments` validate |
+| Input validation | Zod in every controller | `users` controller reads `req.body` without a schema; `matches` now validates `createMatch`/`submitScore` (card #57) but the rest of its handlers don't yet; `auth`, `reservations` and (inline) `tournaments` validate |
 | Webhook safety | Signature check + idempotency via `mp_webhook_events` | Met via `payment.service.ts` (`verifyWebhookSignature`, amount check, idempotency via the existing `payments.mp_event_id` column instead of a separate table — no `mp_webhook_events` table exists) |
+| Domain boundaries (rule 5) | A domain's service imports only the other domain's repository, never its service | `payments` has no `payment.repository.ts` (documented above), so `match.service.ts` (card #57) imports functions straight from `payment.service.ts` for match payment preferences/refunds — the alternative (duplicating MercadoPago preference/refund logic inside the matches domain) was judged worse. `payment.service.ts` itself imports `matchRepository` (a real repository) to insert confirmed players and check the 4-player count on webhook approval, which does follow the rule |
 | ELO | Worker computing ELO | `match.service.ts` applies a fixed ±15 on accepted ranked scores, non-transactional; there are no scheduled jobs |
 
 ## Agent workflow

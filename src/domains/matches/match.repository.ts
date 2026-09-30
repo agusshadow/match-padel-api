@@ -10,6 +10,7 @@ export interface CreateMatchData {
   type: 'friendly' | 'ranked' | 'tournament'
   is_ranked: boolean
   club_id?: string
+  reservation_id: string
 }
 
 export interface ScoreData {
@@ -129,6 +130,9 @@ export const matchRepository = {
     return data
   },
 
+  // The creator, like every other player, only becomes a match_players row once
+  // their share of the court is actually paid (see payment.service.ts's webhook
+  // handling) — so creating a match no longer inserts a player row here.
   async create(data: CreateMatchData, createdBy: string) {
     const lobbyUrl = `${Math.random().toString(36).slice(2, 8).toUpperCase()}`
 
@@ -138,6 +142,7 @@ export const matchRepository = {
         type: data.type,
         is_ranked: data.is_ranked,
         club_id: data.club_id ?? null,
+        reservation_id: data.reservation_id,
         created_by: createdBy,
         lobby_url: lobbyUrl,
         status: 'waiting',
@@ -147,17 +152,6 @@ export const matchRepository = {
       .single()
 
     if (matchError) throw matchError
-
-    // Add creator as team 1
-    const { error: playerError } = await supabase
-      .from('match_players')
-      .insert({
-        match_id: match.id,
-        user_id: createdBy,
-        team: 1,
-      })
-
-    if (playerError) throw playerError
 
     return match
   },
@@ -279,6 +273,55 @@ export const matchRepository = {
 
     if (error) throw error
     return data ?? []
+  },
+
+  async isPlayer(matchId: string, userId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('match_players')
+      .select('id')
+      .eq('match_id', matchId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (error) throw error
+    return data !== null
+  },
+
+  async countPlayers(matchId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('match_players')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', matchId)
+
+    if (error) throw error
+    return count ?? 0
+  },
+
+  async removePlayer(matchId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('match_players')
+      .delete()
+      .eq('match_id', matchId)
+      .eq('user_id', userId)
+
+    if (error) throw error
+  },
+
+  // Used by the auto-cancel job: matches whose court time already started (or
+  // passed) but never reached 4 confirmed players — nobody is coming, free the
+  // court and refund whoever already paid their share.
+  async findUnfilledPastMatches(): Promise<Array<{ id: string; reservation_id: string }>> {
+    const now = new Date().toISOString()
+
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, reservation_id, court_reservations!inner(start_time)')
+      .eq('status', 'waiting')
+      .not('reservation_id', 'is', null)
+      .lt('court_reservations.start_time', now)
+
+    if (error) throw error
+    return (data ?? []).map((m: any) => ({ id: m.id, reservation_id: m.reservation_id }))
   },
 
 }

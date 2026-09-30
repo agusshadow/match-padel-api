@@ -62,16 +62,19 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 `router.use(requireAuth)` (from `auth.ts`): every route requires auth.
 
+Card #57: a match is tied to a real court reservation (`matches.reservation_id`) and its price is split 4 ways. Creating a match or joining one never adds a `match_players` row directly — both return a MercadoPago checkout link for that player's 1/4 share, and the player is only added once the webhook confirms the payment (see `payment.service.ts`). A match auto-cancels with full refunds if its court time passes without reaching 4 confirmed players (`src/jobs/auto-cancel-unfilled-matches.job.ts`).
+
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/matches` | requireAuth | My matches (filters `status`, `type`, `page`; no `meta`) | `getMyMatches` (`match.controller.ts`) |
 | GET | `/api/v1/matches/:id` | requireAuth | Match detail (only participants or the creator, checked in the service) | `getMatch` |
-| POST | `/api/v1/matches` | requireAuth | Create a match (201) | `createMatch` |
-| POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL | `joinByLobbyUrl` |
+| POST | `/api/v1/matches` | requireAuth | Create a match tied to a court/time slot (`type`, `is_ranked`, `court_id`, `start_time`, `end_time`); returns `{ match, payment }` — `payment` is a checkout link for the creator's 1/4 share (201) | `createMatch` |
+| POST | `/api/v1/matches/join/:lobbyUrl` | requireAuth | Join a match by lobby URL; returns a checkout link for the caller's 1/4 share, not the match itself | `joinByLobbyUrl` |
 | PUT | `/api/v1/matches/:id/score` | requireAuth | Submit a score | `submitScore` |
 | PUT | `/api/v1/matches/:id/score/accept` | requireAuth | Accept the pending score (applies ELO on ranked matches). Rejects if the caller submitted the score themselves | `acceptScore` |
 | PUT | `/api/v1/matches/:id/score/reject` | requireAuth | Reject the pending score, clearing it so it can be resubmitted. Rejects if the caller submitted the score themselves | `rejectScore` |
-| DELETE | `/api/v1/matches/:id` | requireAuth | Cancel a match | `cancelMatch` |
+| DELETE | `/api/v1/matches/:id` | requireAuth | Creator cancels the whole match; releases the reservation and refunds every approved payment if it's still ≥24h before start, refunds nobody otherwise | `cancelMatch` |
+| DELETE | `/api/v1/matches/:id/leave` | requireAuth | A player leaves their own spot; same 24h refund window as `cancelMatch`. If the match had reached 4/4, it drops back to `waiting` instead of being cancelled | `leaveMatch` |
 
 ## tournaments — `/api/v1/tournaments` (`tournament.router.ts`)
 
@@ -99,8 +102,10 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
-| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, checks the paid amount against the reservation, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after | `webhook` |
+| POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a plain reservation (`reservation_id`), full price, caller must own it | `createPreference` (`payment.controller.ts`) |
+| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, resolves the exact `payments` row by id (`external_reference`), checks the paid amount against it, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after | `webhook` |
+
+Card #57: `createMatchPaymentPreference(matchId, userId)` (not exposed directly — called from `match.service.ts`) creates a preference for a player's 1/4 share of a match's reservation. Every preference, single-payer or split, is created against a `payments` row inserted first so its id becomes the MercadoPago `external_reference` — the webhook always resolves the specific row by id, never by `reservation_id` alone. `refundPayment(paymentId)` calls MercadoPago's refund API and marks the row `refunded` on success.
 
 ## achievements — `/api/v1/achievements` (`achievements.router.ts`)
 

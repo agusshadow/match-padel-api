@@ -272,6 +272,53 @@ export async function cancel(
   return data as unknown as ReservationWithJoins
 }
 
+export interface BookableCourt {
+  id: string
+  club_id: string
+  price_per_hour: number
+  is_active: boolean
+}
+
+export async function getCourtForBooking(courtId: string): Promise<BookableCourt | null> {
+  const { data, error } = await supabase
+    .from('courts')
+    .select('id, club_id, price_per_hour, is_active')
+    .eq('id', courtId)
+    .single()
+
+  if (error || !data) return null
+  return data as BookableCourt
+}
+
+export async function hasOverlap(
+  courtId: string,
+  startTime: string,
+  endTime: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('court_reservations')
+    .select('id')
+    .eq('court_id', courtId)
+    .in('status', ['pending', 'confirmed'])
+    .lt('start_time', endTime)
+    .gt('end_time', startTime)
+
+  if (error) throw error
+  return (data ?? []).length > 0
+}
+
+export async function updateStatus(
+  id: string,
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed',
+): Promise<void> {
+  const { error } = await supabase
+    .from('court_reservations')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
 export async function countActiveByUser(userId: string): Promise<number> {
   const now = new Date().toISOString()
   const { count, error } = await supabase

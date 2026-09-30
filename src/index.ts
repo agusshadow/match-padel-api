@@ -16,6 +16,7 @@ import tournamentRouter from './domains/tournaments/tournament.router'
 import paymentRouter from './domains/payments/payment.router'
 import achievementsRouter from './domains/achievements/achievements.router'
 import { expireReservationsJob } from './jobs/expire-reservations.job'
+import { autoCancelUnfilledMatchesJob } from './jobs/auto-cancel-unfilled-matches.job'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -81,6 +82,7 @@ app.listen(PORT, () => {
 // Scheduled jobs run in this same process (no separate worker/dyno) since the
 // API already runs 24/7 on Render — see src/jobs/scheduler.ts.
 expireReservationsJob.start()
+autoCancelUnfilledMatchesJob.start()
 
 // Last-resort safety net: log and keep the process alive instead of letting an
 // unhandled rejection or a truly uncaught exception crash the whole API for every
