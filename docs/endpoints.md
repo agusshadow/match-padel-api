@@ -100,7 +100,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or c
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | POST | `/api/v1/payments/preference` | requireAuth | Create a MercadoPago preference for a reservation (`reservation_id`) | `createPreference` (`payment.controller.ts`) |
-| POST | `/api/v1/payments/webhook` | none | MercadoPago notification; responds 200 immediately, no signature check, no idempotency | `webhook` |
+| POST | `/api/v1/payments/webhook` | none (signature-verified) | MercadoPago notification; verifies `x-signature`, checks the paid amount against the reservation, deduped via `payments.mp_event_id`, responds 200 immediately and logs any processing error that happens after | `webhook` |
 
 ## achievements — `/api/v1/achievements` (`achievements.router.ts`)
 
