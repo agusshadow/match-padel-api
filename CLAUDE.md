@@ -158,7 +158,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 
 1. `planner` → plan + API contract
 2. **Checkpoint: the user approves the plan** (nothing is coded before that)
-3. `db-agent` (only if there are schema changes; there is no separate dev Supabase project — it applies directly to production, see below)
+3. `db-agent` (only if there are schema changes; it applies them to the **dev** Supabase project, never to production, see below)
 4. `backend-dev` → implementation
 5. `tester` → tests
 6. `reviewer` → review (max. 2 rounds of fixes)
@@ -168,7 +168,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 |---|---|
 | `planner` | Plan and API contract. Read-only |
 | `backend-dev` | Code in `src/` (domains, middleware, payments, sockets, jobs) |
-| `db-agent` | Migrations, RLS, `docs/schema.sql`. Applies directly to production (no separate dev project) |
+| `db-agent` | Migrations, RLS, `docs/schema.sql`. Applies to the dev Supabase project only; promotion to production is a separate, human-approved step |
 | `tester` | Tests. Does not modify production code |
 | `reviewer` | Diff review. Does not modify code |
 | `pr-agent` | Git and `gh`: branches, commits, PR |
@@ -177,13 +177,14 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 
 ## Branches, environments and hard rules
 
-- `main` is **production** (Render `match-padel-api`, Supabase `match-padel`). `develop` is the working branch. **There is no separate dev environment**: the dev Render service and dev Supabase project were decommissioned on 24/09/2026 — `develop` and local work both point at the same Render/Supabase production instances as `main`. This is acceptable for now because production holds no real user data yet; revisit if that changes.
+- `main` is **production** (Render `match-padel-api`, Supabase `match-padel`, project `ebdnlrwzhthqflsbdzvu`). `develop` is the working branch and deploys to the **dev environment** (Render `match-padel-api-dev` at https://match-padel-api-dev.onrender.com, Supabase `match-padel-dev`, project `vrnonxpxksaruvsvbplt`). Local work also points at dev, never at production. The dev environment was decommissioned on 24/09/2026 and rebuilt on 03/10/2026; its schema is built from `supabase/migrations/` and was verified identical to production when it was recreated. The dev Render service needs its own env vars (`SUPABASE_SERVICE_ROLE_KEY` etc.), set by the human in the Render dashboard; the web previews on `develop` get theirs from Vercel's Preview variables scoped to that branch.
 - **`main` and `develop` accept no direct commits or pushes.** Everything goes through a pull request. GitHub branch protection is not available for private repos on the free plan, so it is enforced locally: (1) a Claude Code hook (`.claude/hooks/guard-protected-branches.py`, registered in `.claude/settings.json`) that blocks agents, in every session on this repo; (2) git hooks in `.githooks/` for the human, enabled once per clone with `git config core.hooksPath .githooks`. Only the human may override the git hooks in an emergency (`ALLOW_PROTECTED_BRANCH=1`); agents must never bypass them.
 - **Day-to-day:** feature branch from `develop` → PR against `develop` → merged with **squash** by the human.
 - **Release** (`/release` skill): when `develop` has accumulated several commits, a `release/vX.Y.Z` branch is cut from `develop` with all of them plus **one** extra commit, `chore: version bump`, that only raises the version. It is merged into `main` with a **merge commit** (to keep traceability), then `main` is merged back into `develop` (PR, **merge commit**) so both branches are level again.
 - Never enable "automatically delete head branches" on the repository: the release flow uses `develop` and `main` as PR heads.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
-- Every schema change lands directly on production (no dev project to apply it to first) — `db-agent` applies it and reports what it did. Every change also gets a versioned file under `supabase/migrations/` (see the `db-migration` skill, card #26) in the same PR as `docs/schema.sql`'s update — `docs/schema.sql` is still the human-readable source of truth, the migration file is what makes the schema reproducible from scratch (`supabase db reset`/`migration up` against a fresh project). Destructive changes still need explicit human go-ahead before `db-agent` applies them. Non-schema production actions (Render/Vercel config, env vars) still require the human to do them or explicitly direct an agent session to.
+- Every schema change is applied to the **dev** project first (`db-agent` applies it and reports what it did) and promoted to production only when the release that depends on it ships, with the human's go-ahead — agents never touch the production database on their own. Every change also gets a versioned file under `supabase/migrations/` (see the `db-migration` skill, card #26) in the same PR as `docs/schema.sql`'s update — `docs/schema.sql` is still the human-readable source of truth, the migration file is what makes the schema reproducible from scratch (`supabase db reset`/`migration up` against a fresh project) and is what gets replayed on production. Destructive changes still need explicit human go-ahead before `db-agent` applies them, even on dev. Production actions (Render/Vercel config, env vars, production migrations) still require the human to do them or explicitly direct an agent session to.
+- Known gap: production has permissive RLS policies copied faithfully into dev (see the header of `20261003143500_sync_baseline_with_production.sql`: `notifications` insert policies and `tournament_matches_service_write` open to the anon key, `matches`/`tournaments` readable in full). Tightening them is a pending change that needs the human's go-ahead on production.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map

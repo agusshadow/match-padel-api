@@ -231,6 +231,22 @@ create table public.tournament_teams (
   unique(tournament_id, player2_id)
 );
 
+-- tournament_matches: bracket rounds (exists in production; synced here on 03/10/2026)
+create table public.tournament_matches (
+  id             uuid primary key default gen_random_uuid(),
+  tournament_id  uuid not null references tournaments(id) on delete cascade,
+  match_id       uuid references matches(id) on delete set null,
+  round          integer not null default 1,
+  team1_id       uuid references tournament_teams(id),
+  team2_id       uuid references tournament_teams(id),
+  winner_team_id uuid references tournament_teams(id),
+  score_team1    integer[],
+  score_team2    integer[],
+  status         text not null default 'pending',
+  scheduled_at   timestamptz,
+  created_at     timestamptz not null default now()
+);
+
 -- elo_history: ELO change history
 create table public.elo_history (
   id          uuid primary key default uuid_generate_v4(),
@@ -388,6 +404,11 @@ create index on match_chats(match_id, created_at);
 create index on tournament_teams(tournament_id);
 create index on elo_history(user_id, created_at desc);
 create index on notifications(user_id, is_read, created_at desc);
+create index notifications_user_id_created_at_idx on notifications(user_id, created_at desc);
+create index notifications_user_id_is_read_idx on notifications(user_id, is_read) where is_read = false;
+create index tournaments_start_date_idx on tournaments(start_date);
+create index tournaments_status_idx on tournaments(status);
+create index tournament_matches_tournament_id_idx on tournament_matches(tournament_id);
 create index on payments(mp_event_id);
 create index on users(elo desc) where is_active = true;
 create index on user_challenges(user_id, status); -- card #62
@@ -417,6 +438,7 @@ alter table match_players enable row level security;
 alter table match_chats enable row level security;
 alter table tournaments enable row level security;
 alter table tournament_teams enable row level security;
+alter table tournament_matches enable row level security;
 alter table elo_history enable row level security;
 alter table achievements enable row level security;
 alter table user_achievements enable row level security;
@@ -460,25 +482,48 @@ create policy "courts_public_read" on courts for select using (is_active = true)
 -- court_schedules: public read
 create policy "schedules_public_read" on court_schedules for select using (is_active = true);
 
--- court_reservations: user sees their own
+-- court_reservations: user sees and manages their own
 create policy "reservations_own_read" on court_reservations for select using (auth.uid() = user_id);
+create policy "reservations_own_insert" on court_reservations for insert with check (auth.uid() = user_id);
+create policy "reservations_own_update" on court_reservations for update using (auth.uid() = user_id);
 
--- matches: players see matches they participate in
-create policy "matches_participants_read" on matches for select using (
-  exists (select 1 from match_players where match_id = id and user_id = auth.uid())
-  or created_by = auth.uid()
-);
+-- NOTE (03/10/2026): the policies below on matches, match_players, notifications,
+-- tournaments, tournament_teams and tournament_matches are copied from what
+-- production really has. Several are more permissive than intended (see the
+-- header of supabase/migrations/20261003143500_sync_baseline_with_production.sql);
+-- tightening them is a pending change that needs a go-ahead on production.
+
+-- matches: readable by everyone; creator inserts/updates their own
+create policy "matches_public_read" on matches for select using (true);
+create policy "matches_own_insert" on matches for insert with check (auth.uid() = created_by);
+create policy "matches_own_update" on matches for update using (auth.uid() = created_by);
+
+-- match_players
+create policy "match_players_public_read" on match_players for select using (true);
+create policy "match_players_own_insert" on match_players for insert with check (auth.uid() = user_id);
 
 -- match_chats: same
 create policy "chats_participants_read" on match_chats for select using (
   exists (select 1 from match_players where match_id = match_chats.match_id and user_id = auth.uid())
 );
 
--- tournaments: public read
-create policy "tournaments_public_read" on tournaments for select using (status <> 'draft');
+-- tournaments: public read (drafts included), any signed-in user creates, creator updates
+create policy "tournaments_public_read" on tournaments for select using (true);
+create policy "tournaments_auth_insert" on tournaments for insert with check (auth.uid() is not null);
+create policy "tournaments_creator_update" on tournaments for update
+  using (auth.uid() = created_by) with check (auth.uid() = created_by);
 
--- tournament_teams: public read
+-- tournament_teams: public read; a player registers/leaves their own team
 create policy "tournament_teams_public_read" on tournament_teams for select using (true);
+create policy "tournament_teams_auth_insert" on tournament_teams for insert
+  with check ((auth.uid() = player1_id) or (auth.uid() = player2_id));
+create policy "tournament_teams_player_delete" on tournament_teams for delete
+  using ((auth.uid() = player1_id) or (auth.uid() = player2_id));
+
+-- tournament_matches: public read. The write policy is FOR ALL TO public (not
+-- service_role), so the anon key can write — known issue, copied from production.
+create policy "tournament_matches_public_read" on tournament_matches for select using (true);
+create policy "tournament_matches_service_write" on tournament_matches for all with check (true);
 
 -- achievements: public catalog
 create policy "achievements_public_read" on achievements for select using (true);
@@ -504,9 +549,14 @@ create policy "user_cosmetics_own_read" on user_cosmetics for select using (user
 -- currency_purchases: own purchases only
 create policy "currency_purchases_own_read" on currency_purchases for select using (user_id = auth.uid());
 
--- notifications: owner only
+-- notifications: owner reads/updates; two redundant INSERT policies with check(true)
+-- let any anon-key client insert (known issue, copied from production)
 create policy "notifications_own_read" on notifications for select using (auth.uid() = user_id);
 create policy "notifications_own_update" on notifications for update using (auth.uid() = user_id);
+create policy "notifications_service_insert" on notifications for insert with check (true);
+create policy "service_role_insert_notifications" on notifications for insert with check (true);
+create policy "users_read_own_notifications" on notifications for select using (auth.uid() = user_id);
+create policy "users_update_own_notifications" on notifications for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- payments: owner only
 create policy "payments_own_read" on payments for select using (auth.uid() = user_id);
@@ -988,7 +1038,7 @@ begin
      and new.winner_team is not null then
     for mp in select user_id, team from match_players where match_id = new.id loop
       is_win := (mp.team = new.winner_team);
-      insert into user_stats (user_id, total_matches, wins, losses, updated_at)
+      insert into public.user_stats (user_id, total_matches, wins, losses, updated_at)
       values (
         mp.user_id, 1,
         case when is_win then 1 else 0 end,
@@ -1014,7 +1064,8 @@ for each row execute function update_user_stats_on_match_completed();
 -- TRIGGER: create user profile on sign-up
 -- ============================================================
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer
+set search_path = public as $$
 begin
   insert into public.users (id, first_name, last_name, username, avatar_url, skill_level, preferred_hand)
   values (
@@ -1023,8 +1074,8 @@ begin
     coalesce(new.raw_user_meta_data->>'last_name', '-'),
     coalesce(new.raw_user_meta_data->>'username', 'user_' || substr(new.id::text, 1, 8)),
     new.raw_user_meta_data->>'avatar_url',
-    nullif(new.raw_user_meta_data->>'skill_level', '')::skill_level,
-    nullif(new.raw_user_meta_data->>'preferred_hand', '')::preferred_hand
+    nullif(new.raw_user_meta_data->>'skill_level', '')::public.skill_level,
+    nullif(new.raw_user_meta_data->>'preferred_hand', '')::public.preferred_hand
   );
   return new;
 end;
