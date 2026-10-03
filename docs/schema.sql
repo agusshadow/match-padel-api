@@ -489,9 +489,11 @@ create policy "reservations_own_update" on court_reservations for update using (
 
 -- NOTE (03/10/2026): the policies below on matches, match_players, notifications,
 -- tournaments, tournament_teams and tournament_matches are copied from what
--- production really has. Several are more permissive than intended (see the
--- header of supabase/migrations/20261003143500_sync_baseline_with_production.sql);
--- tightening them is a pending change that needs a go-ahead on production.
+-- production really has. Several are more permissive than intended (they come
+-- from supabase/migrations/20260924022039_fix_rls_policies.sql,
+-- 20260924022822_create_notifications_table.sql and
+-- 20260924022856_create_tournaments_tables.sql); tightening them is a pending
+-- change that needs a go-ahead on production.
 
 -- matches: readable by everyone; creator inserts/updates their own
 create policy "matches_public_read" on matches for select using (true);

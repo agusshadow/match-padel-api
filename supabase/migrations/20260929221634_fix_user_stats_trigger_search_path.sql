@@ -1,0 +1,1 @@
+alter function public.update_user_stats_on_match_completed() set search_path = public, pg_temp;
