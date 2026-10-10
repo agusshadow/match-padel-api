@@ -105,5 +105,18 @@ export async function listUsers(query: ListUsersQuery) {
 
 export async function getAuditLog(query: ListAuditLogQuery) {
   const { data, total } = await listAuditLog(query)
-  return { data, meta: buildMeta(query.page, query.limit, total) }
+  const actorIds = [...new Set(data.map((e) => e.actor_id).filter((id): id is string => id !== null))]
+  const clubIds = [...new Set(data.map((e) => e.club_id).filter((id): id is string => id !== null))]
+  const [actors, clubs] = await Promise.all([
+    repository.findUsersByIds(actorIds),
+    repository.findClubNamesByIds(clubIds),
+  ])
+  const actorById = new Map(actors.map((a) => [a.id, a]))
+  const clubById = new Map(clubs.map((c) => [c.id, c]))
+  const enriched = data.map((entry) => ({
+    ...entry,
+    actor: entry.actor_id ? (actorById.get(entry.actor_id) ?? null) : null,
+    club: entry.club_id ? (clubById.get(entry.club_id) ?? null) : null,
+  }))
+  return { data: enriched, meta: buildMeta(query.page, query.limit, total) }
 }

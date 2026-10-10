@@ -155,3 +155,22 @@ export async function findEmail(userId: string): Promise<string | null> {
   if (error) return null
   return data.user?.email ?? null
 }
+
+export async function findUsersByIds(
+  ids: string[],
+): Promise<Array<{ id: string; username: string | null; first_name: string | null; last_name: string | null }>> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, first_name, last_name')
+    .in('id', ids)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function findClubNamesByIds(ids: string[]): Promise<Array<{ id: string; name: string }>> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase.from('clubs').select('id, name').in('id', ids)
+  if (error) throw error
+  return data ?? []
+}
