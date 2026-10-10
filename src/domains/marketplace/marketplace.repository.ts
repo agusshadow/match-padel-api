@@ -60,6 +60,17 @@ export const marketplaceRepository = {
     return data
   },
 
+  async findCosmeticsByIds(ids: string[]) {
+    if (ids.length === 0) return []
+    const { data, error } = await supabase
+      .from('cosmetics')
+      .select('id, code, name, description, type, image_url, price_currency')
+      .in('id', ids)
+
+    if (error) throw error
+    return data ?? []
+  },
+
   async purchase(userId: string, cosmeticId: string) {
     const { data, error } = await supabase.rpc('purchase_cosmetic', {
       p_user_id: userId,

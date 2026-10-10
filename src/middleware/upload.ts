@@ -35,3 +35,20 @@ export const uploadClubDocument = multer({
     cb(null, true)
   },
 }).single('file')
+
+// Card #78: gamification catalog images (public `catalog-assets` bucket). Only
+// png/jpg/webp (no SVG: it can carry scripts), up to 2 MB; the same limits are
+// set on the bucket. The route also checks the magic bytes.
+const CATALOG_ASSET_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+export const uploadCatalogAsset = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!CATALOG_ASSET_MIME_TYPES.includes(file.mimetype)) {
+      cb(new ValidationError('Image must be a JPEG, PNG or WebP file'))
+      return
+    }
+    cb(null, true)
+  },
+}).single('file')
