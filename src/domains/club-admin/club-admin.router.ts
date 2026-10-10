@@ -3,6 +3,7 @@ import { requireAuth } from '../../middleware/auth'
 import { loadAccess, requireClubRole } from '../../middleware/access.middleware'
 import { uploadClubDocument } from '../../middleware/upload'
 import * as controller from './club-admin.controller'
+import teamRouter from '../team/team.router'
 
 // Mounted at /api/v1/club-admin/:clubId, hence mergeParams to see `clubId`.
 const router = Router({ mergeParams: true })
@@ -44,6 +45,8 @@ router.delete('/schedule-exceptions/:id', ownerOrAdmin, controller.deleteExcepti
 router.post('/documents', ownerOrAdmin, uploadClubDocument, controller.uploadDocument)
 router.delete('/documents/:id', ownerOrAdmin, controller.deleteDocument)
 router.get('/documents/:id/url', ownerOrAdmin, controller.getDocumentUrl)
+// Card #72: club team (owner/admin read, owner writes). Own role checks inside.
+router.use('/team', teamRouter)
 router.get('/', anyStaff, controller.getClub)
 router.patch('/', ownerOrAdmin, controller.updateClub)
 

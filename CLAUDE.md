@@ -30,6 +30,7 @@ src/
 │   ├── access/       ← /me/access, platform role + club memberships (card #66)
 │   ├── club-admin/   ← club panel API, /club-admin/:clubId (onboarding, courts, documents: card #67; schedules, exceptions, price rules: card #70; calendar, move/cancel, blocks: card #71)
 │   ├── courts/       ← public slots route, effective schedule/price resolution (schedule.service.ts, pure) and its loader (card #70)
+│   ├── team/         ← club team: invitations, members, accept (card #72), under /club-admin/:clubId/team, /invitations and /me/invitations/accept
 │   ├── audit/        ← recordAudit / audit_log
 │   ├── mail/         ← transactional email (Resend), templates, email_log, notifyApplicationStatusChange (card #69)
 │   └── platform/
@@ -99,7 +100,7 @@ Always in that order in a route's middleware chain (`requireRole`/`requireClubRo
 See `.env.example`. Never hardcode values. Always access them via `process.env.NAME`.
 Required today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `PORT`. Also `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN` depending on the environment. (`JWT_SECRET` used to be listed but the code does not use it.)
 
-Transactional email (card #69, `docs/email.md`) adds optional `RESEND_API_KEY`, `MAIL_FROM`, `MAIL_MODE`, `APP_ENV`, `MAIL_DEV_RECIPIENT` and `CLUB_PANEL_URL`; without a key the mail module only logs.
+Transactional email (card #69, `docs/email.md`; also the team invitation link, card #72) adds optional `RESEND_API_KEY`, `MAIL_FROM`, `MAIL_MODE`, `APP_ENV`, `MAIL_DEV_RECIPIENT` and `CLUB_PANEL_URL`; without a key the mail module only logs.
 
 `SUPABASE_ANON_KEY` backs an isolated client (`supabaseAuth` in `src/lib/supabase.ts`) used only to mint sessions in `auth.controller.ts` (`signInWithPassword`). Never call session-mutating auth methods on the `service_role` client (`supabase`): supabase-js swaps its Authorization header to the authenticated user's token as soon as a session is established, silently downgrading every later `.from(...)` call in the process from `service_role` to that user.
 
@@ -200,6 +201,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 - Card #68: no migration. Application review (`/platform/applications`, approve / request changes / reject, superadmin `reopen`, `suspend`, `unsuspend`) over the card #67 tables, with `suspended`/`reinstated` emails. A reviewer only sees `pending` and `changes_requested` clubs. See `docs/club-lifecycle.md`.
 - Card #70 (migration `20261010153252_court_schedules_exceptions_price_rules`, dev only until the next release): weekly schedules per court (existing `court_schedules`, several intervals per day, `24:00` close), `court_schedule_exceptions` and `court_price_rules`, backfilled from `clubs.settings.opening_hours`. Slots, prices and reservation/match totals come from `src/domains/courts/schedule.service.ts` (pure); see `docs/availability-and-pricing.md`.
 - Card #71 (migration `20261010154511_court_blocks`, dev only until the next release): `court_blocks`, the `create_court_blocks` RPC and a trigger on `court_reservations` that refuses a booking or move over a block. `GET /club-admin/:clubId/calendar`, `PATCH .../reservations/:id/move`, `POST .../reservations/:id/cancel` (club cancellation: always 100% refund, match cancelled with it, in-app notification) and `/blocks`; slots carry `unavailable_reason` and booking returns 409 `COURT_BLOCKED`. See `docs/availability-and-pricing.md`.
+- Card #72 (migration `20261010155448_club_team_invitations`, dev only until the next release): `club_invitations` (RLS on, no policies; only the token's SHA-256 is stored) and the `accept_club_invitation` RPC. Club team: `GET /club-admin/:clubId/team` (owner/admin), owner-only writes (invite, resend, revoke, change role, remove), `POST /me/invitations/accept` and public `GET /invitations/preview`; `team_invitation` email. Reception can no longer confirm/complete reservations. The owner role is not invitable. See `docs/club-lifecycle.md` (Team) and `docs/permissions.md`.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map

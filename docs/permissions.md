@@ -44,7 +44,8 @@ The migration backfills every `users.role = 'super_admin'` as `superadmin`. A cl
 |---|---|---|---|---|---|---|
 | Club summary | `GET /summary` | Y | Y | Y | - | Y |
 | List reservations | `GET /reservations` | Y | Y | Y | - | Y |
-| Confirm / cancel / complete a reservation | `PATCH /reservations/:id` | Y | Y | Y | - | Y |
+| Confirm / complete a reservation (card #72: not Reception) | `PATCH /reservations/:id` with `confirmed` / `completed` | Y | Y | - | - | Y |
+| Cancel a reservation | `PATCH /reservations/:id` with `cancelled` | Y | Y | Y | - | Y |
 | Calendar (reservations, ranked matches, blocks, open hours) (card #71) | `GET /calendar` | Y | Y | Y | - | Y |
 | Move / cancel an existing reservation (card #71). Reception never creates reservations | `PATCH /reservations/:id/move`, `POST /reservations/:id/cancel` | Y | Y | Y | - | Y |
 | List blocks (card #71) | `GET /blocks` | Y | Y | Y | - | Y |
@@ -59,6 +60,11 @@ The migration backfills every `users.role = 'super_admin'` as `superadmin`. A cl
 | Read a court's schedule, price rules, exceptions and day preview (card #70) | `GET /courts/:courtId/schedule`, `/price-rules`, `/preview`, `GET /schedule-exceptions` | Y | Y | Y | - | Y |
 | Replace a court's schedule or price rules, create / delete exceptions (card #70) | `PUT /courts/:courtId/schedule`, `PUT /courts/:courtId/price-rules`, `POST`, `DELETE /schedule-exceptions` | Y | Y | - | - | Y |
 | Upload / delete / get URL of a document | `POST /documents`, `DELETE /documents/:id`, `GET /documents/:id/url` | Y | Y | - | - | Y |
+| See the team (members and open invitations) (card #72) | `GET /team` | Y | Y | - | - | Y |
+| Invite, resend, revoke an invitation; change a member's role; remove a member (card #72) | `POST /team/invitations`, `POST /team/invitations/:id/resend`, `DELETE /team/invitations/:id`, `PATCH`, `DELETE /team/members/:userId` | Y | - | - | - | Y |
+| Mercado Pago account of the club (not built yet; target) | - | Y | - | - | - | Y |
+
+Reception (`staff`) only sees, moves and cancels existing reservations (calendar, list, move, cancel) and reads schedules, prices and blocks: it never creates reservations, changes prices or schedules, confirms/completes reservations, or touches the team. The Administrador manages courts, schedules, prices, calendar, reservations, blocks and tournaments but not the team nor (future) the Mercado Pago account; both are owner-only. The team routes enforce this with `requireClubRole(['owner'])` for writes and `['owner', 'admin']` for the read. Every route in `club-admin.router.ts` was checked against this table in card #72; the only deviation found (Reception could confirm/complete reservations through `PATCH /reservations/:id`) is fixed in `updateReservationStatus`.
 
 A caller with no membership in `:clubId` (including an owner of a different club) gets `403 FORBIDDEN`; a malformed id is `400`.
 
@@ -81,6 +87,8 @@ A caller with no membership in `:clubId` (including an owner of a different club
 
 ### Any signed-in user
 
+`POST /api/v1/me/invitations/accept` (card #72) joins the club of an invitation with the invited role, only if the caller's confirmed email equals the invited email. `GET /api/v1/invitations/preview?token=` is public (rate limited) and reveals only club name, role, a masked email and `expired`.
+
 `GET /api/v1/me/access` returns the caller's platform role and the clubs they can administer (each with its `status`).
 
 `POST /api/v1/me/clubs` creates a club application in `draft`; the caller becomes its `owner`. The club panel registers a
@@ -90,7 +98,7 @@ new owner with `POST /auth/register`, then `POST /me/clubs`. Only the owner of t
 
 Every write above calls `recordAudit` (`src/domains/audit/audit.service.ts`) after it succeeds: actor, club, `action`
 (`club.created`, `club.updated`, `club.activated`, `club.deactivated`, `reservation.status_changed`), entity and a
-`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. A failure to write the audit entry is logged and never fails the operation.
+`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. Card #72 adds `team.invitation_created`, `team.invitation_resent`, `team.invitation_revoked`, `team.invitation_accepted` (entity `club_invitation`, `before`/`after` status and role; never the token) and `team.member_role_changed`, `team.member_removed` (entity `club_staff`, `before`/`after` role, `user_id`). A failure to write the audit entry is logged and never fails the operation.
 `audit_log` has RLS enabled with no policies, so only the API can read or write it.
 
 ## Database side (RLS)
@@ -117,3 +125,7 @@ Card #71 (migration `20261010154511_court_blocks`): `court_blocks` has RLS enabl
 Players never read it: availability goes through the public endpoints (service role). `create_court_blocks` is
 executable by `service_role` only. The trigger function `court_reservations_check_blocks` is `security definer` (it must
 see every block whatever the caller's RLS) and is not executable by `anon`/`authenticated`.
+
+Card #72 (migration `20261010155448_club_team_invitations`): `club_invitations` has RLS enabled, no policies and no
+client grants (API only, service role). It stores only a SHA-256 hash of the token. `accept_club_invitation` is
+executable by `service_role` only and is not `security definer`.

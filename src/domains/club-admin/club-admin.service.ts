@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
-import { AppError, ConflictError, NotFoundError, ValidationError } from '../../types/errors'
-import type { ClubStatus } from '../../types/access'
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../types/errors'
+import type { ClubRole, ClubStatus } from '../../types/access'
 import { buildMeta } from '../../lib/pagination'
 import { logger } from '../../lib/logger'
 import { recordAudit } from '../audit/audit.service'
@@ -162,7 +162,14 @@ export async function updateReservationStatus(
   reservationId: string,
   actorId: string,
   status: Exclude<ReservationStatus, 'pending'>,
+  clubRole?: ClubRole,
 ) {
+  // Card #72: reception only sees, moves and cancels existing reservations;
+  // confirming or completing one is for owner/admin (docs/permissions.md).
+  if (clubRole === 'staff' && status !== 'cancelled') {
+    throw new ForbiddenError('Reception can only cancel reservations')
+  }
+
   const reservation = await repository.findReservationInClub(clubId, reservationId)
   if (!reservation) throw new NotFoundError('Reservation')
 

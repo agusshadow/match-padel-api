@@ -47,6 +47,7 @@ dev service so mail behaves as non-production.
 | `rejected` | the application is rejected | `note` = reason |
 | `suspended` | a superadmin suspends an approved club | `note` = reason |
 | `reinstated` | a superadmin lifts the suspension (`suspended` to `approved`) | `note` = optional note |
+| `team_invitation` | the owner invites a person to the club team (card #72), and on resend | `clubName`, `roleLabel` (Administrador / Recepción), `inviterName`, `expiresInDays`, `panelUrl` = the accept link |
 
 `notifyApplicationStatusChange({ clubId, toStatus, note })` (exported from `mail.service.ts`) resolves the owners of the
 club (`club_staff.role = 'owner'`, email from the Supabase auth admin API), picks the template for `toStatus` and sends
@@ -54,6 +55,12 @@ one email per owner. `draft` has no template and is ignored. `fromStatus` is opt
 `approved`, template `reinstated`) from a first approval (`approved`); `templateForStatusChange(from, to)` is the pure
 rule. Callers: `submit` (`pending`), and the platform review/suspend actions (card #68), after the transition and the
 history entry succeeded.
+
+`notifyTeamInvitation({ clubId, to, role, inviterName, token, expiresInDays })` (card #72) builds the accept link with
+`buildInvitationUrl` (`${CLUB_PANEL_URL}/invite?token=...&club=<clubId>`), sends it and resolves `true` only when the
+provider accepted the email (`false` in `log` mode, without a key or on failure; it never throws). The raw token is
+only in the email body: `email_log` records no body and the logger never receives it. In non-production with
+`MAIL_DEV_RECIPIENT` the link goes to that mailbox.
 
 ## Adding a template
 

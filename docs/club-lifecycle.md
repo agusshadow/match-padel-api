@@ -90,3 +90,25 @@ the review actions (`approved`, `rejected` with the reason, `changes_requested` 
 The migration is additive. Between applying it to production and releasing this code, a club created with the old
 `POST /platform/clubs` gets the column default (`draft`); the old API does not filter by status, so it still shows it,
 and the new API creates it as `approved`.
+
+## Team (card #72)
+
+A club has its owner from the application (`POST /me/clubs` or `POST /platform/clubs`). The owner then builds the
+team with invitations; the owner role itself is **not** invitable and ownership transfer is out of scope (a
+superadmin can change `club_staff` by hand, see `docs/permissions.md`).
+
+1. `POST /club-admin/:clubId/team/invitations` `{ email, role: 'admin' | 'staff' }` creates a `club_invitations` row
+   (`pending`, expires in 7 days; only the SHA-256 of the token is stored) and emails the link
+   `${CLUB_PANEL_URL}/invite?token=<raw token>&club=<clubId>` (template `team_invitation`, `docs/email.md`).
+   The response carries `email_sent`; a mail failure never fails the request, the owner can `resend`.
+2. The panel's `/invite` page calls `GET /invitations/preview?token=` (club name, role, masked email, expired).
+3. The invited person registers (`POST /auth/register` + email code) or logs in with the invited email, then calls
+   `POST /me/invitations/accept` `{ token }`. The API requires the caller's confirmed email to equal the invited one
+   and creates the `club_staff` row with the invited role, once (`accept_club_invitation`).
+4. The owner can change a member's role, remove a member, revoke or resend an invitation. The owner cannot be
+   changed or removed, and nobody changes their own membership.
+
+Invitation states: `pending` to `accepted` | `revoked` | `expired`. `expired` is written lazily (on team reads and
+before a new invitation) and a resend turns an expired invitation back to `pending` with a new token. One pending
+invitation per club and email. Invitations are allowed in any club status; a suspended club is hidden from players
+but its team is not blocked.

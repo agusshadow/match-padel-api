@@ -55,7 +55,7 @@ export async function updateReservation(req: Request, res: Response, next: NextF
     const { clubId, id } = reservationParamsSchema.parse(req.params)
     const { status } = updateReservationStatusSchema.parse(req.body)
     const { userId } = req as AuthenticatedRequest
-    res.json({ success: true, data: await service.updateReservationStatus(clubId, id, userId, status) })
+    res.json({ success: true, data: await service.updateReservationStatus(clubId, id, userId, status, req.clubRole) })
   } catch (err) {
     next(err)
   }

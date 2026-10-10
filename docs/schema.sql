@@ -265,6 +265,33 @@ create table public.court_blocks (
 create index court_blocks_club_start_idx on public.court_blocks (club_id, start_time);
 create index court_blocks_created_by_idx on public.court_blocks (created_by);
 
+-- club_invitations (card #72): invitations of the club team. The owner is not invitable. Only a SHA-256
+-- hash of the token is stored; the raw token travels once, in the email link. API only (RLS on, no policies).
+create table public.club_invitations (
+  id           uuid primary key default gen_random_uuid(),
+  club_id      uuid not null references clubs(id) on delete cascade,
+  email        text not null,
+  role         staff_role not null,
+  token_hash   text not null,
+  invited_by   uuid references users(id) on delete set null,
+  status       text not null default 'pending',
+  expires_at   timestamptz not null default (now() + interval '7 days'),
+  accepted_by  uuid references users(id) on delete set null,
+  accepted_at  timestamptz,
+  created_at   timestamptz not null default now(),
+  constraint club_invitations_token_hash_key unique (token_hash),
+  constraint club_invitations_role_check check (role in ('admin', 'staff')),
+  constraint club_invitations_status_check
+    check (status in ('pending', 'accepted', 'revoked', 'expired')),
+  constraint club_invitations_email_check
+    check (email = lower(email) and length(email) between 3 and 254)
+);
+create unique index club_invitations_pending_email_key
+  on public.club_invitations (club_id, lower(email)) where status = 'pending';
+create index club_invitations_club_idx on public.club_invitations (club_id, created_at desc);
+create index club_invitations_invited_by_idx on public.club_invitations (invited_by);
+create index club_invitations_accepted_by_idx on public.club_invitations (accepted_by);
+
 -- court_reservations (Supabase Realtime enabled here)
 create table public.court_reservations (
   id            uuid primary key default uuid_generate_v4(),
@@ -587,6 +614,7 @@ alter table court_schedules enable row level security;
 alter table court_schedule_exceptions enable row level security; -- card #70
 alter table court_price_rules enable row level security; -- card #70
 alter table court_blocks enable row level security; -- card #71
+alter table club_invitations enable row level security; -- card #72: no policies, API only
 alter table court_reservations enable row level security;
 alter table payments enable row level security;
 alter table matches enable row level security;
@@ -715,6 +743,50 @@ begin
 end; $$;
 revoke execute on function public.create_court_blocks(uuid, uuid[], timestamptz, timestamptz, text, uuid) from public, anon, authenticated;
 grant execute on function public.create_court_blocks(uuid, uuid[], timestamptz, timestamptz, text, uuid) to service_role;
+
+-- Card #72: accepts an invitation and creates the membership in one transaction. Compare-and-set on
+-- status = 'pending' and expires_at > now(); `on conflict do nothing` so an existing member (owner included)
+-- keeps their role. Returns no row when the invitation is not acceptable. service_role only.
+create or replace function public.accept_club_invitation(
+  p_invitation_id uuid,
+  p_user_id       uuid
+)
+returns table (club_id uuid, role public.staff_role, already_member boolean)
+language plpgsql
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  v_club_id  uuid;
+  v_role     public.staff_role;
+  v_inserted boolean;
+begin
+  update public.club_invitations i
+     set status = 'accepted', accepted_by = p_user_id, accepted_at = now()
+   where i.id = p_invitation_id
+     and i.status = 'pending'
+     and i.expires_at > now()
+  returning i.club_id, i.role into v_club_id, v_role;
+
+  if not found then
+    return;
+  end if;
+
+  insert into public.club_staff (club_id, user_id, role)
+  values (v_club_id, p_user_id, v_role)
+  on conflict (club_id, user_id) do nothing;
+  v_inserted := found;
+
+  select s.role into v_role
+    from public.club_staff s
+   where s.club_id = v_club_id and s.user_id = p_user_id;
+
+  return query select v_club_id, v_role, not v_inserted;
+end;
+$$;
+
+revoke execute on function public.accept_club_invitation(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.accept_club_invitation(uuid, uuid) to service_role;
 
 -- Card #71: a reservation cannot be inserted, or moved to another court/time, over a block (net for
 -- the race; the API answers 409 COURT_BLOCKED first). Status-only updates are never checked.

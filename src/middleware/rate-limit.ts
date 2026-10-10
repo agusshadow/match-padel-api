@@ -20,3 +20,31 @@ export const createClubLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
 })
+
+// Card #72: inviting (and resending) sends an email, so it is limited per IP on
+// top of the 50-pending-invitations cap in the service.
+export const teamInvitationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})
+
+// Card #72: public invitation preview and acceptance. Tokens are 256-bit random,
+// so this only slows down abuse.
+export const invitationPreviewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})
+
+export const acceptInvitationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})
