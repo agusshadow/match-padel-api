@@ -168,7 +168,7 @@ Requirements come in through a Claude session. The main session **orchestrates**
 |---|---|
 | `planner` | Plan and API contract. Read-only |
 | `backend-dev` | Code in `src/` (domains, middleware, payments, sockets, jobs) |
-| `db-agent` | Migrations, RLS, `docs/schema.sql`. Applies to the dev Supabase project only; promotion to production is a separate, human-approved step |
+| `db-agent` | Migration files, RLS, `docs/schema.sql`. File first, applied to the dev Supabase project only and without asking; promotion to production happens at release time |
 | `tester` | Tests. Does not modify production code |
 | `reviewer` | Diff review. Does not modify code |
 | `pr-agent` | Git and `gh`: branches, commits, PR |
@@ -183,7 +183,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 - **Release** (`/release` skill): when `develop` has accumulated several commits, a `release/vX.Y.Z` branch is cut from `develop` with all of them plus **one** extra commit, `chore: version bump`, that only raises the version. It is merged into `main` with a **merge commit** (to keep traceability), then `main` is merged back into `develop` (PR, **merge commit**) so both branches are level again.
 - Never enable "automatically delete head branches" on the repository: the release flow uses `develop` and `main` as PR heads.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
-- Every schema change is applied to the **dev** project first (`db-agent` applies it and reports what it did) and promoted to production only when the release that depends on it ships, with the human's go-ahead — agents never touch the production database on their own. Every change also gets a versioned file under `supabase/migrations/` (see the `db-migration` skill, card #26) in the same PR as `docs/schema.sql`'s update — `docs/schema.sql` is still the human-readable source of truth, the migration file is what makes the schema reproducible from scratch (`supabase db reset`/`migration up` against a fresh project) and is what gets replayed on production. Destructive changes still need explicit human go-ahead before `db-agent` applies them, even on dev. Production actions (Render/Vercel config, env vars, production migrations) still require the human to do them or explicitly direct an agent session to.
+- **Schema changes are file first.** Every change is a migration file under `supabase/migrations/` (created with `supabase migration new`) before it touches any database. `db-agent` applies it to the **dev** project without asking, aligns the version recorded in dev with the file's version and verifies the contents (see the `db-migration` skill). The same files are promoted to production at release time, in order and **before** the release PR is merged, because Render redeploys the API as soon as `main` changes; so migrations must be additive and backward compatible, and destructive ones need the human's explicit go-ahead and their own release. Applied migrations are immutable: a mistake is fixed with a new migration. The `Migrations` GitHub workflow replays every migration on an empty database on each PR and blocks edits to existing files. `docs/schema.sql` is a derived, human-readable view; the migrations win if they disagree. Production actions (Render/Vercel config, env vars, migrations on production) still require the human to do them or explicitly direct a session to, until the guard hook and release agent from Trello card #64 exist.
 - Known gap: production has permissive RLS policies, and dev has them too because dev is built from the same migrations: `notifications` accepts inserts from the anon key (`create_notifications_table`, `fix_rls_policies`), `tournament_matches_service_write` is open to the anon key (`create_tournaments_tables`), and `matches`/`tournaments` are readable in full. Tightening them is a pending change that needs the human's go-ahead on production.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
@@ -191,7 +191,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 
 - `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
 - `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".
-- `docs/schema.sql` — the full database schema, source of truth for the single (production) Supabase project.
+- `supabase/migrations/` — the versioned history of the database: the exact migrations recorded in production plus the ones added since. Source of truth. `docs/schema.sql` is a readable view derived from it.
 
 ## Keeping documentation current
 
@@ -200,7 +200,7 @@ Documentation is part of the definition of done. In the **same PR** as the code:
 - Added, changed or removed an endpoint → update `docs/endpoints.md`.
 - Fixed or introduced a deviation from the target architecture → update the "Real state vs. target" table above.
 - Added an environment variable → update `.env.example` (and `README.md` if it is required).
-- Changed the schema → update `docs/schema.sql` (see the `db-migration` skill).
+- Changed the schema → add the migration file first and update `docs/schema.sql` in the same PR (see the `db-migration` skill); never edit a migration that was already applied.
 - Described something that is not built yet → mark it "target — not implemented yet".
 
 `backend-dev` makes the update, `reviewer` checks it, and the PR checklist has an item for it.

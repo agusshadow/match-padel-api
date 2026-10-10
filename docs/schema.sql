@@ -1,13 +1,15 @@
 -- ============================================================
--- Match Padel — Initial Supabase schema
+-- Match Padel — database schema (human-readable reference)
 -- ============================================================
--- Run in the Supabase SQL Editor (Settings → SQL Editor)
+-- The source of truth is supabase/migrations/: the files there are what gets
+-- applied to every environment and what CI replays on an empty database.
+-- This file is a readable, derived view of the result. If it ever disagrees
+-- with the migrations, the migrations win; fix this file in the same PR.
 -- Order: extensions → enums → tables → indexes → RLS → functions
 -- ============================================================
 
 -- EXTENSIONS
 create extension if not exists "uuid-ossp";
-create extension if not exists "pg_cron";
 create extension if not exists "btree_gist"; -- required by court_reservations.no_overlap
 
 -- ============================================================

@@ -46,5 +46,9 @@ Everything under `docs/` is written for humans and agents alike, in English.
 - [`CLAUDE.md`](./CLAUDE.md) — working contract: stack, architecture rules, real state vs. target, workflow.
 - [`docs/endpoints.md`](./docs/endpoints.md) — every endpoint mounted today.
 - [`docs/architecture.md`](./docs/architecture.md), [`docs/conventions.md`](./docs/conventions.md), [`docs/implementing.md`](./docs/implementing.md), [`docs/api-patterns.md`](./docs/api-patterns.md) — target architecture and how-tos.
-- [`docs/schema.sql`](./docs/schema.sql) — database schema, human-readable source of truth.
-- [`supabase/migrations/`](./supabase/migrations) — the same schema as versioned migration files (card #26), so it can be reconstructed from scratch with the Supabase CLI (`supabase db reset` locally, or `supabase migration up` against a fresh project). Every schema change gets a new file here alongside its `docs/schema.sql` update — see the `db-migration` skill. Never run these against the live production project; they're for a new, empty instance only.
+- [`supabase/migrations/`](./supabase/migrations) — the versioned history of the database and the source of truth: the 35 migrations recorded in production (24/09 to 30/09/2026, exact versions, names and SQL) plus every change since. Applying them to an empty project reproduces production; the `Migrations` GitHub workflow checks that on every PR.
+- [`docs/schema.sql`](./docs/schema.sql) — a human-readable view of the schema, derived from the migrations (they win if they disagree).
+
+### Changing the database
+
+File first, always: `supabase migration new <name>`, write the SQL, apply it to the **dev** project, align the recorded version with the file and verify it, then update `docs/schema.sql`. Never edit a migration that was already applied; add a new one. Production receives the same files at release time, before the release PR is merged. Full steps: the `db-migration` skill (`.claude/skills/db-migration/SKILL.md`).

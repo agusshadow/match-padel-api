@@ -28,14 +28,14 @@ Follow the steps in order. Talk to the user in the language they use. There is a
 
 ### What goes in "Production steps"
 - Render deploys production automatically from `main`. If the release includes environment variable changes, remind the human to set them in Render **before** merging.
-- **Production SQL:** collect every "Migrations applied to dev only" note and production SQL from the included PRs. List it under "Production steps" with the order relative to the deploy. **Never run it yourself.**
+- **Pending migrations:** compute them as the files in `supabase/migrations/` (on the release branch) whose version is not in `list_migrations` of production (`ebdnlrwzhthqflsbdzvu`, a read-only check). List them in order under "Production steps", marking any destructive one. They must be applied to production **before** this PR is merged, because Render redeploys the API as soon as `main` changes; the procedure is the "Promotion to production" section of the `db-migration` skill. Do not apply them yourself unless the human explicitly directs this session to (the guard hook and release agent from Trello card #64 are not in place yet). A destructive migration needs the human's explicit go-ahead and its own release.
 - **Environment variables:** new or changed variables mentioned in the included PRs.
 
 ## Phase 2 — after the human merges to main
 
 Run when the user says the release PR is merged.
 
-1. **Verify.** `git fetch`; `origin/main` contains the release merge commit and the `chore: version bump` commit; `package.json` on `main` has the new version.
+1. **Verify.** `git fetch`; `origin/main` contains the release merge commit and the `chore: version bump` commit; `package.json` on `main` has the new version. Also check, read-only, that production's `list_migrations` contains every migration file of the release; if one is missing, tell the human right away (the deployed code expects that schema).
 2. **Tag (ask first).** Offer to create the annotated tag `vX.Y.Z` on that commit and push it (`git tag -a vX.Y.Z -m "Release vX.Y.Z" <sha> && git push origin vX.Y.Z`). Only do it if the user says yes.
 3. **Sync develop.** Invoke `pr-agent` to open a PR with head `main` and base `develop`, title `chore: sync develop with main (vX.Y.Z)`, so `develop` receives the bump commit and the merge commit. It must state that this PR is merged with a **merge commit** and that the head branch (`main`) must **not** be deleted.
 4. **Move Trello cards to Done.** For every PR bundled in this release (the changelog from Phase 1 step 4), read its **Related Trello card** line and move that card to `Done` on the `match-padel` board (see the `trello-story` skill). Do this once the release PR (to `main`) is merged — don't wait for the sync PR. Skip any PR whose card is already `Done` or says "None".
@@ -45,4 +45,4 @@ Run when the user says the release PR is merged.
 - Never commit or push to `main` or `develop`, never merge a PR, never delete `main` or `develop`. The human merges.
 - The release branch contains exactly what is in `develop` plus the single bump commit. Do not cherry-pick, do not add fixes to it: a fix goes to `develop` through its own PR and into the next release (or a hotfix).
 - If something blocks (permissions, conflicts, ambiguity), stop and explain it; do not work around it.
-- Never touch production services or databases.
+- Never touch production services or databases, except applying the release's pending migrations when the human explicitly directs this session to.

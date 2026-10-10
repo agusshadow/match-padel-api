@@ -1,0 +1,89 @@
+name: Migrations
+
+# Card #64. Every change under supabase/migrations/ must (1) only add files,
+# never edit or delete ones that already exist, (2) be well formed, and
+# (3) replay without errors on an empty local Supabase database.
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/migrations.yml'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/migrations.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    name: Replay migrations on an empty database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Applied migrations are immutable
+        # Fixing a mistake is a NEW migration. A deliberate history rewrite (like the
+        # one on 03/10/2026) needs the `migrations-rewrite` label on the PR.
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'migrations-rewrite')
+        run: |
+          base="origin/${{ github.base_ref }}"
+          changed=$(git diff --name-status --no-renames "$base"...HEAD -- supabase/migrations | grep -v '^A' || true)
+          if [ -n "$changed" ]; then
+            echo "These migration files were modified, deleted or renamed:"
+            echo "$changed"
+            echo "Never edit a migration that was already applied; add a new one instead."
+            exit 1
+          fi
+
+      - name: File names are well formed and versions are unique
+        run: |
+          cd supabase/migrations
+          bad=$(ls | grep -v -E '^[0-9]{14}_[a-z0-9_]+\.sql$' || true)
+          if [ -n "$bad" ]; then
+            echo "Names must look like 20260924005031_name_in_snake_case.sql:"
+            echo "$bad"
+            exit 1
+          fi
+          dup=$(ls | cut -d_ -f1 | sort | uniq -d)
+          if [ -n "$dup" ]; then
+            echo "Duplicated versions: $dup"
+            exit 1
+          fi
+          echo "$(ls | wc -l) migration files, all well formed"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (applies every migration to a fresh database)
+        # Services that do not influence the schema are excluded to keep it fast.
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,mailpit,supavisor,postgres-meta
+
+      - name: Every migration file is recorded as applied
+        run: |
+          files=$(ls supabase/migrations/*.sql | wc -l)
+          db_container=$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)
+          applied=$(docker exec "$db_container" psql -U postgres -t -A -c "select count(*) from supabase_migrations.schema_migrations")
+          echo "files=$files applied=$applied"
+          if [ "$files" != "$applied" ]; then
+            echo "The number of applied migrations does not match the number of files."
+            exit 1
+          fi
+
+      - name: Show the replayed schema summary
+        if: always()
+        run: |
+          db_container=$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)
+          [ -n "$db_container" ] && docker exec "$db_container" psql -U postgres -c "select (select count(*) from pg_tables where schemaname='public') as tables, (select count(*) from pg_policies where schemaname='public') as policies, (select count(*) from pg_proc p where p.pronamespace='public'::regnamespace) as functions" || true
