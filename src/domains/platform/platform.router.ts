@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth } from '../../middleware/auth'
 import { loadAccess, requireRole } from '../../middleware/access.middleware'
 import * as controller from './platform.controller'
+import catalogsRouter from '../catalogs/catalogs.router'
 
 const router = Router()
 
@@ -26,6 +27,9 @@ router.post('/clubs/:clubId/suspend', superadminOnly, controller.suspendClub)
 router.post('/clubs/:clubId/unsuspend', superadminOnly, controller.unsuspendClub)
 router.get('/users', superadminOnly, controller.listUsers)
 router.get('/audit-log', superadminOnly, controller.getAuditLog)
+
+// Card #78 (Admin F5): gamification catalogs, superadmin only (a reviewer is 403).
+router.use('/catalogs', superadminOnly, catalogsRouter)
 
 export { router as platformRouter }
 export default router

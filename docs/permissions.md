@@ -84,6 +84,7 @@ A caller with no membership in `:clubId` (including an owner of a different club
 | Activate / deactivate a club | `PATCH /clubs/:id/active` | - | Y |
 | List users | `GET /users` | - | Y |
 | Audit log | `GET /audit-log` | - | Y |
+| Gamification catalogs: list, read, create, edit, activate / deactivate achievements, challenges and cosmetics; upload catalog images (card #78) | `/catalogs/{achievements,challenges,cosmetics}[/:id[/activate\|/deactivate]]`, `POST /catalogs/assets` | - | Y |
 
 ### Any signed-in user
 
@@ -98,7 +99,7 @@ new owner with `POST /auth/register`, then `POST /me/clubs`. Only the owner of t
 
 Every write above calls `recordAudit` (`src/domains/audit/audit.service.ts`) after it succeeds: actor, club, `action`
 (`club.created`, `club.updated`, `club.activated`, `club.deactivated`, `reservation.status_changed`), entity and a
-`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. Card #72 adds `team.invitation_created`, `team.invitation_resent`, `team.invitation_revoked`, `team.invitation_accepted` (entity `club_invitation`, `before`/`after` status and role; never the token) and `team.member_role_changed`, `team.member_removed` (entity `club_staff`, `before`/`after` role, `user_id`). A failure to write the audit entry is logged and never fails the operation.
+`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. Card #78 adds `catalog.{achievement,challenge,cosmetic}_{created,updated,activated,deactivated}` (entity `achievement` / `challenge` / `cosmetic`; metadata `{ code, before, after }`) and `catalog.asset_uploaded`. Card #72 adds `team.invitation_created`, `team.invitation_resent`, `team.invitation_revoked`, `team.invitation_accepted` (entity `club_invitation`, `before`/`after` status and role; never the token) and `team.member_role_changed`, `team.member_removed` (entity `club_staff`, `before`/`after` role, `user_id`). A failure to write the audit entry is logged and never fails the operation.
 `audit_log` has RLS enabled with no policies, so only the API can read or write it.
 
 ## Database side (RLS)
@@ -129,3 +130,8 @@ see every block whatever the caller's RLS) and is not executable by `anon`/`auth
 Card #72 (migration `20261010155448_club_team_invitations`): `club_invitations` has RLS enabled, no policies and no
 client grants (API only, service role). It stores only a SHA-256 hash of the token. `accept_club_invitation` is
 executable by `service_role` only and is not `security definer`.
+
+Card #78 (migration `20261010160513_gamification_catalogs`): `achievements`, `challenges` and `cosmetics` keep their public
+read policies (active rows; achievements all rows) and gain `challenges_participant_read` / `cosmetics_owner_read`, which
+let an authenticated player read the inactive item they have progress on / own. Nobody writes the catalogs from the
+client. The `catalog-assets` bucket is public for reads; there is no write policy, only the API (service role) uploads.

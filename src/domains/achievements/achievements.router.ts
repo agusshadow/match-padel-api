@@ -4,7 +4,7 @@ import { getCatalog, getMyAchievements } from './achievements.controller'
 
 const router = Router()
 
-// GET /api/v1/achievements — public catalog of all achievements
+// GET /api/v1/achievements — public catalog of active achievements
 router.get('/', getCatalog)
 
 // GET /api/v1/achievements/me — achievements the current user has earned

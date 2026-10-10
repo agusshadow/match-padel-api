@@ -118,8 +118,8 @@ Card #54 — reads only; achievements are awarded from `accept_match_score` (see
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| GET | `/api/v1/achievements` | none | Full achievement catalog | `getCatalog` |
-| GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned | `getMyAchievements` |
+| GET | `/api/v1/achievements` | none | Active achievement catalog (card #78: deactivated ones are not listed) | `getCatalog` |
+| GET | `/api/v1/achievements/me` | requireAuth | Achievements the current user has earned (also the ones deactivated since) | `getMyAchievements` |
 
 ## challenges — `/api/v1/challenges` (`challenges.router.ts`)
 
@@ -138,10 +138,10 @@ Card #63: cosmetics (palette skins, avatar frames, emblems) bought with an inter
 |---|---|---|---|---|
 | GET | `/api/v1/marketplace/cosmetics` | none | Full active cosmetics catalog | `getCatalog` (`marketplace.controller.ts`) |
 | GET | `/api/v1/marketplace/cosmetics/me` | requireAuth | Cosmetics the current user owns | `getMyCosmetics` |
-| GET | `/api/v1/marketplace/equipped` | requireAuth | The 3 equip slots (`equipped_palette_cosmetic_id`/`equipped_avatar_cosmetic_id`/`equipped_emblem_cosmetic_id`) | `getMyEquipped` |
+| GET | `/api/v1/marketplace/equipped` | requireAuth | The 3 equip slots (`equipped_palette_cosmetic_id`/`equipped_avatar_cosmetic_id`/`equipped_emblem_cosmetic_id`) plus, since card #78, the cosmetic itself per slot: `palette`, `avatar`, `emblem` (`{ id, code, name, description, type, image_url, price_currency }` or `null`), also when it has been deactivated | `getMyEquipped` |
 | GET | `/api/v1/marketplace/balance` | requireAuth | Current currency balance | `getMyBalance` |
-| POST | `/api/v1/marketplace/cosmetics/:id/purchase` | requireAuth | Spend currency on an item (atomic via `purchase_cosmetic`); 409 if already owned, 400 if insufficient balance | `purchaseCosmetic` |
-| POST | `/api/v1/marketplace/cosmetics/:id/equip` | requireAuth | Equip an owned item; 403 if not owned | `equipCosmetic` |
+| POST | `/api/v1/marketplace/cosmetics/:id/purchase` | requireAuth | Spend currency on an item (atomic via `purchase_cosmetic`); 409 `ALREADY_OWNED`, 409 `COSMETIC_INACTIVE` (card #78, deactivated item), 404 if it does not exist, 400 `INSUFFICIENT_BALANCE` | `purchaseCosmetic` |
+| POST | `/api/v1/marketplace/cosmetics/:id/equip` | requireAuth | Equip an owned item (even if it was deactivated after the purchase, card #78); 403 `NOT_OWNED`, 404 if it does not exist | `equipCosmetic` |
 | POST | `/api/v1/marketplace/currency/purchase` | requireAuth | MercadoPago checkout link for the currency pack; confirmed by the same `POST /payments/webhook`, resolved via a `currency:` prefix on `external_reference` since it isn't reservation-shaped | `purchaseCurrency` |
 
 ## me — `/api/v1/me` (`access.router.ts`, card #66)
@@ -219,6 +219,29 @@ Card #67 (and #70 for schedules, exceptions and price rules): club data, courts 
 | POST | `/api/v1/platform/clubs/:clubId/unsuspend` | requireRole superadmin | Card #68. Body `{ note? }`. `suspended` to `approved`. Audit `club.unsuspended`; emails the owner (`reinstated`) | `unsuspendClub` |
 | GET | `/api/v1/platform/users?search=&page=&limit=` | requireRole superadmin | Users (`id`, `username`, `first_name`, `last_name`, `role`, `is_active`, `created_at`, `email`); `search` matches username and names, not email | `listUsers` |
 | GET | `/api/v1/platform/audit-log?clubId=&actorId=&page=&limit=` | requireRole superadmin | `audit_log` entries, newest first, each with `actor` (`id, username, first_name, last_name`) and `club` (`id, name`) or `null` | `getAuditLog` |
+
+### Gamification catalogs — `/api/v1/platform/catalogs` (`catalogs.router.ts`, card #78)
+
+Mounted in `platform.router.ts` behind `requireRole(['superadmin'])`: a reviewer, a club role or a plain player gets 403. Field meaning and player-visible effect: `docs/catalogs.md`. Bodies and rows use the column names (snake_case), the same as the public catalogs. `code` is the immutable identity key (lowercase snake_case, 2..60). There is no delete; `is_active` is changed only through `activate`/`deactivate` (a PATCH that carries `code` or `is_active` is 400). Every write is audited (`catalog.<entity>_created` / `_updated` / `_activated` / `_deactivated`, entity `achievement`/`challenge`/`cosmetic`, `metadata: { code, before, after }`; `_updated` only lists the changed fields; a no-op PATCH or an already-in-state activate writes nothing). Single-item responses are the row plus `usage` (counts of players that own / have progress on it). Lists: `?page=&limit=` (max 100), `?search=` (name, code, description), `?is_active=true|false`, newest first, `meta` envelope.
+
+| Method | Path | Body / filters | Notes |
+|---|---|---|---|
+| GET | `/catalogs/achievements` | filters above | Every achievement, active or not |
+| POST | `/catalogs/achievements` | `{ code, name, description, icon, points?, condition: { type: 'matches_played' \| 'wins', count }, is_active? }` | 201. 409 `CODE_ALREADY_EXISTS` |
+| GET | `/catalogs/achievements/:id` | | 404 `NOT_FOUND`; `usage: { owners_count }` |
+| PATCH | `/catalogs/achievements/:id` | any of `name, description, icon, points, condition` | `code` immutable |
+| POST | `/catalogs/achievements/:id/activate`, `/deactivate` | none | Idempotent |
+| GET | `/catalogs/challenges` | filters above + `cadence`, `action_type` | |
+| POST | `/catalogs/challenges` | `{ code, name, description, cadence: 'daily' \| 'weekly' \| 'monthly' \| 'one_time', action_type: 'play_matches' \| 'win_matches', target_count (1..10000), reward_xp? (0..100000), reward_currency? (0..1000000), is_active? }` | 201. 409 `CODE_ALREADY_EXISTS` |
+| GET | `/catalogs/challenges/:id` | | `usage: { assignments_count, active_assignments_count }` |
+| PATCH | `/catalogs/challenges/:id` | any of `name, description, cadence, action_type, target_count, reward_xp, reward_currency` | 409 `CATALOG_FIELD_LOCKED` (`details: { fields, usage }`) when `cadence`/`action_type` change after players were assigned it |
+| POST | `/catalogs/challenges/:id/activate`, `/deactivate` | none | Idempotent |
+| GET | `/catalogs/cosmetics` | filters above + `type` | |
+| POST | `/catalogs/cosmetics` | `{ code, name, description, type: 'palette_skin' \| 'avatar' \| 'emblem', image_url (https), price_currency (0..1000000), is_active? }` | 201. 409 `CODE_ALREADY_EXISTS` |
+| GET | `/catalogs/cosmetics/:id` | | `usage: { owners_count }` |
+| PATCH | `/catalogs/cosmetics/:id` | any of `name, description, type, image_url, price_currency` | 409 `CATALOG_FIELD_LOCKED` when `type` changes after someone owns it |
+| POST | `/catalogs/cosmetics/:id/activate`, `/deactivate` | none | Idempotent |
+| POST | `/catalogs/assets` | multipart, field `file`: png, jpg or webp (checked by magic bytes), max 2 MB | 201 `{ url, path, content_type, size_bytes }`; `url` is the public URL in the `catalog-assets` bucket, to be used as `image_url` / `icon`. 400 for another type, a spoofed type, too large or no file. Audited (`catalog.asset_uploaded`) |
 
 ## invitations — `/api/v1/invitations` (`team.router.ts`, card #72)
 

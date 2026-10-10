@@ -440,8 +440,11 @@ create table public.achievements (
   name        text not null,
   description text not null,
   icon        text not null,
-  points      integer not null default 0,
-  condition   jsonb not null default '{}'
+  points      integer not null default 0 check (points >= 0), -- card #78 (NOT VALID in the migration: enforced for new/updated rows)
+  condition   jsonb not null default '{}',   -- card #78: {"type": "matches_played" | "wins", "count": n}, read by accept_match_score
+  is_active   boolean not null default true, -- card #78: inactive = no longer awarded; earned rows stay
+  created_at  timestamptz not null default now(), -- card #78
+  updated_at  timestamptz not null default now()  -- card #78
 );
 
 -- user_achievements
@@ -465,10 +468,11 @@ create table public.challenges (
   cadence         challenge_cadence not null,
   action_type     challenge_action not null,
   target_count    integer not null check (target_count > 0),
-  reward_xp       integer not null default 0,
-  reward_currency integer not null default 0, -- card #63: paid out once the internal currency exists
+  reward_xp       integer not null default 0 check (reward_xp >= 0), -- card #78 (NOT VALID in the migration)
+  reward_currency integer not null default 0 check (reward_currency >= 0), -- card #63: paid out once the internal currency exists
   is_active       boolean not null default true,
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now() -- card #78
 );
 
 -- user_challenges: per-user, per-period progress
@@ -496,7 +500,8 @@ create table public.cosmetics (
   image_url       text not null,
   price_currency  integer not null check (price_currency >= 0),
   is_active       boolean not null default true,
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now() -- card #78
 );
 
 -- user_cosmetics: ownership
@@ -877,6 +882,8 @@ create policy "tournament_matches_public_read" on tournament_matches for select 
 
 -- achievements: public catalog
 create policy "achievements_public_read" on achievements for select using (true);
+-- (card #78) public read stays unfiltered: inactive achievements are filtered by the API, and earned
+-- ones must keep embedding their achievement in user_achievements.
 
 -- user_achievements: public
 create policy "user_achievements_public_read" on user_achievements for select using (true);
@@ -886,12 +893,18 @@ create policy "elo_history_public_read" on elo_history for select using (true);
 
 -- challenges: public catalog (card #62)
 create policy "challenges_public_read" on challenges for select using (is_active = true);
+-- card #78: a player keeps reading the inactive challenge they have progress on
+create policy "challenges_participant_read" on challenges for select to authenticated
+  using (exists (select 1 from user_challenges ucg where ucg.challenge_id = challenges.id and ucg.user_id = (select auth.uid())));
 
 -- user_challenges: own progress only
 create policy "user_challenges_own_read" on user_challenges for select using (user_id = auth.uid());
 
 -- cosmetics: public catalog (card #63)
 create policy "cosmetics_public_read" on cosmetics for select using (is_active = true);
+-- card #78: a player keeps reading the inactive cosmetic they own
+create policy "cosmetics_owner_read" on cosmetics for select to authenticated
+  using (exists (select 1 from user_cosmetics uc where uc.cosmetic_id = cosmetics.id and uc.user_id = (select auth.uid())));
 
 -- user_cosmetics: own ownership rows only
 create policy "user_cosmetics_own_read" on user_cosmetics for select using (user_id = auth.uid());
@@ -934,6 +947,9 @@ create trigger set_updated_at before update on court_reservations for each row e
 create trigger set_updated_at before update on payments for each row execute function update_updated_at();
 create trigger set_updated_at before update on matches for each row execute function update_updated_at();
 create trigger set_updated_at before update on tournaments for each row execute function update_updated_at();
+create trigger set_updated_at before update on achievements for each row execute function update_updated_at(); -- card #78
+create trigger set_updated_at before update on challenges for each row execute function update_updated_at(); -- card #78
+create trigger set_updated_at before update on cosmetics for each row execute function update_updated_at(); -- card #78
 
 -- ============================================================
 -- FUNCTION: accept_match_score (card #21 atomic score+ELO; card #54 awards
@@ -993,23 +1009,24 @@ begin
       values (mp.user_id, p_match_id, v_elo_before, v_elo_after, v_delta);
     end if;
 
-    -- Card #54: award achievements based on the just-updated counter-cache.
-    -- Deliberately minimal (not the full condition-engine card #55 would
-    -- need) — just the 3 seeded achievements below, matched by hand.
+    -- Card #54 / #78: award every active achievement whose condition the
+    -- just-updated counter-cache meets. Supported condition types:
+    -- matches_played (user_stats.total_matches) and wins (user_stats.wins),
+    -- both with "count". Idempotent: unique (user_id, achievement_id).
     select * into v_stats from user_stats where user_id = mp.user_id;
-    if v_stats.total_matches = 1 then
+    if found then
       insert into user_achievements (user_id, achievement_id)
-      select mp.user_id, id from achievements where code = 'first_match'
-      on conflict (user_id, achievement_id) do nothing;
-    end if;
-    if v_stats.wins = 1 then
-      insert into user_achievements (user_id, achievement_id)
-      select mp.user_id, id from achievements where code = 'first_win'
-      on conflict (user_id, achievement_id) do nothing;
-    end if;
-    if v_stats.wins = 5 then
-      insert into user_achievements (user_id, achievement_id)
-      select mp.user_id, id from achievements where code = 'five_wins'
+      select mp.user_id, a.id
+      from achievements a
+      where a.is_active
+        and a.condition ->> 'count' ~ '^[0-9]{1,9}$'
+        and (
+          (a.condition ->> 'type' = 'matches_played'
+            and v_stats.total_matches >= (a.condition ->> 'count')::integer)
+          or
+          (a.condition ->> 'type' = 'wins'
+            and v_stats.wins >= (a.condition ->> 'count')::integer)
+        )
       on conflict (user_id, achievement_id) do nothing;
     end if;
 
@@ -1207,6 +1224,7 @@ as $$
 declare
   v_balance integer;
   v_price integer;
+  v_active boolean;
   v_already_owned boolean;
   v_result user_cosmetics;
 begin
@@ -1215,7 +1233,7 @@ begin
     raise exception 'USER_NOT_FOUND';
   end if;
 
-  select price_currency into v_price from cosmetics where id = p_cosmetic_id and is_active;
+  select price_currency, is_active into v_price, v_active from cosmetics where id = p_cosmetic_id;
   if not found then
     raise exception 'COSMETIC_NOT_FOUND';
   end if;
@@ -1223,6 +1241,11 @@ begin
   select exists(select 1 from user_cosmetics where user_id = p_user_id and cosmetic_id = p_cosmetic_id) into v_already_owned;
   if v_already_owned then
     raise exception 'ALREADY_OWNED';
+  end if;
+
+  -- card #78: a deactivated cosmetic is no longer sold
+  if not v_active then
+    raise exception 'COSMETIC_INACTIVE';
   end if;
 
   if v_balance < v_price then
@@ -1449,4 +1472,10 @@ on conflict (id) do nothing;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('club-documents', 'club-documents', false, 10485760,
         array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+-- Card #78: public bucket for gamification catalog images. Written by the API only
+-- (service_role); no write policy for anyone else. Files: <uuid>.<ext>.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('catalog-assets', 'catalog-assets', true, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
