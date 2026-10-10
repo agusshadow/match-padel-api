@@ -198,4 +198,76 @@ export const notifications = {
       data: { tournament_id: tournamentId },
     })
   },
+
+  // Card #77: the registration fee was paid and the place is confirmed.
+  tournamentRegistrationConfirmed(
+    userIds: string[],
+    input: { tournamentId: string; name: string; teamName: string },
+  ) {
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'tournament_update' as NotificationType,
+        title: 'Inscripción confirmada',
+        body: `Tu equipo "${input.teamName}" quedó inscripto en ${input.name}.`,
+        data: { kind: 'tournament_registration_confirmed', tournament_id: input.tournamentId },
+      })),
+    )
+  },
+
+  // Card #77: the club cancelled the tournament. `refunded` = the player had paid and the money goes back.
+  tournamentCancelled(
+    userIds: string[],
+    input: { tournamentId: string; name: string; reason: string | null; refunded: boolean },
+  ) {
+    const reason = input.reason ? ` Motivo: ${input.reason}.` : ''
+    const refund = input.refunded ? ' Se te reembolsa la inscripción.' : ''
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'tournament_update' as NotificationType,
+        title: 'Torneo cancelado',
+        body: `El club canceló el torneo ${input.name}.${reason}${refund}`,
+        data: {
+          kind: 'tournament_cancelled',
+          tournament_id: input.tournamentId,
+          reason: input.reason,
+          refunded: input.refunded,
+        },
+      })),
+    )
+  },
+
+  // Card #77: the fixture was generated and the tournament started.
+  tournamentStarted(userIds: string[], input: { tournamentId: string; name: string }) {
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'tournament_update' as NotificationType,
+        title: '¡Arrancó el torneo!',
+        body: `${input.name} ya tiene fixture. Revisá tus partidos.`,
+        data: { kind: 'tournament_started', tournament_id: input.tournamentId },
+      })),
+    )
+  },
+
+  // Card #77: a result of the tournament was recorded (or corrected) for the players of that match.
+  tournamentResult(
+    userIds: string[],
+    input: { tournamentId: string; name: string; matchId: string; round: number },
+  ) {
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'tournament_update' as NotificationType,
+        title: 'Resultado cargado',
+        body: `Se cargó un resultado de la ronda ${input.round} en ${input.name}.`,
+        data: {
+          kind: 'tournament_result',
+          tournament_id: input.tournamentId,
+          tournament_match_id: input.matchId,
+        },
+      })),
+    )
+  },
 }

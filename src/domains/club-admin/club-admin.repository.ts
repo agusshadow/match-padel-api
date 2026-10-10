@@ -189,7 +189,7 @@ export async function updateReservationStatus(
   if (error) throw error
 }
 
-// ---- Matches and tournaments ------------------------------------------------
+// ---- Matches (tournaments moved to the tournaments domain, card #77) -----------
 
 export async function listMatches(
   clubId: string,
@@ -206,25 +206,6 @@ export async function listMatches(
     )
     .eq('club_id', clubId)
     .order('created_at', { ascending: false })
-    .range(from, to)
-  if (error) throw error
-  return { data: data ?? [], total: count ?? 0 }
-}
-
-export async function listTournaments(
-  clubId: string,
-  options: { page: number; limit: number },
-): Promise<{ data: unknown[]; total: number }> {
-  const { from, to } = rangeFor(options.page, options.limit)
-  const { data, error, count } = await supabase
-    .from('tournaments')
-    .select(
-      `id, name, format, status, max_teams, entry_fee, prize_pool, start_date, end_date, created_at,
-       teams:tournament_teams(count)`,
-      { count: 'exact' },
-    )
-    .eq('club_id', clubId)
-    .order('start_date', { ascending: false })
     .range(from, to)
   if (error) throw error
   return { data: data ?? [], total: count ?? 0 }

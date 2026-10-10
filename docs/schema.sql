@@ -446,12 +446,26 @@ create table public.tournaments (
   prize_pool    numeric(10,2) not null default 0,
   start_date    timestamptz not null,
   end_date      timestamptz,
-  rules         jsonb not null default '{}',
-  bracket       jsonb not null default '{}',  -- bracket structure
+  rules         jsonb not null default '{}',  -- card #77: free rules; americano_rounds (int) = rounds to generate
+  bracket       jsonb not null default '{}',  -- card #77: metadata of the generated fixture (format, seeding, seed_order, ...)
   created_by    uuid not null references users(id),
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  -- card #77 (club-managed tournaments)
+  category      text,                          -- free-text category ("5ta", "Mixto")
+  min_elo       integer,                       -- level limits checked for BOTH players of a team at registration
+  max_elo       integer,
+  registration_deadline timestamptz,
+  started_at    timestamptz,
+  completed_at  timestamptz,
+  cancelled_at  timestamptz,
+  cancel_reason text,
+  constraint tournaments_elo_range_check check (
+    (min_elo is null or min_elo >= 0) and (max_elo is null or max_elo >= 0)
+    and (min_elo is null or max_elo is null or min_elo <= max_elo)
+  )
 );
+-- max_teams = registrations (pairs); americano: max_players / 2.
 
 -- circular FK tournaments ↔ matches
 alter table public.matches
@@ -467,9 +481,21 @@ create table public.tournament_teams (
   player2_id      uuid not null references users(id),
   seed            integer,
   registered_at   timestamptz not null default now(),
+  -- card #77: registration payment
+  status          text not null default 'confirmed' check (status in ('pending_payment', 'confirmed')),
+  expires_at      timestamptz,                 -- pending_payment: when the place is released (30 minutes)
+  paid_at         timestamptz,
+  payment_id      uuid,                        -- FK to payments added below (circular)
   unique(tournament_id, player1_id),
   unique(tournament_id, player2_id)
 );
+
+-- card #77: a registration fee is a payment of a tournament team (reservation_id stays null)
+alter table public.payments
+  add column tournament_id uuid references tournaments(id) on delete set null,
+  add column tournament_team_id uuid references tournament_teams(id) on delete set null;
+alter table public.tournament_teams
+  add constraint tournament_teams_payment_id_fkey foreign key (payment_id) references payments(id) on delete set null;
 
 -- tournament_matches: bracket rounds (exists in production; synced here on 03/10/2026)
 create table public.tournament_matches (
@@ -482,10 +508,25 @@ create table public.tournament_matches (
   winner_team_id uuid references tournament_teams(id),
   score_team1    integer[],
   score_team2    integer[],
+  -- card #77. status: pending (waiting for teams), ready (both known), completed,
+  -- bye (auto-resolved: one side never exists), void (nobody ever plays it)
   status         text not null default 'pending',
   scheduled_at   timestamptz,
-  created_at     timestamptz not null default now()
+  created_at     timestamptz not null default now(),
+  -- card #77: fixture position and bracket links (docs/tournaments.md)
+  stage          text not null default 'main',   -- group | main | winners | losers | grand_final | americano
+  position       integer,                         -- 0-based inside (stage, round)
+  next_match_id  uuid references tournament_matches(id) on delete set null,   -- where the winner goes
+  next_match_slot smallint check (next_match_slot is null or next_match_slot in (1, 2)),
+  loser_next_match_id uuid references tournament_matches(id) on delete set null, -- double elimination: where the loser drops
+  loser_next_match_slot smallint check (loser_next_match_slot is null or loser_next_match_slot in (1, 2)),
+  team1_players  uuid[],                          -- americano: the two players of each side (team1_id/team2_id stay null)
+  team2_players  uuid[],
+  result_by      uuid references users(id) on delete set null,
+  result_at      timestamptz,
+  updated_at     timestamptz not null default now()
 );
+create unique index tournament_matches_position_key on tournament_matches (tournament_id, stage, round, position);
 
 -- elo_history: ELO change history
 create table public.elo_history (
@@ -654,6 +695,14 @@ create index notifications_user_id_is_read_idx on notifications(user_id, is_read
 create index tournaments_start_date_idx on tournaments(start_date);
 create index tournaments_status_idx on tournaments(status);
 create index tournament_matches_tournament_id_idx on tournament_matches(tournament_id);
+create index tournament_teams_status_idx on tournament_teams (tournament_id, status); -- card #77
+create index tournament_teams_pending_expiry_idx on tournament_teams (expires_at) where status = 'pending_payment'; -- card #77
+create index tournament_teams_payment_id_idx on tournament_teams (payment_id); -- card #77
+create index payments_tournament_idx on payments (tournament_id) where tournament_id is not null; -- card #77
+create index payments_tournament_team_idx on payments (tournament_team_id) where tournament_team_id is not null; -- card #77
+create index tournament_matches_next_match_idx on tournament_matches (next_match_id) where next_match_id is not null; -- card #77
+create index tournament_matches_loser_next_match_idx on tournament_matches (loser_next_match_id) where loser_next_match_id is not null; -- card #77
+create index tournament_matches_result_by_idx on tournament_matches (result_by) where result_by is not null; -- card #77
 create index on payments(mp_event_id);
 create index payments_club_created_idx on payments (club_id, created_at desc); -- card #75
 create index on users(elo desc) where is_active = true;
@@ -938,17 +987,28 @@ create policy "chats_participants_read" on match_chats for select using (
   exists (select 1 from match_players where match_id = match_chats.match_id and user_id = auth.uid())
 );
 
--- tournaments: non-drafts are public; drafts for their creator and staff of the tournament's club; no client writes
+-- tournaments: (card #77) non-drafts of an approved, active club are public; every tournament for its
+-- creator and for members of the tournament's club / platform superadmins; no client writes
 create policy "tournaments_public_read" on tournaments for select to anon, authenticated
-  using (status <> 'draft');
+  using (
+    status <> 'draft'
+    and exists (select 1 from clubs c where c.id = tournaments.club_id and c.status = 'approved' and c.is_active)
+  );
 create policy "tournaments_staff_read" on tournaments for select to authenticated
   using (created_by = (select auth.uid()) or public.is_club_member(club_id));
 
--- tournament_teams: public read; no client writes
-create policy "tournament_teams_public_read" on tournament_teams for select using (true);
+-- tournament_teams (card #77): confirmed teams of a tournament the caller can read; the two players of a team
+-- read their own registration whatever its status; members of the club read all; no client writes
+create policy "tournament_teams_public_read" on tournament_teams for select to anon, authenticated
+  using (status = 'confirmed' and exists (select 1 from tournaments t where t.id = tournament_teams.tournament_id));
+create policy "tournament_teams_own_read" on tournament_teams for select to authenticated
+  using ((select auth.uid()) in (player1_id, player2_id));
+create policy "tournament_teams_staff_read" on tournament_teams for select to authenticated
+  using (exists (select 1 from tournaments t where t.id = tournament_teams.tournament_id and public.is_club_member(t.club_id)));
 
--- tournament_matches: public read; no client writes
-create policy "tournament_matches_public_read" on tournament_matches for select using (true);
+-- tournament_matches (card #77): the matches of a tournament the caller can read; no client writes
+create policy "tournament_matches_public_read" on tournament_matches for select to anon, authenticated
+  using (exists (select 1 from tournaments t where t.id = tournament_matches.tournament_id));
 
 -- achievements: public catalog
 create policy "achievements_public_read" on achievements for select using (true);
@@ -1042,6 +1102,7 @@ create trigger set_updated_at before update on court_reservations for each row e
 create trigger set_updated_at before update on payments for each row execute function update_updated_at();
 create trigger set_updated_at before update on matches for each row execute function update_updated_at();
 create trigger set_updated_at before update on tournaments for each row execute function update_updated_at();
+create trigger set_updated_at before update on tournament_matches for each row execute function update_updated_at(); -- card #77
 create trigger set_updated_at before update on achievements for each row execute function update_updated_at(); -- card #78
 create trigger set_updated_at before update on challenges for each row execute function update_updated_at(); -- card #78
 create trigger set_updated_at before update on cosmetics for each row execute function update_updated_at(); -- card #78

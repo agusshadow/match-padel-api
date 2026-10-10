@@ -75,17 +75,6 @@ export async function listMatches(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function listTournaments(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { clubId } = clubParamsSchema.parse(req.params)
-    const query = listQuerySchema.parse(req.query)
-    const { data, meta } = await service.listTournaments(clubId, query)
-    res.json({ success: true, data, meta })
-  } catch (err) {
-    next(err)
-  }
-}
-
 export async function getClub(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { clubId } = clubParamsSchema.parse(req.params)

@@ -558,11 +558,6 @@ export async function listMatches(clubId: string, options: { page: number; limit
   return { data, meta: buildMeta(options.page, options.limit, total) }
 }
 
-export async function listTournaments(clubId: string, options: { page: number; limit: number }) {
-  const { data, total } = await repository.listTournaments(clubId, options)
-  return { data, meta: buildMeta(options.page, options.limit, total) }
-}
-
 // ---- Card #67: club creation from the panel ---------------------------------
 
 const MAX_DRAFT_CLUBS_PER_USER = 10

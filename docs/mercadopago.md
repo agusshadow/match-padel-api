@@ -166,8 +166,10 @@ For a `club_account` club WITHOUT a connected, non-expired link (or with the OAu
 Free (0) flows and `platform_account` clubs are unaffected. `payments_enabled` never decrypts a token (it reads the
 link's status and `expires_at`).
 
-Tournament registration fees (`tournaments.entry_fee`) have **no payment flow in the API yet**, so there is nothing to
-charge for them in this card; card #79/F4 will create it on top of `resolveSeller`.
+Tournament registration fees (`tournaments.entry_fee`) are charged since card #77 on top of `resolveSeller`, with the same
+seller, commission, webhook and refund rules: `docs/tournaments.md`, "Registration payment". A `payments` row of a
+registration has `reservation_id = null` and `tournament_id` / `tournament_team_id` set; the webhook confirms the team or
+refunds the payment in full when the place no longer exists. Unverified against the sandbox like the rest.
 
 ### Known exposure
 
