@@ -58,9 +58,44 @@ For each slot, the **hourly rate** is the matching `court_price_rules` row, else
 | `POST /matches` | Same check and pricing for the reservation it creates (the 4-way split is unchanged). |
 | Expiry, cancellation, payments | Untouched. A stored `court_reservations.total_price` is never recomputed: changing rules or exceptions does not rewrite existing reservations, which stay valid (closing a day only returns a `warning` count). |
 
+## Blocks (card #71)
+
+A block is a time range on one court that players cannot book (maintenance, classes, private events). Simple blocks,
+no recurrence. Table `court_blocks(id, club_id, court_id, start_time, end_time, reason, created_by, created_at)`,
+`end_time > start_time`; one row per court, so a block over several courts is several rows created in one transaction
+by the RPC `create_court_blocks`. Blocks of the same court never overlap (exclusion constraint). Times are UTC instants.
+
+| Where | Effect |
+|---|---|
+| `GET /courts/:courtId/slots`, `GET /clubs/:clubId/availability` | A slot overlapping a block has `available: false` and `unavailable_reason: 'blocked'` (the club availability simply leaves that court out of the slot). The block's reason is never shown to players. |
+| `POST /reservations`, `POST /matches` | 409 `COURT_BLOCKED` when the range overlaps a block. A database trigger on `court_reservations` backs it up for the race between a booking and a new block. |
+| `PATCH .../reservations/:id/move` | 409 `COURT_BLOCKED` when the target overlaps a block. |
+| `POST /club-admin/:clubId/blocks` | Blocks never cover existing pending/confirmed reservations: any conflict (reservation or block, on any of the courts) rejects the whole request with 409 `BLOCK_CONFLICTS` and `details.conflicts`; the club must move or cancel them first. Nothing is cancelled automatically. |
+
+Blocks sit next to the schedule and exceptions: closed time from a schedule exception is a different concept (it is
+about the day's hours and does not touch existing reservations), and a block is about a concrete range. The calendar
+returns both, so the panel can draw them differently.
+
+## Club-initiated move and cancel (card #71)
+
+- **Move** keeps the price as it was charged (never recomputed, even if the target slot costs more or less) and the
+  status; the new time must have the same duration. It must be whole slots of the target court's effective schedule, in
+  the future, with no other reservation and no block. A match on the reservation needs no change: it references the
+  reservation, which moved with its players. Booker and match players are notified in-app.
+- **Cancel** always refunds 100% of every approved payment (MercadoPago refund per payment, `refundPayment`) whatever
+  the time left, and never applies the late-cancellation currency rule: the club's decision does not penalize the
+  player. The per-club refund policy is a later card (F3). A reservation of a match cancels the match too
+  (`matchService.cancelByClub`: refunds all payers, sets the match `cancelled`), so no match stays on a cancelled
+  reservation. Pending (unpaid) payment rows are left as they are; a player who still pays an old checkout link after
+  the cancellation is the same pre-existing gap as with the expiry job (the payment would need a manual refund).
+- No email: the mail module is built around club-owner application notices and has no player recipient resolution, so
+  the player is told in-app only (target — not implemented yet).
+
 ## Rollout and compatibility
 
-The migration is additive; existing courts keep their rows (seed: every day 08:00-22:00, 90 min) and therefore the same
+Card #71's migration is also additive (a new table, an RPC and a trigger that only fires when a block exists); production on the previous API ignores blocks, and none can exist before the new API is released.
+
+The card #70 migration is additive; existing courts keep their rows (seed: every day 08:00-22:00, 90 min) and therefore the same
 slots and prices. Courts with no rows whose club has `opening_hours` get rows from them (60 min). Production keeps running
 the previous API until release: it reads `court_schedules` with `.single()` per court and day, so it is only safe while a
 court has one interval per day; clubs can only create more once the new API and panel are released.

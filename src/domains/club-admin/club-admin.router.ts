@@ -16,6 +16,13 @@ const ownerOnly = requireClubRole(['owner'])
 router.get('/summary', anyStaff, controller.getSummary)
 router.get('/reservations', anyStaff, controller.listReservations)
 router.patch('/reservations/:id', anyStaff, controller.updateReservation)
+// Card #71: calendar, move/cancel (reception manages existing reservations, never creates) and blocks.
+router.get('/calendar', anyStaff, controller.getCalendar)
+router.patch('/reservations/:id/move', anyStaff, controller.moveReservation)
+router.post('/reservations/:id/cancel', anyStaff, controller.cancelReservation)
+router.get('/blocks', anyStaff, controller.listBlocks)
+router.post('/blocks', ownerOrAdmin, controller.createBlocks)
+router.delete('/blocks/:id', ownerOrAdmin, controller.deleteBlock)
 router.get('/matches', ownerOrAdmin, controller.listMatches)
 router.get('/tournaments', ownerOrAdmin, controller.listTournaments)
 // Card #67: onboarding. Registered before '/' only for readability; paths are distinct.

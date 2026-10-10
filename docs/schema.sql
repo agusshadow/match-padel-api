@@ -243,6 +243,28 @@ create table public.court_price_rules (
 );
 create index court_price_rules_court_idx on court_price_rules (court_id);
 
+-- court_blocks (card #71): a time range on a court that players cannot book (maintenance, classes).
+-- One row per court; same-court blocks never overlap. Written by the API only (create_court_blocks).
+create table public.court_blocks (
+  id          uuid primary key default gen_random_uuid(),
+  club_id     uuid not null references clubs(id) on delete cascade,
+  court_id    uuid not null,
+  start_time  timestamptz not null,
+  end_time    timestamptz not null,
+  reason      text,
+  created_by  uuid references users(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  constraint court_blocks_court_fkey
+    foreign key (court_id, club_id) references courts (id, club_id) on delete cascade,
+  constraint court_blocks_range_check check (end_time > start_time),
+  constraint court_blocks_no_overlap exclude using gist (
+    court_id with =,
+    tstzrange(start_time, end_time) with &&
+  )
+);
+create index court_blocks_club_start_idx on public.court_blocks (club_id, start_time);
+create index court_blocks_created_by_idx on public.court_blocks (created_by);
+
 -- court_reservations (Supabase Realtime enabled here)
 create table public.court_reservations (
   id            uuid primary key default uuid_generate_v4(),
@@ -564,6 +586,7 @@ alter table courts enable row level security;
 alter table court_schedules enable row level security;
 alter table court_schedule_exceptions enable row level security; -- card #70
 alter table court_price_rules enable row level security; -- card #70
+alter table court_blocks enable row level security; -- card #71
 alter table court_reservations enable row level security;
 alter table payments enable row level security;
 alter table matches enable row level security;
@@ -632,6 +655,13 @@ create policy "court_price_rules_staff_read" on court_price_rules for select to 
 revoke all on table court_schedule_exceptions, court_price_rules from anon, authenticated;
 grant select on table court_schedule_exceptions, court_price_rules to authenticated;
 
+-- Card #71: blocks. Staff of the club and platform staff read; no client writes; players read
+-- availability through the API only (service_role).
+create policy "court_blocks_staff_read" on court_blocks for select to authenticated
+  using (public.is_club_member(club_id) or public.is_platform_staff());
+revoke all on table court_blocks from anon, authenticated;
+grant select on table court_blocks to authenticated;
+
 -- Card #70: atomic "replace the whole set", executable by service_role only.
 create or replace function public.replace_court_schedule(p_court_id uuid, p_rows jsonb)
 returns void language plpgsql set search_path = public as $$
@@ -659,6 +689,52 @@ revoke execute on function public.replace_court_schedule(uuid, jsonb) from publi
 revoke execute on function public.replace_court_price_rules(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.replace_court_schedule(uuid, jsonb) to service_role;
 grant execute on function public.replace_court_price_rules(uuid, jsonb) to service_role;
+
+-- Card #71: atomic one-block-per-court creation. Returns { conflicts, blocks }; with any conflict
+-- (a pending/confirmed reservation or a block overlapping on any court) nothing is inserted.
+-- Takes the same per-court advisory lock as court_reservations_check_blocks. service_role only.
+create or replace function public.create_court_blocks(
+  p_club_id uuid, p_court_ids uuid[], p_start timestamptz, p_end timestamptz, p_reason text, p_created_by uuid
+) returns jsonb language plpgsql set search_path = public as $$
+declare v_court uuid; v_conflicts jsonb; v_blocks jsonb;
+begin
+  if p_end <= p_start then raise exception 'INVALID_RANGE' using errcode = '22023'; end if;
+  if p_court_ids is null or cardinality(p_court_ids) = 0 then raise exception 'NO_COURTS' using errcode = '22023'; end if;
+  if exists (select 1 from unnest(p_court_ids) as t(id)
+             where not exists (select 1 from public.courts c where c.id = t.id and c.club_id = p_club_id)) then
+    raise exception 'COURT_NOT_IN_CLUB' using errcode = '22023';
+  end if;
+  for v_court in select distinct t.id from unnest(p_court_ids) as t(id) order by 1 loop
+    perform pg_advisory_xact_lock(hashtextextended('court_blocks:' || v_court::text, 0));
+  end loop;
+  -- conflicts: pending/confirmed reservations ({type:'reservation', id, court_id, start_time, end_time,
+  -- status, user:{id,first_name,last_name,username}, match_id}) and overlapping blocks ({type:'block', ..., reason})
+  -- ... (see the migration for the full query)
+  -- if there are none: insert one court_blocks row per distinct court and return them
+  return jsonb_build_object('conflicts', v_conflicts, 'blocks', v_blocks);
+end; $$;
+revoke execute on function public.create_court_blocks(uuid, uuid[], timestamptz, timestamptz, text, uuid) from public, anon, authenticated;
+grant execute on function public.create_court_blocks(uuid, uuid[], timestamptz, timestamptz, text, uuid) to service_role;
+
+-- Card #71: a reservation cannot be inserted, or moved to another court/time, over a block (net for
+-- the race; the API answers 409 COURT_BLOCKED first). Status-only updates are never checked.
+create or replace function public.court_reservations_check_blocks() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'cancelled' then return new; end if;
+  if tg_op = 'UPDATE' and new.court_id = old.court_id and new.start_time = old.start_time
+     and new.end_time = old.end_time then return new; end if;
+  perform pg_advisory_xact_lock(hashtextextended('court_blocks:' || new.court_id::text, 0));
+  if exists (select 1 from public.court_blocks b where b.court_id = new.court_id
+             and b.start_time < new.end_time and b.end_time > new.start_time) then
+    raise exception 'COURT_BLOCKED' using errcode = 'check_violation';
+  end if;
+  return new;
+end; $$;
+revoke execute on function public.court_reservations_check_blocks() from public, anon, authenticated;
+create trigger court_reservations_check_blocks
+  before insert or update of court_id, start_time, end_time on court_reservations
+  for each row execute function public.court_reservations_check_blocks();
 
 -- Card #66: security definer helpers used by the policies below (executable by
 -- authenticated only). "Staff" means membership of the row's club via

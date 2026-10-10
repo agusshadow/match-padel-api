@@ -658,3 +658,167 @@ export async function countOpenReservations(
   if (error) throw error
   return count ?? 0
 }
+
+// ---- Card #71: calendar and blocks --------------------------------------------
+
+const CHUNK = 100
+
+function chunks<T>(items: T[], size = CHUNK): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/** Pending, confirmed and completed reservations of the given courts overlapping [from, to). */
+export async function listCalendarReservations(
+  clubId: string,
+  courtIds: string[],
+  range: { from: string; to: string },
+): Promise<ClubReservationRow[]> {
+  if (courtIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('court_reservations')
+    .select(RESERVATION_SELECT)
+    .eq('court.club_id', clubId)
+    .in('court_id', courtIds)
+    .in('status', ['pending', 'confirmed', 'completed'])
+    .lt('start_time', range.to)
+    .gt('end_time', range.from)
+    .order('start_time')
+  if (error) throw error
+  return (data ?? []) as unknown as ClubReservationRow[]
+}
+
+export interface PaymentSummaryRow {
+  reservation_id: string
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'refunded'
+  amount: number
+}
+
+/** Approved and refunded payments of the reservations (the ones that say how much was paid). */
+export async function listPaymentsForReservations(reservationIds: string[]): Promise<PaymentSummaryRow[]> {
+  const rows: PaymentSummaryRow[] = []
+  for (const ids of chunks(reservationIds)) {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('reservation_id, status, amount')
+      .in('reservation_id', ids)
+      .in('status', ['approved', 'refunded'])
+    if (error) throw error
+    for (const r of data ?? []) rows.push({ ...(r as PaymentSummaryRow), amount: Number(r.amount) })
+  }
+  return rows
+}
+
+export interface ReservationMatchRow {
+  id: string
+  reservation_id: string
+  type: 'friendly' | 'ranked' | 'tournament'
+  is_ranked: boolean
+  status: 'waiting' | 'in_progress' | 'completed' | 'cancelled'
+  players_count: number
+}
+
+export async function listMatchesForReservations(reservationIds: string[]): Promise<ReservationMatchRow[]> {
+  const rows: ReservationMatchRow[] = []
+  for (const ids of chunks(reservationIds)) {
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, reservation_id, type, is_ranked, status, players:match_players(count)')
+      .in('reservation_id', ids)
+    if (error) throw error
+    for (const m of (data ?? []) as unknown as Array<Omit<ReservationMatchRow, 'players_count'> & { players: Array<{ count: number }> | null }>) {
+      const { players, ...rest } = m
+      rows.push({ ...rest, players_count: players?.[0]?.count ?? 0 })
+    }
+  }
+  return rows
+}
+
+export interface BlockRow {
+  id: string
+  club_id: string
+  court_id: string
+  start_time: string
+  end_time: string
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+const BLOCK_COLUMNS = 'id, club_id, court_id, start_time, end_time, reason, created_by, created_at'
+
+/** Blocks of the club overlapping [from, to) (either bound optional), optionally of given courts. */
+export async function listBlocks(
+  clubId: string,
+  filters: { courtIds?: string[]; from?: string; to?: string; limit?: number },
+): Promise<BlockRow[]> {
+  let query = supabase
+    .from('court_blocks')
+    .select(BLOCK_COLUMNS)
+    .eq('club_id', clubId)
+    .order('start_time')
+    .limit(filters.limit ?? 500)
+  if (filters.courtIds) query = query.in('court_id', filters.courtIds)
+  if (filters.to) query = query.lt('start_time', filters.to)
+  if (filters.from) query = query.gt('end_time', filters.from)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as BlockRow[]
+}
+
+export async function findBlockInClub(clubId: string, id: string): Promise<BlockRow | null> {
+  const { data, error } = await supabase
+    .from('court_blocks')
+    .select(BLOCK_COLUMNS)
+    .eq('id', id)
+    .eq('club_id', clubId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as BlockRow | null) ?? null
+}
+
+export interface BlockConflict {
+  type: 'reservation' | 'block'
+  id: string
+  court_id: string
+  start_time: string
+  end_time: string
+  /** reservation only */
+  status?: string
+  user?: { id: string; first_name: string | null; last_name: string | null; username: string | null } | null
+  match_id?: string | null
+  /** block only */
+  reason?: string | null
+}
+
+export interface CreateBlocksResult {
+  conflicts: BlockConflict[]
+  blocks: BlockRow[]
+}
+
+/** Atomic one-row-per-court insert through `create_court_blocks` (service_role only). */
+export async function createBlocks(input: {
+  clubId: string
+  courtIds: string[]
+  startTime: string
+  endTime: string
+  reason: string | null
+  createdBy: string
+}): Promise<CreateBlocksResult> {
+  const { data, error } = await supabase.rpc('create_court_blocks', {
+    p_club_id: input.clubId,
+    p_court_ids: input.courtIds,
+    p_start: input.startTime,
+    p_end: input.endTime,
+    p_reason: input.reason,
+    p_created_by: input.createdBy,
+  })
+  if (error) throw error
+  return data as unknown as CreateBlocksResult
+}
+
+export async function deleteBlock(id: string): Promise<void> {
+  const { error } = await supabase.from('court_blocks').delete().eq('id', id)
+  if (error) throw error
+}

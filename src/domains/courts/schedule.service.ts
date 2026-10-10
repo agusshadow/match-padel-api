@@ -390,3 +390,46 @@ export function findAmbiguousRules(rules: RuleInput[]): string[] {
   }
   return problems
 }
+
+// ---- Calendar helpers (card #71) ---------------------------------------------------
+
+export interface OpenWindow {
+  /** UTC instants (ISO). */
+  start_time: string
+  end_time: string
+  /** Club-local wall clock `HH:MM` (`24:00` possible for `end`). */
+  start: string
+  end: string
+  slot_minutes: number
+}
+
+/**
+ * The open hours of a resolved day as contiguous windows: consecutive slots of
+ * the same length are merged, so 08:00-22:00 in 90 minute slots is one window.
+ * Time outside the windows is closed (the calendar greys it).
+ */
+export function openWindows(day: DaySchedule): OpenWindow[] {
+  const windows: OpenWindow[] = []
+  for (const slot of day.slots) {
+    const last = windows[windows.length - 1]
+    if (last && last.end_time === slot.start_time && last.slot_minutes === slot.slot_minutes) {
+      last.end_time = slot.end_time
+      last.end = slot.end
+    } else {
+      windows.push({
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        start: slot.start,
+        end: slot.end,
+        slot_minutes: slot.slot_minutes,
+      })
+    }
+  }
+  return windows
+}
+
+/** `DD/MM HH:MM` of an instant, club-local (for notification texts). */
+export function formatLocalDateTime(instant: Date): string {
+  const iso = new Date(instant.getTime() + CLUB_UTC_OFFSET_MINUTES * 60_000).toISOString()
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)} ${iso.slice(11, 16)}`
+}

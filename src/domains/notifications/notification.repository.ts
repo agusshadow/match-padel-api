@@ -10,6 +10,7 @@ export type NotificationType =
   | 'reservation_cancelled'
   | 'elo_updated'
   | 'tournament_update'
+  | 'system'
 
 export interface CreateNotificationData {
   user_id: string

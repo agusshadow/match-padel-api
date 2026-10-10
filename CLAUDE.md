@@ -28,7 +28,7 @@ src/
 │   ├── tournaments/
 │   ├── users/
 │   ├── access/       ← /me/access, platform role + club memberships (card #66)
-│   ├── club-admin/   ← club panel API, /club-admin/:clubId (onboarding, courts, documents: card #67; schedules, exceptions, price rules: card #70)
+│   ├── club-admin/   ← club panel API, /club-admin/:clubId (onboarding, courts, documents: card #67; schedules, exceptions, price rules: card #70; calendar, move/cancel, blocks: card #71)
 │   ├── courts/       ← public slots route, effective schedule/price resolution (schedule.service.ts, pure) and its loader (card #70)
 │   ├── audit/        ← recordAudit / audit_log
 │   ├── mail/         ← transactional email (Resend), templates, email_log, notifyApplicationStatusChange (card #69)
@@ -199,6 +199,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 - Card #69 (migration `20261010152129_email_log`, dev only until the next release): `email_log` (RLS on, no policies) records every transactional email attempt. Module and configuration: `docs/email.md`.
 - Card #68: no migration. Application review (`/platform/applications`, approve / request changes / reject, superadmin `reopen`, `suspend`, `unsuspend`) over the card #67 tables, with `suspended`/`reinstated` emails. A reviewer only sees `pending` and `changes_requested` clubs. See `docs/club-lifecycle.md`.
 - Card #70 (migration `20261010153252_court_schedules_exceptions_price_rules`, dev only until the next release): weekly schedules per court (existing `court_schedules`, several intervals per day, `24:00` close), `court_schedule_exceptions` and `court_price_rules`, backfilled from `clubs.settings.opening_hours`. Slots, prices and reservation/match totals come from `src/domains/courts/schedule.service.ts` (pure); see `docs/availability-and-pricing.md`.
+- Card #71 (migration `20261010154511_court_blocks`, dev only until the next release): `court_blocks`, the `create_court_blocks` RPC and a trigger on `court_reservations` that refuses a booking or move over a block. `GET /club-admin/:clubId/calendar`, `PATCH .../reservations/:id/move`, `POST .../reservations/:id/cancel` (club cancellation: always 100% refund, match cancelled with it, in-app notification) and `/blocks`; slots carry `unavailable_reason` and booking returns 409 `COURT_BLOCKED`. See `docs/availability-and-pricing.md`.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map
