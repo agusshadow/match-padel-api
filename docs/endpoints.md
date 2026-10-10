@@ -175,7 +175,7 @@ The club panel's API. `:clubId` must be a UUID (400 otherwise); the caller needs
 | POST | `/api/v1/platform/clubs` | requireRole superadmin | Body `{ name, slug (kebab-case), address, city, description?, phone?, email?, ownerUserId? }`. Creates the club (201); with `ownerUserId` it also creates an `owner` membership (400 if that user does not exist, the club insert is rolled back if the membership fails). 409 if the slug is taken. Audited (`club.created`) | `createClub` |
 | PATCH | `/api/v1/platform/clubs/:id/active` | requireRole superadmin | Body `{ isActive: boolean }`. 404 if the club does not exist. Audited (`club.activated`/`club.deactivated`) | `setClubActive` |
 | GET | `/api/v1/platform/users?search=&page=&limit=` | requireRole superadmin | Users (`id`, `username`, `first_name`, `last_name`, `role`, `is_active`, `created_at`, `email`); `search` matches username and names, not email | `listUsers` |
-| GET | `/api/v1/platform/audit-log?clubId=&actorId=&page=&limit=` | requireRole superadmin | `audit_log` entries, newest first | `getAuditLog` |
+| GET | `/api/v1/platform/audit-log?clubId=&actorId=&page=&limit=` | requireRole superadmin | `audit_log` entries, newest first, each with `actor` (`id, username, first_name, last_name`) and `club` (`id, name`) or `null` | `getAuditLog` |
 
 ## Unmounted routers
 
