@@ -76,3 +76,31 @@ export const setCommissionSchema = z
   .strict()
 
 export const setCollectionModeSchema = z.object({ collection_mode: z.enum(COLLECTION_MODES) }).strict()
+
+// ---- Card #76: refund policy ---------------------------------------------------------------------
+
+const twoDecimals = (n: number) => Math.round(n * 100) / 100 === n
+
+/** `PUT /club-admin/:clubId/refund-policy` */
+export const setClubRefundPolicySchema = z
+  .object({
+    hours_before_start: z.number().int().min(0).max(720),
+    late_refund_percent: z
+      .number()
+      .min(0)
+      .max(100)
+      .refine(twoDecimals, { message: 'at most 2 decimals' }),
+  })
+  .strict()
+
+/** `PUT /platform/settings/refund-policy` */
+export const setPlatformRefundLimitsSchema = z
+  .object({
+    max_hours_before_start: z.number().int().min(0).max(720),
+    min_late_refund_percent: z
+      .number()
+      .min(0)
+      .max(100)
+      .refine(twoDecimals, { message: 'at most 2 decimals' }),
+  })
+  .strict()

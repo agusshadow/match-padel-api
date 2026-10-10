@@ -319,3 +319,50 @@ export async function notifyMpConnectionProblem(input: NotifyMpConnectionInput):
     logger.error({ clubId: input.clubId, template: input.template, err: describeError(err) }, '[mail] failed to notify Mercado Pago link problem')
   }
 }
+
+// ---- Card #76: refunds that could not be completed ------------------------------
+
+export interface NotifyRefundPendingInput {
+  clubId: string
+  /** How many payments are waiting for a refund. */
+  count: number
+  /** Total owed to the players, ARS. */
+  amount: number
+}
+
+/**
+ * Tells the club owner(s) that a player's refund (per the club's policy) could
+ * not be completed from the club's Mercado Pago account. Never throws; use it
+ * fire-and-forget. The email carries no technical detail.
+ */
+export async function notifyRefundPending(input: NotifyRefundPendingInput): Promise<void> {
+  try {
+    const [clubName, owners] = await Promise.all([
+      repository.findClubName(input.clubId),
+      repository.findClubOwners(input.clubId),
+    ])
+    if (owners.length === 0) {
+      logger.warn({ clubId: input.clubId, template: 'refund_pending' }, '[mail] club has no owner with an email, nothing to send')
+      return
+    }
+    const panelUrl = buildMercadoPagoPanelUrl(getMailConfig().clubPanelUrl, input.clubId)
+    await Promise.all(
+      owners.map((owner) =>
+        sendMail({
+          to: owner.email,
+          template: 'refund_pending',
+          clubId: input.clubId,
+          data: {
+            clubName: clubName ?? '',
+            recipientName: owner.firstName,
+            panelUrl,
+            refundCount: input.count,
+            refundAmount: input.amount,
+          },
+        }),
+      ),
+    )
+  } catch (err) {
+    logger.error({ clubId: input.clubId, err: describeError(err) }, '[mail] failed to notify pending refunds')
+  }
+}

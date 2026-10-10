@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express'
 import type { AuthenticatedRequest } from '../../middleware/auth'
 import * as service from './club-admin.service'
 import { listClubPayments } from '../payments/payment-admin.service'
-import { clubPaymentsQuerySchema } from '../payments/payment.validator'
+import { clubPaymentsQuerySchema, setClubRefundPolicySchema } from '../payments/payment.validator'
+import { getClubRefundPolicy, setClubRefundPolicy } from '../payments/refund-policy.service'
 import { ValidationError } from '../../types/errors'
 import {
   blockParamsSchema,
@@ -366,6 +367,28 @@ export async function listPayments(req: Request, res: Response, next: NextFuncti
     const query = clubPaymentsQuerySchema.parse(req.query)
     const { data, meta } = await listClubPayments(clubId, query)
     res.json({ success: true, data, meta })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// GET /club-admin/:clubId/refund-policy (card #76, owner/admin/staff)
+export async function getRefundPolicy(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    res.json({ success: true, data: await getClubRefundPolicy(clubId) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// PUT /club-admin/:clubId/refund-policy (card #76, owner/admin)
+export async function putRefundPolicy(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const body = setClubRefundPolicySchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await setClubRefundPolicy(userId, clubId, body) })
   } catch (err) {
     next(err)
   }

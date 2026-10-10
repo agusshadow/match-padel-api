@@ -6,19 +6,18 @@ import {
   refundPayment,
   findApprovedPayment,
   findApprovedPaymentsForReservation,
-  creditLateCancellationCurrency,
   refundAllApprovedPayments,
+  refundPaymentsByPolicy,
   assertClubCanCharge,
   type RefundSummary,
 } from '../payments/payment.service'
+import { toPlayerRefundResult, type PlayerRefundResult } from '../payments/refund-policy.core'
 import * as courtRepository from '../courts/court.repository'
 import { localDateOf, quoteRangeOrThrow } from '../courts/schedule.service'
 import { logger } from '../../lib/logger'
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../../types/errors'
 import { AppError } from '../../types/errors'
 import { notifications } from '../notifications/notification.service'
-
-const REFUND_CUTOFF_HOURS = 24
 
 export const matchService = {
   async getMyMatches(userId: string, options: { status?: string; type?: string; page?: number }) {
@@ -205,10 +204,12 @@ export const matchService = {
     return result
   },
 
-  // Card #57: the creator cancelling the whole match now also releases the
-  // court and applies the same 24h refund window as a player leaving —
-  // everyone who already paid gets refunded if there's still more than a day
-  // to go, nobody does if the match is being cancelled last-minute.
+  // Card #57: the creator cancelling the whole match releases the court and
+  // refunds everyone who already paid. Card #76: the amount is the club's
+  // refund policy, not a fixed 24h rule: 100% before the club's cutoff, the
+  // club's late percentage (in money) inside the window, nothing once it
+  // started. A refund that cannot be completed does not block the cancellation:
+  // it is left pending, the club is told and the response says so.
   async cancelMatch(matchId: string, userId: string) {
     const match = await matchRepository.findById(matchId)
 
@@ -224,26 +225,21 @@ export const matchService = {
       throw new AppError('Cannot cancel a completed match', 400, 'MATCH_COMPLETED')
     }
 
+    let refund: PlayerRefundResult | null = null
+    const pendingPlayerIds: string[] = []
+
     if (match.reservation_id) {
       const reservation = await reservationRepository.findById(match.reservation_id)
       if (reservation) {
-        const hoursUntilStart =
-          (new Date(reservation.start_time).getTime() - Date.now()) / (1000 * 60 * 60)
-
         const approvedPayments = await findApprovedPaymentsForReservation(match.reservation_id)
-        if (hoursUntilStart >= REFUND_CUTOFF_HOURS) {
-          for (const payment of approvedPayments) {
-            await refundPayment(payment.id).catch((err) =>
-              logger.error(err, `Failed to refund payment ${payment.id} on match cancel`),
-            )
-          }
-        } else {
-          // Card #63: no real refund this late, half each share back as currency.
-          for (const payment of approvedPayments) {
-            await creditLateCancellationCurrency(payment.user_id, Number(payment.amount)).catch((err) =>
-              logger.error(err, `Failed to credit currency for payment ${payment.id} on match cancel`),
-            )
-          }
+        const summary = await refundPaymentsByPolicy({
+          clubId: reservation.club_id ?? reservation.court?.club?.id ?? (match as { club_id?: string | null }).club_id ?? null,
+          payments: approvedPayments.map((p) => ({ id: p.id, user_id: p.user_id, amount: Number(p.amount) })),
+          startsAt: reservation.start_time,
+        })
+        refund = toPlayerRefundResult(summary)
+        for (const o of summary.outcomes) {
+          if (o.status === 'pending') pendingPlayerIds.push(o.user_id)
         }
 
         await reservationRepository.updateStatus(match.reservation_id, 'cancelled')
@@ -260,8 +256,14 @@ export const matchService = {
     if (otherPlayerIds.length > 0) {
       notifications.matchCancelled(otherPlayerIds, matchId).catch((err) => logger.error(err, 'Failed to send matchCancelled notification'))
     }
+    const otherPending = pendingPlayerIds.filter((id) => id !== userId)
+    if (otherPending.length > 0) {
+      notifications.playerRefundPending(otherPending, matchId).catch((err) =>
+        logger.error(err, 'Failed to send refund pending notification'),
+      )
+    }
 
-    return cancelledMatch
+    return { ...cancelledMatch, refund }
   },
 
   // Card #71: the club cancelled the reservation the match is played on. Unlike
@@ -276,11 +278,13 @@ export const matchService = {
   },
 
   // Card #57 (new): a player leaves their own spot instead of the creator
-  // cancelling everything. >24h before the match, they get their share back;
-  // under 24h, no refund — either way the spot reopens for someone else. If
-  // the match had already filled to 4/4, it drops back to `waiting` (the
-  // reservation itself stays alive, just short one player) instead of being
-  // cancelled outright.
+  // cancelling everything. Card #76: what comes back is the club's refund
+  // policy (100% before its cutoff, its late percentage in money inside the
+  // window, nothing once the match started; the old currency credit is gone).
+  // Either way the spot reopens for someone else. If the match had already
+  // filled to 4/4, it drops back to `waiting` (the reservation itself stays
+  // alive, just short one player) instead of being cancelled outright. A refund
+  // that cannot be completed does not block leaving: it is left pending.
   async leaveMatch(matchId: string, userId: string) {
     const match = await matchRepository.findById(matchId)
 
@@ -297,24 +301,19 @@ export const matchService = {
       throw new ForbiddenError('You are not part of this match')
     }
 
-    let refunded = false
-    let currencyCredited = 0
+    let refund: PlayerRefundResult | null = null
 
     if (match.reservation_id) {
       const reservation = await reservationRepository.findById(match.reservation_id)
       if (reservation) {
-        const hoursUntilStart =
-          (new Date(reservation.start_time).getTime() - Date.now()) / (1000 * 60 * 60)
-
         const payment = await findApprovedPayment(match.reservation_id, userId)
         if (payment) {
-          if (hoursUntilStart >= REFUND_CUTOFF_HOURS) {
-            refunded = await refundPayment(payment.id)
-          } else {
-            // Card #63: no real refund this late, but half the share back as
-            // internal currency instead of nothing.
-            currencyCredited = await creditLateCancellationCurrency(userId, Number(payment.amount))
-          }
+          const summary = await refundPaymentsByPolicy({
+            clubId: reservation.club_id ?? reservation.court?.club?.id ?? (match as { club_id?: string | null }).club_id ?? null,
+            payments: [{ id: payment.id, user_id: payment.user_id, amount: Number(payment.amount) }],
+            startsAt: reservation.start_time,
+          })
+          refund = toPlayerRefundResult(summary)
         }
       }
     }
@@ -338,7 +337,13 @@ export const matchService = {
       )
     }
 
-    return { refunded, currencyCredited }
+    // `refunded`: money went back (all or part). `currencyCredited` is kept at 0
+    // for existing clients: the late-cancellation currency credit was removed (card #76).
+    return {
+      refunded: refund !== null && refund.amount_refunded > 0,
+      currencyCredited: 0,
+      refund,
+    }
   },
 
   // Called by the scheduled job (src/jobs/auto-cancel-unfilled-matches.job.ts).
