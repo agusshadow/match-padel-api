@@ -27,6 +27,9 @@ src/
 │   ├── matches/
 │   ├── tournaments/
 │   ├── users/
+│   ├── access/       ← /me/access, platform role + club memberships (card #66)
+│   ├── club-admin/   ← club panel API, /club-admin/:clubId
+│   ├── audit/        ← recordAudit / audit_log
 │   └── platform/
 ├── middleware/       ← reusable global middleware
 ├── lib/              ← external clients (supabase, mercadopago, firebase, logger)
@@ -78,15 +81,16 @@ Standard error codes: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `VALIDATION_ERRO
 }
 ```
 
-## Auth middleware (target; today only `requireAuth` exists)
+## Auth middleware
 
 ```typescript
-requireAuth                          // verifies the Supabase JWT, adds req.user
-requireRole(['super_admin'])         // only for /platform/* routes
-requireClubStaff(clubId, ['owner', 'manager'])  // checks the club_staff table
+requireAuth                          // verifies the Supabase JWT, sets req.userId (src/middleware/auth.ts)
+loadAccess                           // loads platform role + club memberships once per request into req.access (src/middleware/access.middleware.ts)
+requireRole(['superadmin'])          // platform routes (/platform/*); a superadmin passes any list
+requireClubRole(['owner', 'admin'])  // club routes, reads req.params.clubId; a platform superadmin always passes
 ```
 
-Always in that order in a route's middleware chain.
+Always in that order in a route's middleware chain (`requireRole`/`requireClubRole` call `loadAccess` themselves when it has not run). Club roles: `owner` = Dueño, `admin` = Administrador, `staff` = Recepción. Permission matrix in `docs/permissions.md`.
 
 ## Environment variables
 
@@ -135,14 +139,14 @@ This document describes the **target architecture**. The existing code does not 
 | Middleware | One file per responsibility | Duplicates: `auth.ts` and `auth.middleware.ts`, `error.ts` and `error.middleware.ts` (10 files import each version of auth). **Canonical: `auth.middleware.ts` and `error.middleware.ts`** (the real rate limit is inline in `index.ts`; `rate-limiter.middleware.ts` is only used by the dead `app.ts`) |
 | Entry point | `index.ts` | A duplicate `app.ts` also exists and is unused |
 | Rate limiting | 100/min per IP, 1000/min per user, 5/min on sensitive endpoints | Met for IP (`trust proxy` set) and for `/auth/login`+`/auth/register` (5/min via `authLimiter`). Per-authenticated-user limit (1000/min) and the MercadoPago webhook limit are still not implemented |
-| Role-based auth | `requireRole`, `requireClubStaff` | They do not exist; only `requireAuth` |
+| Role-based auth | `requireRole`, `requireClubRole` | Met (card #66): `requireRole` (platform roles from `platform_staff`) and `requireClubRole` (per-club role from `club_staff`) in `src/middleware/access.middleware.ts`. Only the new `/me`, `/club-admin` and `/platform` routes use them; the older player routes still check ownership/staff inside their services. `users.role` is kept for the player app but the API no longer uses it for authorization of the new routes |
 | DB types | Generated in `src/types/supabase.ts` | The file does not exist |
 | Tests | Vitest + Supertest, 70% in `src/domains/` | No framework and no tests |
 | Logs | Logger, no `console.log` | `src/lib/logger.ts` is a thin `console` wrapper that nothing imports; `index.ts` and the error handlers call `console.log`/`console.error` directly |
 | Push | Firebase Admin | Not installed |
 | Async error handling | Every error reaches the error handler | All controllers (including tournaments, fixed) wrap handlers in try/catch → `next(err)`, and `index.ts` has `process.on('unhandledRejection'/'uncaughtException')` as a last-resort net. The MercadoPago webhook replies 200 and then processes async — since headers are already sent it can't call `next(err)`, so it logs the error directly with `logger.error` instead |
 | Error responses | The `{ success: false, error: { code, message, details } }` envelope | The mounted `error.middleware.ts`, `notFound` and `auth.middleware.ts` answer `{ error, message }`. `error.ts` has the envelope but is not mounted |
-| Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`; no role is available |
+| Auth data on the request | `req.user` with id, email and role | `requireAuth` sets only `req.userId`. Card #66 adds `req.access` (platform role + memberships), `req.platformRole` and `req.clubRole`, set by the role middleware; `req.user` is still never populated |
 | Auth domain files | Controller → service → repository | `auth.service.ts` is never imported (its repository and validator only by each other); `auth.controller.ts` does everything itself |
 | Input validation | Zod in every controller | `users` controller validates only the new `getLeaderboard` query (card #60) — `updateMe` and the rest still read `req.body` without a schema; `matches` validates `createMatch`/`submitScore` (card #57/#58) but the rest of its handlers don't yet; `auth`, `reservations`, `chats` and (inline) `tournaments` validate |
 | Webhook safety | Signature check + idempotency via `mp_webhook_events` | Met via `payment.service.ts` (`verifyWebhookSignature`, amount check, idempotency via the existing `payments.mp_event_id` column instead of a separate table — no `mp_webhook_events` table exists) |
@@ -185,7 +189,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 - Never enable "automatically delete head branches" on the repository: the release flow uses `develop` and `main` as PR heads.
 - Commits and PRs in **English**, conventional commits. See the `pr-format` skill.
 - **Schema changes are file first.** Every change is a migration file under `supabase/migrations/` (created with `supabase migration new`) before it touches any database. `db-agent` applies it to the **dev** project without asking, aligns the version recorded in dev with the file's version and verifies the contents (see the `db-migration` skill). The same files are promoted to production at release time, in order and **before** the release PR is merged, because Render redeploys the API as soon as `main` changes; so migrations must be additive and backward compatible, and destructive ones need the human's explicit go-ahead and their own release. Applied migrations are immutable: a mistake is fixed with a new migration. The `Migrations` GitHub workflow replays every migration on an empty database on each PR and blocks edits to existing files. `docs/schema.sql` is a derived, human-readable view; the migrations win if they disagree. Migrations reach production through the `release-agent` (invoked by the `release` skill before the release PR is merged), and every production database call is checked by `.claude/hooks/guard-production-db.py`: only exact migration files, and destructive or security-weakening SQL pauses for the human's confirmation. Other production actions (Render/Vercel config, env vars) still require the human to do them or explicitly direct a session to.
-- RLS (card #65): the open policies (anon-key inserts on `notifications` and `tournament_matches`, direct client writes on `matches`, `match_players`, `court_reservations`, `tournaments` and `tournament_teams`, and public reads of `matches`, `match_players` and draft tournaments) are closed by migration `20261010135812_tighten_open_rls_policies`. It is applied to **dev** and reaches production with the next release, through the `release-agent`; until then production still has the old policies. Reads that the admin panel makes directly stay available to staff (`users.role` in `club_staff`/`super_admin`). Known leftovers: the admin panel still writes `clubs` and `court_reservations` straight to Supabase, which RLS already blocked for other people's rows, so those screens need to go through the API.
+- RLS (card #65): the open policies (anon-key inserts on `notifications` and `tournament_matches`, direct client writes on `matches`, `match_players`, `court_reservations`, `tournaments` and `tournament_teams`, and public reads of `matches`, `match_players` and draft tournaments) are closed by migration `20261010135812_tighten_open_rls_policies`. It is applied to **dev** and reaches production with the next release, through the `release-agent`; until then production still has the old policies. Reads that the admin panel makes directly stay available to staff. Card #66 (migration `20261010145531_admin_foundations`, dev only until the next release) narrows "staff" to membership of the row's club through `club_staff` (or a platform superadmin) instead of `users.role in ('club_staff','super_admin')`, via the `is_club_member`/`is_court_club_member`/`is_match_club_member` helpers. Known leftovers: the admin panel still writes `clubs` and `court_reservations` straight to Supabase, which RLS already blocked; those screens need to go through `/club-admin` and `/platform`.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map
