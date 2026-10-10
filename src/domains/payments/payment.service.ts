@@ -24,6 +24,13 @@ import {
 } from './refund-policy.core'
 import { resolveEffectivePolicy } from './refund-policy.service'
 import { notifyRefundPending } from '../mail/mail.service'
+import { tournamentRepository } from '../tournaments/tournament.repository'
+import {
+  createConfirmationCore,
+  type PaymentInit,
+  type TeamRecord,
+  type TournamentRecord,
+} from '../tournaments/tournament.core'
 
 const APP_URL = process.env.APP_URL ?? 'https://match-padel-web.vercel.app'
 const API_URL = process.env.API_URL ?? 'https://match-padel-api.railway.app'
@@ -63,13 +70,21 @@ export interface PreferenceResult {
 // split payments: inserts the `payments` row first so its id can be used as
 // the MercadoPago `external_reference` — the webhook then resolves the exact
 // row unambiguously, whether a reservation has one payer or four.
+// Card #77: a tournament registration fee is the same charge with a
+// `tournament` target instead of a reservation (reservation_id stays null).
+interface TournamentChargeTarget {
+  tournamentId: string
+  tournamentTeamId: string
+}
+
 async function createPreferenceForPayment(
-  reservationId: string,
+  reservationId: string | null,
   userId: string,
   amount: number,
   title: string,
   clubId: string | null,
-): Promise<PreferenceResult> {
+  tournament?: TournamentChargeTarget,
+): Promise<PreferenceResult & { payment_id: string }> {
   // Card #75: who collects. Resolved BEFORE inserting the row so a club that
   // cannot charge (409 CLUB_PAYMENTS_NOT_ENABLED) leaves nothing behind.
   const seller = await charging.resolveSeller(clubId, amount)
@@ -80,6 +95,8 @@ async function createPreferenceForPayment(
     .from('payments')
     .insert({
       reservation_id: reservationId,
+      tournament_id: tournament?.tournamentId ?? null,
+      tournament_team_id: tournament?.tournamentTeamId ?? null,
       user_id: userId,
       amount,
       currency: 'ARS',
@@ -102,6 +119,10 @@ async function createPreferenceForPayment(
     ? `${API_URL}/api/v1/payments/webhook?club_id=${seller.clubId}`
     : `${API_URL}/api/v1/payments/webhook`
 
+  const backUrlBase = tournament
+    ? `${APP_URL}/tournaments/${tournament.tournamentId}`
+    : `${APP_URL}/reservations/${reservationId}`
+
   let pref
   try {
     const body: MpPreferenceBody = {
@@ -116,9 +137,9 @@ async function createPreferenceForPayment(
       ],
       external_reference: paymentRow.id,
       back_urls: {
-        success: `${APP_URL}/reservations/${reservationId}?payment=success`,
-        failure: `${APP_URL}/reservations/${reservationId}?payment=failure`,
-        pending: `${APP_URL}/reservations/${reservationId}?payment=pending`,
+        success: `${backUrlBase}?payment=success`,
+        failure: `${backUrlBase}?payment=failure`,
+        pending: `${backUrlBase}?payment=pending`,
       },
       auto_return: 'approved',
       notification_url: notificationUrl,
@@ -143,7 +164,37 @@ async function createPreferenceForPayment(
     .update({ metadata: result })
     .eq('id', paymentRow.id)
 
-  return result
+  return { ...result, payment_id: paymentRow.id as string }
+}
+
+/**
+ * Card #77: the registration fee of a tournament team, charged through the
+ * club's per-club charging abstraction (`resolveSeller`: club token and
+ * `marketplace_fee` for a `club_account` club). The amount is the tournament's
+ * `entry_fee` as the server read it, never a client value. NOT verified against
+ * the Mercado Pago sandbox (card #73).
+ */
+export async function createTournamentRegistrationPayment(input: {
+  tournament: TournamentRecord
+  team: TeamRecord
+  payerId: string
+  amount: number
+}): Promise<PaymentInit> {
+  const result = await createPreferenceForPayment(
+    null,
+    input.payerId,
+    input.amount,
+    `Inscripción – ${input.tournament.name}`,
+    input.tournament.club_id,
+    { tournamentId: input.tournament.id, tournamentTeamId: input.team.id },
+  )
+  return {
+    payment_id: result.payment_id,
+    preference_id: result.preference_id,
+    init_point: result.init_point,
+    sandbox_init_point: result.sandbox_init_point,
+    amount: input.amount,
+  }
 }
 
 export async function createPaymentPreference(
@@ -169,13 +220,14 @@ export async function createPaymentPreference(
   const courtName = (court?.name as string) ?? 'Cancha'
   const clubName = ((court?.club as Record<string, unknown>)?.name as string) ?? 'Club'
 
-  return createPreferenceForPayment(
+  const { payment_id: _paymentId, ...preference } = await createPreferenceForPayment(
     reservationId,
     userId,
     Number(reservation.total_price),
     `Reserva – ${courtName} en ${clubName}`,
     (reservation.club_id as string | null) ?? null,
   )
+  return preference
 }
 
 // Card #57: a match's court is split 4 ways. A player only becomes a
@@ -208,13 +260,14 @@ export async function createMatchPaymentPreference(matchId: string, userId: stri
 
   const share = Math.round((Number(reservation.total_price) / 4) * 100) / 100
 
-  return createPreferenceForPayment(
+  const { payment_id: _paymentId, ...preference } = await createPreferenceForPayment(
     match.reservation_id,
     userId,
     share,
     `Partido – ${reservation.court.name} en ${reservation.court.club.name} (1/4)`,
     reservation.club_id ?? null,
   )
+  return preference
 }
 
 // Card #63: the one currency top-up pack for now (a fixed rate — 1 currency
@@ -502,7 +555,7 @@ export async function handleWebhook(
   // or four, unlike looking it up by reservation_id alone.
   const { data: existingPayment } = await supabase
     .from('payments')
-    .select('id, mp_event_id, reservation_id, user_id, amount, club_id, collected_via, marketplace_fee, seller_mp_user_id')
+    .select('id, mp_event_id, reservation_id, tournament_id, tournament_team_id, user_id, amount, club_id, collected_via, marketplace_fee, seller_mp_user_id')
     .eq('id', ourPaymentId)
     .maybeSingle()
 
@@ -572,13 +625,27 @@ export async function handleWebhook(
     update.net_amount = computeNetAmount(expectedAmount, fee)
   }
 
+  // Card #77: a tournament registration is the same payment row with a
+  // `tournament_id` (the team may be gone already: expired, withdrawn).
+  const isTournamentPayment = Boolean(existingPayment.tournament_id || existingPayment.tournament_team_id)
+
+  // Checkout Pro lets the buyer retry after a rejection with the same
+  // preference, so a registration payment may still move from rejected, and one
+  // that was cancelled on expiry may still be paid: both are allowed to become
+  // `approved` (and are then refunded if the place no longer exists).
   await supabase
     .from('payments')
     .update(update)
     .eq('id', ourPaymentId)
-    .eq('status', 'pending')
+    .in('status', isTournamentPayment ? ['pending', 'rejected', 'cancelled'] : ['pending'])
 
-  if (mpStatus === 'approved') {
+  if (isTournamentPayment) {
+    // Rejected/cancelled: nothing to undo, the unpaid registration releases its
+    // place by itself when its time runs out.
+    if (mpStatus === 'approved') {
+      await confirmTournamentPayment(ourPaymentId, existingPayment.tournament_team_id, existingPayment.tournament_id)
+    }
+  } else if (mpStatus === 'approved') {
     await confirmMatchPayment(existingPayment.reservation_id, existingPayment.user_id)
   } else if (mpStatus === 'rejected' || mpStatus === 'cancelled') {
     // Only cancel the reservation outright for the plain single-payer flow — a
@@ -707,6 +774,115 @@ const refundPolicy = createRefundPolicyCore({
   now: () => new Date(),
   onError: (message, context) => logger.error(context, message),
 })
+
+// ---- Card #77: tournament registrations ----------------------------------------------------
+
+// Tells the club's owners that refunds of a tournament are still owed.
+async function notifyClubRefundsPending(clubId: string | null, paymentIds: string[], amount: number): Promise<void> {
+  if (!clubId || paymentIds.length === 0) return
+  const ownerIds = await paymentRepository.findClubOwnerUserIds(clubId)
+  await Promise.all([
+    notifications
+      .refundPending(ownerIds, { clubId, count: paymentIds.length, amount, paymentIds })
+      .catch((err) => logger.error(err, 'Failed to create the refund_pending notification')),
+    notifyRefundPending({ clubId, count: paymentIds.length, amount }),
+  ])
+}
+
+/**
+ * Full refund of one approved registration payment (a place that no longer
+ * exists: expired registration, tournament full or no longer open, duplicate
+ * payment). Never throws; a refund that cannot be completed is left `pending`
+ * with its reason and the club's owners are told.
+ */
+export async function refundRegistrationInFull(paymentId: string, reason: string): Promise<boolean> {
+  const result = await attemptRefund(paymentId).catch((err): AttemptRefundResult => {
+    logger.error(err, `Failed to refund registration payment ${paymentId}`)
+    return { ok: false, error: 'REFUND_ERROR' }
+  })
+  if (result.ok) {
+    logger.info({ paymentId, reason }, 'Registration payment refunded in full')
+    return true
+  }
+  const { data: row } = await supabase.from('payments').select('club_id, amount').eq('id', paymentId).maybeSingle()
+  await paymentRepository
+    .updatePaymentRefundState(paymentId, { refund_status: 'pending', refunded_amount: 0, refund_error: `${reason}:${result.error}` })
+    .catch((err) => logger.error(err, `Failed to record the pending refund of payment ${paymentId}`))
+  await notifyClubRefundsPending((row?.club_id as string | null) ?? null, [paymentId], Number(row?.amount ?? 0)).catch((err) =>
+    logger.error(err, 'Failed to notify the pending registration refund'),
+  )
+  return false
+}
+
+const tournamentConfirmation = createConfirmationCore({
+  now: () => new Date(),
+  findTeam: (id) => tournamentRepository.findTeamById(id),
+  findTournament: (id) => tournamentRepository.findRecord(id),
+  countConfirmed: (id) => tournamentRepository.countConfirmed(id),
+  updateTeam: (id, patch) => tournamentRepository.updateTeam(id, patch),
+  deleteTeam: (id) => tournamentRepository.deleteTeam(id),
+  refundInFull: refundRegistrationInFull,
+  findUsers: (ids) => tournamentRepository.findUsers(ids),
+  notifier: {
+    registrationConfirmed: async (userIds, input) => {
+      await notifications.tournamentRegistrationConfirmed(userIds, input)
+    },
+  },
+  onError: (message, context) => logger.error(context, message),
+})
+
+/** An approved registration payment arrived (webhook): confirm the team or give the money back. */
+export async function confirmTournamentPayment(
+  paymentId: string,
+  teamId: string | null,
+  tournamentId: string | null,
+) {
+  const outcome = await tournamentConfirmation.confirmPaidRegistration({ paymentId, teamId, tournamentId })
+  logger.info({ paymentId, teamId, tournamentId, outcome: outcome.outcome }, 'Tournament registration payment processed')
+  return outcome
+}
+
+/** The player withdrew: the payments of the team are refunded per the club's policy (cutoff against the tournament start). */
+export async function refundTournamentTeamByPolicy(input: {
+  clubId: string
+  payments: PolicyRefundPayment[]
+  startsAt: string
+}): Promise<PolicyRefundSummary> {
+  return refundPaymentsByPolicy({ clubId: input.clubId, payments: input.payments, startsAt: input.startsAt })
+}
+
+/**
+ * The club cancelled the tournament: every approved, unsettled payment goes back
+ * at 100% (never the player policy). A refund that cannot be completed stays
+ * `approved` with `refund_status = 'pending'` and the owners are told once.
+ */
+export async function refundAllTournamentPayments(tournamentId: string, clubId: string): Promise<RefundSummary> {
+  const approved = await paymentRepository.findRefundableTournamentPayments({ tournamentId })
+  const summary: RefundSummary = { payments: approved.length, refunded: 0, failed: [], amount_refunded: 0 }
+  let cents = 0
+  let pendingCents = 0
+  for (const payment of approved) {
+    const result = await attemptRefund(payment.id).catch((err): AttemptRefundResult => {
+      logger.error(err, `Failed to refund payment ${payment.id} on tournament cancellation`)
+      return { ok: false, error: 'REFUND_ERROR' }
+    })
+    if (result.ok) {
+      summary.refunded += 1
+      cents += Math.round(Number(payment.amount) * 100)
+    } else {
+      summary.failed.push(payment.id)
+      pendingCents += Math.round(Number(payment.amount) * 100)
+      await paymentRepository
+        .updatePaymentRefundState(payment.id, { refund_status: 'pending', refunded_amount: 0, refund_error: result.error })
+        .catch((err) => logger.error(err, `Failed to record the pending refund of payment ${payment.id}`))
+    }
+  }
+  summary.amount_refunded = cents / 100
+  await notifyClubRefundsPending(clubId, summary.failed, pendingCents / 100).catch((err) =>
+    logger.error(err, 'Failed to notify the pending tournament refunds'),
+  )
+  return summary
+}
 
 export type { PolicyRefundSummary, PolicyRefundPayment }
 

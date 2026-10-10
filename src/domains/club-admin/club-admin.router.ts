@@ -5,6 +5,7 @@ import { uploadClubDocument } from '../../middleware/upload'
 import * as controller from './club-admin.controller'
 import teamRouter from '../team/team.router'
 import mercadoPagoRouter from '../club-mercadopago/club-mercadopago.router'
+import tournamentAdminRouter from '../tournaments/tournament-admin.router'
 
 // Mounted at /api/v1/club-admin/:clubId, hence mergeParams to see `clubId`.
 const router = Router({ mergeParams: true })
@@ -26,7 +27,8 @@ router.get('/blocks', anyStaff, controller.listBlocks)
 router.post('/blocks', ownerOrAdmin, controller.createBlocks)
 router.delete('/blocks/:id', ownerOrAdmin, controller.deleteBlock)
 router.get('/matches', ownerOrAdmin, controller.listMatches)
-router.get('/tournaments', ownerOrAdmin, controller.listTournaments)
+// Card #77: tournaments are managed by the club (create, publish, fixture, results, standings).
+router.use('/tournaments', tournamentAdminRouter)
 // Card #67: onboarding. Registered before '/' only for readability; paths are distinct.
 router.get('/onboarding', ownerOrAdmin, controller.getOnboarding)
 router.post('/submit', ownerOnly, controller.submitApplication)

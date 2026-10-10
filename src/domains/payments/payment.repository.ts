@@ -233,3 +233,87 @@ export async function findClubOwnerUserIds(clubId: string): Promise<string[]> {
   if (error) throw error
   return (data ?? []).map((r) => r.user_id as string)
 }
+
+// ---- Card #77: tournament registration payments ------------------------------------------------
+
+// A payment the refund policy already settled (`none`, `partial`, `full`) has
+// nothing left to refund; rows from before the policy have a null refund_status.
+const STILL_REFUNDABLE = 'refund_status.is.null,refund_status.in.(pending,failed)'
+
+/** Approved registration payments not settled by a refund yet, of one team or of a whole tournament. */
+export async function findRefundableTournamentPayments(filter: {
+  teamId?: string
+  tournamentId?: string
+}): Promise<Array<{ id: string; user_id: string; amount: number }>> {
+  let query = supabase
+    .from('payments')
+    .select('id, user_id, amount')
+    .eq('status', 'approved')
+    .or(STILL_REFUNDABLE)
+  if (filter.teamId) query = query.eq('tournament_team_id', filter.teamId)
+  if (filter.tournamentId) query = query.eq('tournament_id', filter.tournamentId)
+  if (!filter.teamId && !filter.tournamentId) return []
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []).map((p) => ({ id: p.id as string, user_id: p.user_id as string, amount: Number(p.amount) }))
+}
+
+/**
+ * Closes the checkouts that were never paid: a registration that is released or
+ * withdrawn must not be confirmed by a later notification of its old preference.
+ */
+export async function cancelPendingTournamentPayments(filter: {
+  teamIds?: string[]
+  tournamentId?: string
+}): Promise<void> {
+  if (filter.teamIds && filter.teamIds.length > 0) {
+    const { error } = await supabase
+      .from('payments')
+      .update({ status: 'cancelled' })
+      .eq('status', 'pending')
+      .in('tournament_team_id', filter.teamIds)
+    if (error) throw error
+  }
+  if (filter.tournamentId) {
+    const { error } = await supabase
+      .from('payments')
+      .update({ status: 'cancelled' })
+      .eq('status', 'pending')
+      .eq('tournament_id', filter.tournamentId)
+    if (error) throw error
+  }
+}
+
+export interface TournamentPaymentRow {
+  id: string
+  tournament_team_id: string | null
+  user_id: string
+  status: string
+  amount: number
+  currency: string
+  marketplace_fee: number | null
+  net_amount: number | null
+  refund_status: string | null
+  refunded_amount: number
+  refund_error: string | null
+  created_at: string
+}
+
+/** Every payment of a tournament's registrations (club panel detail). */
+export async function listTournamentPayments(tournamentId: string): Promise<TournamentPaymentRow[]> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select(
+      'id, tournament_team_id, user_id, status, amount, currency, marketplace_fee, net_amount, refund_status, refunded_amount, refund_error, created_at',
+    )
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((p) => ({
+    ...(p as unknown as TournamentPaymentRow),
+    amount: Number(p.amount),
+    marketplace_fee: p.marketplace_fee === null ? null : Number(p.marketplace_fee),
+    net_amount: p.net_amount === null ? null : Number(p.net_amount),
+    refunded_amount: Number(p.refunded_amount ?? 0),
+  }))
+}

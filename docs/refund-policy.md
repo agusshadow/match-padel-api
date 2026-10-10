@@ -102,7 +102,8 @@ Endpoints and permissions: `docs/endpoints.md`, `docs/permissions.md`.
 
 ## Not covered
 
-- Tournament registration fees have no payment flow yet.
+- Tournament registrations (card #77): a player who withdraws before the start is refunded by this policy, with the cutoff
+  measured against the tournament's `start_date`; a club cancellation of the tournament refunds 100%. See `docs/tournaments.md`.
 - A refund of a payment collected by the platform account (`collected_via = 'platform'`, every club created before card
   #75) is made from the platform's account, as before; the "from the club's account" wording applies to
   `club_account` clubs.
