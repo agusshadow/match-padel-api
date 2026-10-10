@@ -1,6 +1,12 @@
 import { supabase } from '../../lib/supabase'
 import { rangeFor } from '../../lib/pagination'
-import type { UpdateClubInput } from './club-admin.validator'
+import type { ClubStatus } from '../../types/access'
+import type {
+  CreateCourtInput,
+  OpeningHours,
+  UpdateClubInput,
+  UpdateCourtInput,
+} from './club-admin.validator'
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
 
@@ -18,28 +24,53 @@ export interface ClubRow {
   lat: number | null
   lng: number | null
   is_active: boolean
+  status: ClubStatus
+  legal_name: string | null
+  tax_id: string | null
+  opening_hours: OpeningHours
   created_at: string
   updated_at: string
 }
 
 const CLUB_COLUMNS =
-  'id, name, slug, description, address, city, phone, email, logo_url, cover_url, lat, lng, is_active, created_at, updated_at'
+  'id, name, slug, description, address, city, phone, email, logo_url, cover_url, lat, lng, is_active, status, legal_name, tax_id, settings, created_at, updated_at'
+
+type RawClubRow = Omit<ClubRow, 'opening_hours'> & { settings: Record<string, unknown> | null }
+
+function toClubRow(raw: RawClubRow): ClubRow {
+  const { settings, ...club } = raw
+  const hours = settings && typeof settings === 'object' ? settings['opening_hours'] : undefined
+  return { ...club, opening_hours: (hours && typeof hours === 'object' ? hours : {}) as OpeningHours }
+}
+
+/** Raw `settings` jsonb, needed to merge `opening_hours` without losing other keys. */
+async function findSettings(clubId: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.from('clubs').select('settings').eq('id', clubId).maybeSingle()
+  if (error) throw error
+  const settings = data?.settings
+  return settings && typeof settings === 'object' ? (settings as Record<string, unknown>) : {}
+}
 
 export async function findClub(clubId: string): Promise<ClubRow | null> {
   const { data, error } = await supabase.from('clubs').select(CLUB_COLUMNS).eq('id', clubId).maybeSingle()
   if (error) throw error
-  return (data as ClubRow | null) ?? null
+  return data ? toClubRow(data as unknown as RawClubRow) : null
 }
 
 export async function updateClub(clubId: string, patch: UpdateClubInput): Promise<ClubRow | null> {
+  const { opening_hours: openingHours, ...columns } = patch
+  const update: Record<string, unknown> = { ...columns, updated_at: new Date().toISOString() }
+  if (openingHours !== undefined) {
+    update.settings = { ...(await findSettings(clubId)), opening_hours: openingHours }
+  }
   const { data, error } = await supabase
     .from('clubs')
-    .update({ ...patch, updated_at: new Date().toISOString() })
+    .update(update)
     .eq('id', clubId)
     .select(CLUB_COLUMNS)
     .maybeSingle()
   if (error) throw error
-  return (data as ClubRow | null) ?? null
+  return data ? toClubRow(data as unknown as RawClubRow) : null
 }
 
 // ---- Summary counts ---------------------------------------------------------
@@ -197,4 +228,252 @@ export async function listTournaments(
     .range(from, to)
   if (error) throw error
   return { data: data ?? [], total: count ?? 0 }
+}
+
+// ---- Card #67: onboarding ---------------------------------------------------
+
+export interface CourtRow {
+  id: string
+  club_id: string
+  name: string
+  surface: 'indoor' | 'outdoor' | 'panoramic'
+  is_indoor: boolean
+  price_per_hour: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+const COURT_COLUMNS = 'id, club_id, name, surface, is_indoor, price_per_hour, is_active, created_at, updated_at'
+
+export async function listCourts(clubId: string): Promise<CourtRow[]> {
+  const { data, error } = await supabase
+    .from('courts')
+    .select(COURT_COLUMNS)
+    .eq('club_id', clubId)
+    .order('name')
+  if (error) throw error
+  return (data ?? []) as CourtRow[]
+}
+
+export async function findCourtInClub(clubId: string, courtId: string): Promise<CourtRow | null> {
+  const { data, error } = await supabase
+    .from('courts')
+    .select(COURT_COLUMNS)
+    .eq('id', courtId)
+    .eq('club_id', clubId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as CourtRow | null) ?? null
+}
+
+export async function insertCourt(clubId: string, input: CreateCourtInput): Promise<CourtRow> {
+  const { data, error } = await supabase
+    .from('courts')
+    .insert({ club_id: clubId, ...input })
+    .select(COURT_COLUMNS)
+    .single()
+  if (error) throw error
+  return data as CourtRow
+}
+
+export async function updateCourt(courtId: string, patch: UpdateCourtInput): Promise<CourtRow | null> {
+  const { data, error } = await supabase
+    .from('courts')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', courtId)
+    .select(COURT_COLUMNS)
+    .maybeSingle()
+  if (error) throw error
+  return (data as CourtRow | null) ?? null
+}
+
+export async function countCourtReservations(courtId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('court_reservations')
+    .select('id', { count: 'exact', head: true })
+    .eq('court_id', courtId)
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function deleteCourt(courtId: string): Promise<void> {
+  const { error } = await supabase.from('courts').delete().eq('id', courtId)
+  if (error) throw error
+}
+
+// Clubs, status and history
+
+export interface MyClubDraft {
+  id: string
+  name: string
+  address: string
+  city: string
+}
+
+/** Clubs of the user where they are the owner and which are still in draft. */
+export async function listOwnedDrafts(userId: string): Promise<MyClubDraft[]> {
+  const { data, error } = await supabase
+    .from('club_staff')
+    .select('club:clubs!inner(id, name, address, city, status)')
+    .eq('user_id', userId)
+    .eq('role', 'owner')
+    .eq('club.status', 'draft')
+  if (error) throw error
+  return ((data ?? []) as unknown as Array<{ club: MyClubDraft }>).map((row) => ({
+    id: row.club.id,
+    name: row.club.name,
+    address: row.club.address,
+    city: row.club.city,
+  }))
+}
+
+export async function insertDraftClub(input: {
+  name: string
+  slug: string
+  address: string
+  city: string
+}): Promise<ClubRow> {
+  const { data, error } = await supabase
+    .from('clubs')
+    .insert({ ...input, status: 'draft' })
+    .select(CLUB_COLUMNS)
+    .single()
+  if (error) throw error
+  return toClubRow(data as unknown as RawClubRow)
+}
+
+export async function deleteClub(clubId: string): Promise<void> {
+  const { error } = await supabase.from('clubs').delete().eq('id', clubId)
+  if (error) throw error
+}
+
+export async function insertOwner(clubId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('club_staff').insert({ club_id: clubId, user_id: userId, role: 'owner' })
+  if (error) throw error
+}
+
+/** Compare-and-set: only changes the status when it is still one of `from`. Returns the row or null. */
+export async function transitionStatus(
+  clubId: string,
+  from: ClubStatus[],
+  to: ClubStatus,
+): Promise<ClubRow | null> {
+  const { data, error } = await supabase
+    .from('clubs')
+    .update({ status: to, updated_at: new Date().toISOString() })
+    .eq('id', clubId)
+    .in('status', from)
+    .select(CLUB_COLUMNS)
+    .maybeSingle()
+  if (error) throw error
+  return data ? toClubRow(data as unknown as RawClubRow) : null
+}
+
+export async function insertStatusHistory(input: {
+  clubId: string
+  actorId: string | null
+  fromStatus: ClubStatus | null
+  toStatus: ClubStatus
+  note?: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('club_status_history').insert({
+    club_id: input.clubId,
+    actor_id: input.actorId,
+    from_status: input.fromStatus,
+    to_status: input.toStatus,
+    note: input.note ?? null,
+  })
+  if (error) throw error
+}
+
+export interface StatusHistoryRow {
+  id: string
+  from_status: ClubStatus | null
+  to_status: ClubStatus
+  note: string | null
+  created_at: string
+  actor: { id: string; first_name: string | null; last_name: string | null } | null
+}
+
+export async function listStatusHistory(clubId: string): Promise<StatusHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('club_status_history')
+    .select(
+      'id, from_status, to_status, note, created_at, actor:users!club_status_history_actor_id_fkey(id, first_name, last_name)',
+    )
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as unknown as StatusHistoryRow[]
+}
+
+// Documents
+
+export type DocumentKind = 'tax_id' | 'company_registration' | 'id_document' | 'other'
+
+export interface DocumentRow {
+  id: string
+  club_id: string
+  uploaded_by: string | null
+  kind: DocumentKind
+  file_path: string
+  file_name: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
+}
+
+const DOCUMENT_COLUMNS = 'id, club_id, uploaded_by, kind, file_path, file_name, mime_type, size_bytes, created_at'
+const DOCUMENTS_BUCKET = 'club-documents'
+export const DOCUMENT_URL_TTL_SECONDS = 600
+
+export async function listDocuments(clubId: string): Promise<DocumentRow[]> {
+  const { data, error } = await supabase
+    .from('club_documents')
+    .select(DOCUMENT_COLUMNS)
+    .eq('club_id', clubId)
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []) as DocumentRow[]
+}
+
+export async function findDocumentInClub(clubId: string, documentId: string): Promise<DocumentRow | null> {
+  const { data, error } = await supabase
+    .from('club_documents')
+    .select(DOCUMENT_COLUMNS)
+    .eq('id', documentId)
+    .eq('club_id', clubId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as DocumentRow | null) ?? null
+}
+
+export async function insertDocument(input: Omit<DocumentRow, 'id' | 'created_at'>): Promise<DocumentRow> {
+  const { data, error } = await supabase.from('club_documents').insert(input).select(DOCUMENT_COLUMNS).single()
+  if (error) throw error
+  return data as DocumentRow
+}
+
+export async function deleteDocumentRow(documentId: string): Promise<void> {
+  const { error } = await supabase.from('club_documents').delete().eq('id', documentId)
+  if (error) throw error
+}
+
+export async function uploadDocumentFile(path: string, buffer: Buffer, contentType: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(path, buffer, { contentType, upsert: false })
+  if (error) throw error
+}
+
+export async function removeDocumentFile(path: string): Promise<void> {
+  const { error } = await supabase.storage.from(DOCUMENTS_BUCKET).remove([path])
+  if (error) throw error
+}
+
+export async function signDocumentUrl(path: string, expiresInSeconds: number): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(DOCUMENTS_BUCKET).createSignedUrl(path, expiresInSeconds)
+  if (error || !data) return null
+  return data.signedUrl
 }

@@ -19,3 +19,19 @@ export const uploadAvatar = multer({
     cb(null, true)
   },
 }).single('avatar')
+
+// Card #67: club application documents (private `club-documents` bucket). Same
+// memory storage; limits mirror the bucket's file_size_limit/allowed_mime_types.
+const DOCUMENT_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+
+export const uploadClubDocument = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+      cb(new ValidationError('Document must be a PDF, JPEG, PNG or WebP file'))
+      return
+    }
+    cb(null, true)
+  },
+}).single('file')

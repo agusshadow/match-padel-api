@@ -21,3 +21,12 @@ export interface AccessContext {
   platformRole: PlatformRole | null
   memberships: ClubMembership[]
 }
+
+/** Lifecycle of a club (enum `club_status`, card #67). See docs/club-lifecycle.md. */
+export type ClubStatus =
+  | 'draft'
+  | 'pending'
+  | 'changes_requested'
+  | 'approved'
+  | 'rejected'
+  | 'suspended'

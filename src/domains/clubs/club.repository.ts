@@ -62,6 +62,7 @@ export async function findAll(
     .from('clubs')
     .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, lat, lng, is_active, created_at', { count: 'exact' })
     .eq('is_active', true)
+    .eq('status', 'approved') // card #67: only approved clubs are visible to players
     .order('name')
     .range(offset, offset + limit - 1)
 
@@ -111,6 +112,7 @@ export async function findById(id: string): Promise<ClubWithCourts | null> {
     .select('id, name, slug, address, city, description, logo_url, cover_url, email, phone, lat, lng, is_active, created_at')
     .eq('id', id)
     .eq('is_active', true)
+    .eq('status', 'approved') // card #67
     .single()
 
   if (error) {
@@ -124,14 +126,17 @@ export async function findById(id: string): Promise<ClubWithCourts | null> {
 }
 
 export async function findCourts(clubId: string): Promise<CourtSummary[]> {
+  // Card #67: courts of a club that is not approved and active are not public.
   const { data, error } = await supabase
     .from('courts')
-    .select('id, name, surface, is_indoor, price_per_hour, is_active')
+    .select('id, name, surface, is_indoor, price_per_hour, is_active, club:clubs!inner(status, is_active)')
     .eq('club_id', clubId)
     .eq('is_active', true)
+    .eq('club.status', 'approved')
+    .eq('club.is_active', true)
     .order('name')
 
   if (error) throw error
 
-  return data ?? []
+  return (data ?? []).map(({ club: _club, ...court }) => court)
 }

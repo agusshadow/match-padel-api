@@ -10,8 +10,10 @@ const RegisterSchema = z.object({
   first_name: z.string().min(2),
   last_name: z.string().min(2),
   username: z.string().min(3).max(20).regex(/^[a-z0-9_]+$/),
-  skill_level: z.enum(['beginner', 'intermediate', 'advanced']),
-  preferred_hand: z.enum(['drive', 'backhand']),
+  // Optional (card #67): a club owner registering from the club panel has no
+  // playing profile. Players' clients keep sending both.
+  skill_level: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+  preferred_hand: z.enum(['drive', 'backhand']).optional(),
   phone: z.string().min(6).max(20).optional(),
 })
 

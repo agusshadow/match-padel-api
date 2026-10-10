@@ -3,6 +3,7 @@ import { buildMeta, sanitizeSearch } from '../../lib/pagination'
 import { logger } from '../../lib/logger'
 import { listAuditLog, recordAudit } from '../audit/audit.service'
 import * as repository from './platform.repository'
+import * as clubAdminRepository from '../club-admin/club-admin.repository'
 import type {
   CreateClubInput,
   ListAuditLogQuery,
@@ -71,8 +72,19 @@ export async function createClub(actorId: string, input: CreateClubInput) {
     action: 'club.created',
     entity: 'club',
     entityId: club.id,
-    metadata: { name: club.name, slug: club.slug, ownerUserId: ownerUserId ?? null },
+    metadata: { name: club.name, slug: club.slug, ownerUserId: ownerUserId ?? null, status: 'approved' },
   })
+  try {
+    await clubAdminRepository.insertStatusHistory({
+      clubId: club.id,
+      actorId,
+      fromStatus: null,
+      toStatus: 'approved',
+      note: 'Created by a platform superadmin',
+    })
+  } catch (err) {
+    logger.error({ err, clubId: club.id }, '[platform] failed to record status history')
+  }
   return club
 }
 
@@ -119,4 +131,13 @@ export async function getAuditLog(query: ListAuditLogQuery) {
     club: entry.club_id ? (clubById.get(entry.club_id) ?? null) : null,
   }))
   return { data: enriched, meta: buildMeta(query.page, query.limit, total) }
+}
+
+/** Signed URL of a club's application document (reviewers and superadmins). */
+export async function getClubDocumentUrl(clubId: string, documentId: string) {
+  const doc = await clubAdminRepository.findDocumentInClub(clubId, documentId)
+  if (!doc) throw new NotFoundError('Document')
+  const url = await clubAdminRepository.signDocumentUrl(doc.file_path, clubAdminRepository.DOCUMENT_URL_TTL_SECONDS)
+  if (!url) throw new AppError('Could not generate the document URL', 500, 'INTERNAL_ERROR')
+  return { url, expiresIn: clubAdminRepository.DOCUMENT_URL_TTL_SECONDS }
 }

@@ -16,7 +16,7 @@ Auth column: `none` = public; `requireAuth` = Supabase JWT checked, no role chec
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| POST | `/api/v1/auth/register` | none | Create an unconfirmed Supabase auth user and profile, send the "Confirm signup" code by email; no session returned yet (`EMAIL_VERIFICATION_REQUIRED` flow — the client confirms with `supabase.auth.verifyOtp({ type: 'signup' })` directly, anon key, which returns the session) | `register` (`auth.controller.ts`) |
+| POST | `/api/v1/auth/register` | none | Body `{ email, password (min 8), first_name, last_name, username (3-20, `[a-z0-9_]`), phone?, skill_level?, preferred_hand? }` — `skill_level`/`preferred_hand` are optional since card #67 so a club owner can register from the club panel (the club panel registers owners with this endpoint, confirms the email code, logs in, then calls `POST /me/clubs`). Create an unconfirmed Supabase auth user and profile, send the "Confirm signup" code by email; no session returned yet (`EMAIL_VERIFICATION_REQUIRED` flow — the client confirms with `supabase.auth.verifyOtp({ type: 'signup' })` directly, anon key, which returns the session) | `register` (`auth.controller.ts`) |
 | POST | `/api/v1/auth/login` | none | Sign in with email and password, return user and tokens. `403 EMAIL_NOT_CONFIRMED` if the account hasn't verified its email yet | `login` |
 | POST | `/api/v1/auth/logout` | requireAuth | Acknowledge logout (no server-side session invalidation) | `logout` |
 | GET | `/api/v1/auth/me` | requireAuth | Current user profile | `me` |
@@ -39,7 +39,7 @@ Card #61: `users.xp`/`users.level` (engagement, separate from `elo` which is ski
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| GET | `/api/v1/clubs` | none | List clubs (paginated, `meta` with `totalPages`); includes `lat`/`lng` (nullable — for the map view, Trello card #49) | `getClubes` (`club.controller.ts`) |
+| GET | `/api/v1/clubs` | none | Card #67: every public club read (this section, `/courts/:courtId/slots`, `POST /reservations`, `/matches` creation, `/tournaments` list and detail) only sees clubs with `status = 'approved'` and `is_active`; anything else answers as if it did not exist. List clubs (paginated, `meta` with `totalPages`); includes `lat`/`lng` (nullable — for the map view, Trello card #49) | `getClubes` (`club.controller.ts`) |
 | GET | `/api/v1/clubs/:id` | none | Club detail with courts; includes `lat`/`lng` | `getClubById` |
 | GET | `/api/v1/clubs/:clubId/courts` | none | Courts of a club | `getClubCourts` |
 | GET | `/api/v1/clubs/:clubId/availability?date=YYYY-MM-DD` | none | Combined slot availability across every active court of the club for one day — each slot lists the specific courts free at that time with their exact price, plus a `min_price` for a "starting from" display before a court is picked | `getClubAvailabilityHandler` (calls `getClubAvailability` in `club.service.ts`, which reuses `findAvailableSlots` per court) |
@@ -148,7 +148,8 @@ Card #63: cosmetics (palette skins, avatar frames, emblems) bought with an inter
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| GET | `/api/v1/me/access` | requireAuth | What the caller can administer: `{ user: { id, email, first_name, last_name }, platformRole: 'superadmin' \| 'reviewer' \| null, clubs: [{ clubId, name, slug, isActive, role: 'owner' \| 'admin' \| 'staff' \| 'superadmin' }] }`. A platform superadmin gets every club with role `superadmin`; anyone else only their `club_staff` memberships. `email` comes from Supabase Auth | `getAccess` (`access.controller.ts`) |
+| GET | `/api/v1/me/access` | requireAuth | What the caller can administer: `{ user: { id, email, first_name, last_name }, platformRole: 'superadmin' \| 'reviewer' \| null, clubs: [{ clubId, name, slug, isActive, status: 'draft' \| 'pending' \| 'changes_requested' \| 'approved' \| 'rejected' \| 'suspended', role: 'owner' \| 'admin' \| 'staff' \| 'superadmin' }] }`. A platform superadmin gets every club with role `superadmin`; anyone else only their `club_staff` memberships. `email` comes from Supabase Auth | `getAccess` (`access.controller.ts`) |
+| POST | `/api/v1/me/clubs` | requireAuth (rate limit 10/min per IP) | Card #67. Body `{ name, address, city }` (strict). Creates a club in `draft` with a unique slug generated from the name, an `owner` membership for the caller, a `club_status_history` row (`null` to `draft`) and audit `club.created`. 201 with the club (same shape as `GET /club-admin/:clubId`); 200 with the existing club if the caller already has a draft with the same name, address and city (idempotent retry); 409 `CONFLICT` at 10 drafts owned by the caller | `createMyClub` (`club-admin.controller.ts`) |
 
 ## club-admin — `/api/v1/club-admin/:clubId` (`club-admin.router.ts`, card #66)
 
@@ -161,18 +162,30 @@ The club panel's API. `:clubId` must be a UUID (400 otherwise); the caller needs
 | PATCH | `/api/v1/club-admin/:clubId/reservations/:id` | requireClubRole owner/admin/staff | Body `{ status: 'confirmed' \| 'cancelled' \| 'completed' }`. 404 if the reservation's court is not in this club. Allowed transitions: `pending` to `confirmed`/`cancelled`, `confirmed` to `cancelled`/`completed`; anything else is 409 `CONFLICT`; the same status is a no-op. Audited (`reservation.status_changed`). It does not refund payments or notify the player (target — not implemented yet) | `updateReservation` |
 | GET | `/api/v1/club-admin/:clubId/matches?page=&limit=` | requireClubRole owner/admin | Matches whose `club_id` is this club, with reservation/court and players | `listMatches` |
 | GET | `/api/v1/club-admin/:clubId/tournaments?page=&limit=` | requireClubRole owner/admin | Tournaments of the club, with a `teams: [{ count }]` registration count | `listTournaments` |
-| GET | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin/staff | Club data (`name`, `slug`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng`, `is_active`, timestamps) | `getClub` |
-| PATCH | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin | Partial update of `name`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng` (unknown fields are rejected, at least one required; nullable ones accept `null`). Audited (`club.updated`, with the changed fields) | `updateClub` |
+| GET | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin/staff | Club data (`name`, `slug`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng`, `is_active`, `status`, `legal_name`, `tax_id`, `opening_hours`, timestamps) | `getClub` |
+| PATCH | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin | Partial update of `name`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng`, `legal_name`, `tax_id` (card #67) and `opening_hours` (unknown fields are rejected, at least one required; nullable ones accept `null`). `opening_hours` is `{ mon?: [{ open: 'HH:MM', close: 'HH:MM' }], tue?, ..., sun? }` (`open < close`, `24:00` allowed as close, max 4 intervals a day, a missing or empty day is closed); it is stored in `clubs.settings.opening_hours` and is a draft: F2 replaces it with the per-court schedule model. 409 `CONFLICT` when the club is `pending`, `rejected` or `suspended`. Audited (`club.updated`, with the changed fields) | `updateClub` |
+| GET | `/api/v1/club-admin/:clubId/onboarding` | requireClubRole owner/admin | Card #67. `{ status, steps: [{ key: 'club' \| 'location' \| 'contact' \| 'courts' \| 'schedule' \| 'documents', complete, missing: string[] }], canSubmit, history: [{ id, from_status, to_status, note, created_at, actor: { id, first_name, last_name } \| null }] (newest first), documents: [{ id, kind, file_name, mime_type, size_bytes, uploaded_by, created_at, url }] }`. `url` is a signed URL valid 10 minutes (`null` if it could not be signed) | `getOnboarding` |
+| POST | `/api/v1/club-admin/:clubId/submit` | requireClubRole owner | Card #67. Moves the club from `draft` or `changes_requested` to `pending`; history + audit (`club.submitted`). Returns the club. 422 `APPLICATION_INCOMPLETE` with `details: { missing: ['club.legal_name', ...], steps }` when something is missing; 409 `CONFLICT` from any other status | `submitApplication` |
+| GET | `/api/v1/club-admin/:clubId/courts` | requireClubRole owner/admin | Card #67. Courts of the club (all, active or not), ordered by name: `[{ id, club_id, name, surface, is_indoor, price_per_hour, is_active, created_at, updated_at }]` | `listCourts` |
+| POST | `/api/v1/club-admin/:clubId/courts` | requireClubRole owner/admin | Body `{ name, surface: 'indoor' \| 'outdoor' \| 'panoramic', is_indoor? (default true), price_per_hour (> 0), is_active? (default true) }` (strict). 201 with the court. Audited (`court.created`). 409 when the club is not editable | `createCourt` |
+| PATCH | `/api/v1/club-admin/:clubId/courts/:id` | requireClubRole owner/admin | Partial update of the same fields (at least one). 404 if the court is not in this club. Audited (`court.updated`) | `updateCourt` |
+| DELETE | `/api/v1/club-admin/:clubId/courts/:id` | requireClubRole owner/admin | `{ id }`. 409 `CONFLICT` if the court has reservations (deactivate it instead). Audited (`court.deleted`) | `deleteCourt` |
+| POST | `/api/v1/club-admin/:clubId/documents` | requireClubRole owner/admin | Multipart: file field `file` (PDF/JPEG/PNG/WebP, max 10 MB, content checked against its type) and text field `kind` (`tax_id` \| `company_registration` \| `id_document` \| `other`, default `other`). Stored in the private `club-documents` bucket under `<clubId>/<uuid>-<safe filename>`. 201 with the document (same shape as in `onboarding.documents`). Max 20 per club. 409 when the club is not editable. Audited (`club.document_uploaded`) | `uploadDocument` |
+| DELETE | `/api/v1/club-admin/:clubId/documents/:id` | requireClubRole owner/admin | `{ id }`; removes the file and the row. 409 when the club is not editable. Audited (`club.document_deleted`) | `deleteDocument` |
+| GET | `/api/v1/club-admin/:clubId/documents/:id/url` | requireClubRole owner/admin | `{ url, expiresIn: 600 }` (signed URL, 10 minutes). Platform staff use `GET /platform/clubs/:clubId/documents/:id/url` | `getDocumentUrl` |
+
+Card #67: club data, courts and documents can only be changed while the club is `draft`, `changes_requested` or `approved`; in `pending`, `rejected` and `suspended` the writes answer 409 `CONFLICT` with a message (reads keep working). See `docs/club-lifecycle.md`.
 
 ## platform — `/api/v1/platform` (`platform.router.ts`, card #66)
 
-`requireAuth` + `requireRole(['superadmin'])` on the whole router: a `reviewer` gets 403 for now (the review inbox arrives in F1). Lists answer with the `meta` envelope.
+`requireAuth` on the whole router and the role per route: a `reviewer` only reaches `GET /clubs` and the document URL below (card #67; the approve/reject/request-changes actions arrive with the review card); everything else is superadmin only. Lists answer with the `meta` envelope.
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
 | GET | `/api/v1/platform/summary` | requireRole superadmin | Global counts: `clubs`, `courts`, `reservations`, `pendingReservations`, `matches`, `users`, plus `recentReservations` (5) | `getSummary` (`platform.controller.ts`) |
-| GET | `/api/v1/platform/clubs?search=&page=&limit=` | requireRole superadmin | Every club, active or not | `listClubs` |
-| POST | `/api/v1/platform/clubs` | requireRole superadmin | Body `{ name, slug (kebab-case), address, city, description?, phone?, email?, ownerUserId? }`. Creates the club (201); with `ownerUserId` it also creates an `owner` membership (400 if that user does not exist, the club insert is rolled back if the membership fails). 409 if the slug is taken. Audited (`club.created`) | `createClub` |
+| GET | `/api/v1/platform/clubs?search=&status=&page=&limit=` | requireRole reviewer (superadmin passes) | Every club in every status, active or not (card #67); `status` filters by `draft` / `pending` / `changes_requested` / `approved` / `rejected` / `suspended`. Rows include `status`, `legal_name`, `tax_id` | `listClubs` |
+| POST | `/api/v1/platform/clubs` | requireRole superadmin | Body `{ name, slug (kebab-case), address, city, description?, phone?, email?, ownerUserId? }`. Creates the club as `approved` (card #67, with a status history row) (201); with `ownerUserId` it also creates an `owner` membership (400 if that user does not exist, the club insert is rolled back if the membership fails). 409 if the slug is taken. Audited (`club.created`) | `createClub` |
+| GET | `/api/v1/platform/clubs/:clubId/documents/:id/url` | requireRole reviewer (superadmin passes) | Card #67. `{ url, expiresIn: 600 }`, a signed URL of an application document. 404 if the document is not in that club | `getClubDocumentUrl` |
 | PATCH | `/api/v1/platform/clubs/:id/active` | requireRole superadmin | Body `{ isActive: boolean }`. 404 if the club does not exist. Audited (`club.activated`/`club.deactivated`) | `setClubActive` |
 | GET | `/api/v1/platform/users?search=&page=&limit=` | requireRole superadmin | Users (`id`, `username`, `first_name`, `last_name`, `role`, `is_active`, `created_at`, `email`); `search` matches username and names, not email | `listUsers` |
 | GET | `/api/v1/platform/audit-log?clubId=&actorId=&page=&limit=` | requireRole superadmin | `audit_log` entries, newest first, each with `actor` (`id, username, first_name, last_name`) and `club` (`id, name`) or `null` | `getAuditLog` |
@@ -188,7 +201,7 @@ Not imported by `src/index.ts`, so none of their routes exist:
 
 Verified by reading the code (`src/index.ts`, the routers and `match-padel-web`):
 
-- **Club management is partial (card #66, F0).** Clubs can be created, activated and edited through `/platform` and `/club-admin`, and reservation status can be changed there. There are still no endpoints for courts, schedules, prices, blocks or club team management (F2); the admin app (`match-padel-web/apps/admin`) keeps reading some tables directly with the Supabase client until it is migrated to these endpoints.
+- **Club management is partial (cards #66 F0, #67 F1).** Clubs can be created, activated and edited through `/platform` and `/club-admin`, an owner can register a club and submit it for review (`/me/clubs`, `/club-admin/:clubId/submit`), and courts (name, surface, price) can be managed there. There are no review actions yet (approve / reject / request changes, next card), no emails on status changes, and no endpoints for schedules per court, price bands, blocks or club team management (F2); the admin app (`match-padel-web/apps/admin`) keeps reading some tables directly with the Supabase client until it is migrated to these endpoints.
 - **Superadmin has no UI to grant roles.** Platform roles are granted by inserting into `platform_staff` (see `docs/permissions.md`).
 - **No Socket.io server and no chat endpoints.** `src/lib/socket.ts` is a no-op and socket.io is not in `package.json`, although `docs/api-patterns.md` lists `match:*`, `staff:*` and `chat:message` events (`match_chats` exists in `docs/schema.sql`).
 - Every call the player app makes today through `match-padel-web/apps/app` (`/auth/*`, `/clubs*`, `/courts/:id/slots`, `/reservations*`, `/payments/preference`, `/matches*`, `/users*`, `/tournaments*`, `/notifications*`) has a matching mounted route.
@@ -209,7 +222,7 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | notifications | `/api/v1/notifications` | yes | yes | yes | yes | no |
 | payments | `/api/v1/payments` | yes | yes | yes (holds Supabase queries) | no | no (schema inline in the controller) |
 | achievements | `/api/v1/achievements` | yes | yes | yes | yes | no |
-| access | `/api/v1/me` | yes | yes | yes | yes | no |
+| access | `/api/v1/me` | yes | yes (`POST /me/clubs` reuses `club-admin.controller`) | yes | yes | no |
 | club-admin | `/api/v1/club-admin/:clubId` | yes | yes | yes | yes | yes |
 | platform | `/api/v1/platform` | yes | yes | yes | yes | yes |
 | audit | not mounted (used by the services) | no | no | yes (`recordAudit`) | yes | no |
