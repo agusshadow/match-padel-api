@@ -18,7 +18,8 @@
 ## Checklist
 - [ ] CI is green
 - [ ] Tests added or updated
-- [ ] Migrations applied to dev only
+- [ ] Migration file added first (`supabase migration new`), applied to dev only, no existing migration edited, `Migrations` workflow green (or "No schema changes")
+- [ ] If there is a migration: it is additive and backward compatible, and pending to be promoted to production **before** the release PR is merged
 - [ ] No secrets or production data included
 - [ ] Environment variable changes documented
 - [ ] Docs updated if behavior or structure changed (`docs/endpoints.md`, "Real state vs. target" in `CLAUDE.md`, `.env.example`)
