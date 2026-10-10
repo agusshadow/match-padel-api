@@ -8,6 +8,7 @@ import {
   findApprovedPaymentsForReservation,
   creditLateCancellationCurrency,
   refundAllApprovedPayments,
+  assertClubCanCharge,
   type RefundSummary,
 } from '../payments/payment.service'
 import * as courtRepository from '../courts/court.repository'
@@ -91,6 +92,10 @@ export const matchService = {
       toDate: localDateOf(new Date(endTime.getTime() - 1)),
     })
     const totalPrice = quoteRangeOrThrow(scheduleContext, data.start_time, data.end_time).total_price
+
+    // Card #75: a paid match of a club that collects on its own Mercado Pago
+    // account needs that account connected (409 CLUB_PAYMENTS_NOT_ENABLED).
+    await assertClubCanCharge(court.club_id, totalPrice)
 
     const reservation = await reservationRepository.create({
       court_id: data.court_id,

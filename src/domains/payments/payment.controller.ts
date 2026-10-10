@@ -11,6 +11,10 @@ function getUserId(req: Request): string {
   return userId
 }
 
+// Card #75: the club whose seller token fetches the payment. Present only on
+// club-collected payments; anything that is not a uuid is ignored by the service.
+const webhookClubIdSchema = z.string().uuid()
+
 const createPreferenceSchema = z.object({
   reservation_id: z.string().uuid(),
 })
@@ -53,7 +57,12 @@ export async function webhook(
   res.sendStatus(200)
 
   try {
-    await handleWebhook(req.body as Record<string, unknown>, dataId)
+    const rawClubId = req.query['club_id']
+    const parsedClubId = rawClubId === undefined ? null : webhookClubIdSchema.safeParse(rawClubId)
+    await handleWebhook(req.body as Record<string, unknown>, dataId, {
+      clubId: parsedClubId && parsedClubId.success ? parsedClubId.data : undefined,
+      malformed: parsedClubId !== null && !parsedClubId.success,
+    })
   } catch (err) {
     // Headers are already sent — this can't reach the error middleware, so log it directly
     // instead of letting it disappear silently.

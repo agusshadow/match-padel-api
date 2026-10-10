@@ -87,6 +87,8 @@ create table public.clubs (
   legal_name    text,  -- card #67
   tax_id        text,  -- card #67
   settings      jsonb not null default '{}', -- card #67: settings.opening_hours = weekly draft { mon: [{open,close}], ... }; since card #70 it is the fallback of courts with no court_schedules rows
+  commission_percent numeric(5,2) not null default 0 check (commission_percent >= 0 and commission_percent <= 100), -- card #75: platform commission on each charge; default 0, set by the superadmin
+  collection_mode text not null default 'club_account' check (collection_mode in ('platform_account', 'club_account')), -- card #75: existing clubs were backfilled to 'platform_account' (charges go to the platform's token); new clubs default to 'club_account'
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -363,7 +365,13 @@ create table public.payments (
   mp_event_id     text unique,         -- webhook idempotency
   metadata        jsonb not null default '{}',
   created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  updated_at      timestamptz not null default now(),
+  club_id         uuid references clubs(id) on delete set null, -- card #75 (backfilled from the reservation)
+  seller_mp_user_id text,                                      -- card #75: linked account at charge time, then the payment's collector_id
+  commission_percent numeric(5,2) check (commission_percent is null or (commission_percent >= 0 and commission_percent <= 100)), -- card #75: rate frozen at charge time (null = platform-collected)
+  marketplace_fee numeric(10,2) check (marketplace_fee is null or marketplace_fee >= 0), -- card #75
+  net_amount      numeric(10,2),                               -- card #75: amount - marketplace_fee, before Mercado Pago's own fee
+  collected_via   text not null default 'platform' check (collected_via in ('platform', 'club')) -- card #75
 );
 
 -- matches
@@ -630,6 +638,7 @@ create index tournaments_start_date_idx on tournaments(start_date);
 create index tournaments_status_idx on tournaments(status);
 create index tournament_matches_tournament_id_idx on tournament_matches(tournament_id);
 create index on payments(mp_event_id);
+create index payments_club_created_idx on payments (club_id, created_at desc); -- card #75
 create index on users(elo desc) where is_active = true;
 create index on user_challenges(user_id, status); -- card #62
 create index on user_cosmetics(user_id); -- card #63
@@ -962,8 +971,10 @@ create policy "notifications_own_update" on notifications for update using (auth
 create policy "users_read_own_notifications" on notifications for select using (auth.uid() = user_id);
 create policy "users_update_own_notifications" on notifications for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- payments: owner only
+-- payments: the payer, and (card #75) members of the payment's club / platform superadmins
 create policy "payments_own_read" on payments for select using (auth.uid() = user_id);
+create policy "payments_club_read" on payments for select to authenticated
+  using (club_id is not null and public.is_club_member(club_id));
 
 -- points_transactions: owner only
 create policy "points_own_read" on points_transactions for select using (auth.uid() = user_id);
@@ -974,6 +985,29 @@ create policy "user_stats_public_read" on user_stats for select using (true);
 -- ============================================================
 -- TRIGGER: automatic updated_at
 -- ============================================================
+-- Card #75: totals of the approved payments of a filter (API only: service_role).
+create or replace function public.payment_totals(
+  p_club_id uuid default null,
+  p_from timestamptz default null,
+  p_to timestamptz default null
+)
+returns table (gross numeric, fee numeric, net numeric, payments bigint)
+language sql stable set search_path = public
+as $$
+  select
+    coalesce(sum(p.amount), 0)::numeric,
+    coalesce(sum(coalesce(p.marketplace_fee, 0)), 0)::numeric,
+    coalesce(sum(coalesce(p.net_amount, p.amount - coalesce(p.marketplace_fee, 0))), 0)::numeric,
+    count(*)::bigint
+  from public.payments p
+  where p.status = 'approved'
+    and (p_club_id is null or p.club_id = p_club_id)
+    and (p_from is null or p.created_at >= p_from)
+    and (p_to is null or p.created_at < p_to);
+$$;
+revoke all on function public.payment_totals(uuid, timestamptz, timestamptz) from public, anon, authenticated;
+grant execute on function public.payment_totals(uuid, timestamptz, timestamptz) to service_role;
+
 create or replace function update_updated_at()
 returns trigger language plpgsql as $$
 begin

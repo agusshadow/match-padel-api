@@ -229,3 +229,23 @@ export async function isOwnerOrSuperadmin(userId: string, clubId: string): Promi
   if (platform.error) throw platform.error
   return Boolean(owner.data) || Boolean(platform.data)
 }
+
+// ---- Charging (card #75): non-secret view of the links --------------------------
+
+export interface MpConnectionSummary {
+  club_id: string
+  mp_user_id: string
+  status: MpAccountStatus
+  expires_at: string
+}
+
+/** Never selects a token: safe for listings and availability. */
+export async function findConnectionSummaries(clubIds: string[]): Promise<MpConnectionSummary[]> {
+  if (clubIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('club_mp_accounts')
+    .select('club_id, mp_user_id, status, expires_at')
+    .in('club_id', clubIds)
+  if (error) throw error
+  return (data ?? []) as MpConnectionSummary[]
+}

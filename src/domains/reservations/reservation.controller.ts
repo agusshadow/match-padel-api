@@ -4,9 +4,8 @@ import { NotFoundError, ForbiddenError, UnauthorizedError } from '../../types/er
 import {
   findByUser,
   findById,
-  findAvailableSlots,
 } from './reservation.repository'
-import { validateAndCreateReservation, cancelReservation } from './reservation.service'
+import { validateAndCreateReservation, cancelReservation, getCourtSlots } from './reservation.service'
 import {
   CreateReservationSchema,
   GetSlotsSchema,
@@ -76,9 +75,10 @@ export async function getAvailableSlots(
     const { courtId } = req.params
     const { date } = GetSlotsSchema.parse({ court_id: courtId, date: req.query.date })
 
-    const slots = await findAvailableSlots(courtId, date)
+    const { slots, payments_enabled } = await getCourtSlots(courtId, date)
 
-    res.json({ success: true, data: slots })
+    // Card #75: `data` stays the slots array; the flag travels in `meta`.
+    res.json({ success: true, data: slots, meta: { payments_enabled } })
   } catch (err) {
     next(err)
   }

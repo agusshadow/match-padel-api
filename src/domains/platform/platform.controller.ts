@@ -1,6 +1,12 @@
 import { Request, Response, NextFunction } from 'express'
 import type { AuthenticatedRequest } from '../../middleware/auth'
 import * as service from './platform.service'
+import * as paymentAdmin from '../payments/payment-admin.service'
+import {
+  platformPaymentsQuerySchema,
+  setCollectionModeSchema,
+  setCommissionSchema,
+} from '../payments/payment.validator'
 import type { LifecycleAction } from './platform.service'
 import type { PlatformRole } from '../../types/access'
 import { ForbiddenError } from '../../types/errors'
@@ -140,3 +146,37 @@ export const rejectApplication = lifecycleHandler('reject', (b) => rejectApplica
 export const reopenClub = lifecycleHandler('reopen', (b) => reopenClubSchema.parse(b).note ?? null)
 export const suspendClub = lifecycleHandler('suspend', (b) => suspendClubSchema.parse(b).reason)
 export const unsuspendClub = lifecycleHandler('unsuspend', (b) => unsuspendClubSchema.parse(b).note ?? null)
+
+// ---- Card #75: commission, collection mode and payments (superadmin) ------------
+
+export async function setClubCommission(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = applicationParamsSchema.parse(req.params)
+    const { commission_percent } = setCommissionSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await paymentAdmin.setClubCommission(userId, clubId, commission_percent) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function setClubCollectionMode(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = applicationParamsSchema.parse(req.params)
+    const { collection_mode } = setCollectionModeSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await paymentAdmin.setClubCollectionMode(userId, clubId, collection_mode) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function listPayments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const query = platformPaymentsQuerySchema.parse(req.query)
+    const { data, meta } = await paymentAdmin.listPlatformPayments(query)
+    res.json({ success: true, data, meta })
+  } catch (err) {
+    next(err)
+  }
+}

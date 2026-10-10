@@ -1,15 +1,49 @@
 import crypto from 'crypto'
 import { supabase } from '../../lib/supabase'
-import { preference } from '../../lib/mercadopago'
+import { createMpChargeClient, getPlatformAccessToken, type MpPreferenceBody } from '../../lib/mercadopago'
+import { getMpOAuthConfig } from '../../lib/mp-oauth'
 import { logger } from '../../lib/logger'
 import { matchRepository } from '../matches/match.repository'
 import * as reservationRepository from '../reservations/reservation.repository'
 import { notifications } from '../notifications/notification.service'
 import { NotFoundError, ForbiddenError, AppError, ConflictError } from '../../types/errors'
+import { getClubAccessToken } from '../club-mercadopago/club-mercadopago.service'
+import * as mpAccountRepository from '../club-mercadopago/club-mercadopago.repository'
+import {
+  computeMarketplaceFee,
+  computeNetAmount,
+  createChargingCore,
+  type ClubPaymentsStatus,
+} from './charging.core'
+import * as paymentRepository from './payment.repository'
 
 const APP_URL = process.env.APP_URL ?? 'https://match-padel-web.vercel.app'
 const API_URL = process.env.API_URL ?? 'https://match-padel-api.railway.app'
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET ?? ''
+
+// Card #75: seller resolution, fee and webhook/refund token selection (logic in
+// charging.core.ts, wired here to the real repository and token provider).
+const charging = createChargingCore({
+  findClubSettings: paymentRepository.findClubChargingSettings,
+  findConnection: async (clubId) => {
+    const [row] = await mpAccountRepository.findConnectionSummaries([clubId])
+    return row ? { mp_user_id: row.mp_user_id, status: row.status, expires_at: row.expires_at } : null
+  },
+  getClubAccessToken,
+  platformAccessToken: getPlatformAccessToken,
+  isMpConfigured: () => getMpOAuthConfig() !== null,
+  now: () => new Date(),
+})
+
+/** `payments_enabled` of a club for the availability responses (never decrypts a token). */
+export async function getClubPaymentsStatus(clubId: string): Promise<ClubPaymentsStatus> {
+  return charging.getClubPaymentsStatus(clubId)
+}
+
+/** 409 CLUB_PAYMENTS_NOT_ENABLED for a paid flow of a club_account club with no usable link. */
+export async function assertClubCanCharge(clubId: string, price: number): Promise<void> {
+  return charging.assertClubCanCharge(clubId, price)
+}
 
 export interface PreferenceResult {
   preference_id: string
@@ -26,7 +60,14 @@ async function createPreferenceForPayment(
   userId: string,
   amount: number,
   title: string,
+  clubId: string | null,
 ): Promise<PreferenceResult> {
+  // Card #75: who collects. Resolved BEFORE inserting the row so a club that
+  // cannot charge (409 CLUB_PAYMENTS_NOT_ENABLED) leaves nothing behind.
+  const seller = await charging.resolveSeller(clubId, amount)
+  const byClub = seller.collectedVia === 'club'
+  const marketplaceFee = byClub ? computeMarketplaceFee(amount, seller.commissionPercent ?? 0) : 0
+
   const { data: paymentRow, error: insertErr } = await supabase
     .from('payments')
     .insert({
@@ -35,35 +76,48 @@ async function createPreferenceForPayment(
       amount,
       currency: 'ARS',
       status: 'pending',
+      club_id: clubId,
+      collected_via: seller.collectedVia,
+      seller_mp_user_id: seller.sellerMpUserId,
+      commission_percent: seller.commissionPercent,
+      marketplace_fee: marketplaceFee,
+      net_amount: computeNetAmount(amount, marketplaceFee),
     })
     .select('id')
     .single()
 
   if (insertErr) throw insertErr
 
+  // The club travels in the notification URL so the webhook knows whose token
+  // to fetch the payment with; the webhook re-validates it against the row.
+  const notificationUrl = byClub
+    ? `${API_URL}/api/v1/payments/webhook?club_id=${seller.clubId}`
+    : `${API_URL}/api/v1/payments/webhook`
+
   let pref
   try {
-    pref = await preference.create({
-      body: {
-        items: [
-          {
-            id: paymentRow.id,
-            title,
-            quantity: 1,
-            unit_price: amount,
-            currency_id: 'ARS',
-          },
-        ],
-        external_reference: paymentRow.id,
-        back_urls: {
-          success: `${APP_URL}/reservations/${reservationId}?payment=success`,
-          failure: `${APP_URL}/reservations/${reservationId}?payment=failure`,
-          pending: `${APP_URL}/reservations/${reservationId}?payment=pending`,
+    const body: MpPreferenceBody = {
+      items: [
+        {
+          id: paymentRow.id,
+          title,
+          quantity: 1,
+          unit_price: amount,
+          currency_id: 'ARS',
         },
-        auto_return: 'approved',
-        notification_url: `${API_URL}/api/v1/payments/webhook`,
+      ],
+      external_reference: paymentRow.id,
+      back_urls: {
+        success: `${APP_URL}/reservations/${reservationId}?payment=success`,
+        failure: `${APP_URL}/reservations/${reservationId}?payment=failure`,
+        pending: `${APP_URL}/reservations/${reservationId}?payment=pending`,
       },
-    })
+      auto_return: 'approved',
+      notification_url: notificationUrl,
+      // Omitted at 0% (platform-collected or commission 0): MP may reject a zero fee.
+      ...(marketplaceFee > 0 ? { marketplace_fee: marketplaceFee } : {}),
+    }
+    pref = await createMpChargeClient(seller.accessToken).createPreference(body)
   } catch (err) {
     // Don't leave an orphaned pending payment row behind if MercadoPago rejects the preference.
     await supabase.from('payments').delete().eq('id', paymentRow.id)
@@ -91,7 +145,7 @@ export async function createPaymentPreference(
   const { data: reservation, error } = await supabase
     .from('court_reservations')
     .select(`
-      id, user_id, total_price, status,
+      id, user_id, club_id, total_price, status,
       court:courts(name, club:clubs(name))
     `)
     .eq('id', reservationId)
@@ -112,6 +166,7 @@ export async function createPaymentPreference(
     userId,
     Number(reservation.total_price),
     `Reserva – ${courtName} en ${clubName}`,
+    (reservation.club_id as string | null) ?? null,
   )
 }
 
@@ -150,6 +205,7 @@ export async function createMatchPaymentPreference(matchId: string, userId: stri
     userId,
     share,
     `Partido – ${reservation.court.name} en ${reservation.court.club.name} (1/4)`,
+    reservation.club_id ?? null,
   )
 }
 
@@ -180,26 +236,26 @@ export async function createCurrencyPreference(userId: string): Promise<Preferen
 
   let pref
   try {
-    pref = await preference.create({
-      body: {
-        items: [
-          {
-            id: purchaseRow.id,
-            title: `${CURRENCY_PACK.currencyAmount} monedas`,
-            quantity: 1,
-            unit_price: CURRENCY_PACK.amountArs,
-            currency_id: 'ARS',
-          },
-        ],
-        external_reference: `currency:${purchaseRow.id}`,
-        back_urls: {
-          success: `${APP_URL}/marketplace?payment=success`,
-          failure: `${APP_URL}/marketplace?payment=failure`,
-          pending: `${APP_URL}/marketplace?payment=pending`,
+    // Card #75: internal-currency purchases ALWAYS go to the platform's own
+    // account: platform token, no marketplace fee, no club in the notification URL.
+    pref = await createMpChargeClient(getPlatformAccessToken()).createPreference({
+      items: [
+        {
+          id: purchaseRow.id,
+          title: `${CURRENCY_PACK.currencyAmount} monedas`,
+          quantity: 1,
+          unit_price: CURRENCY_PACK.amountArs,
+          currency_id: 'ARS',
         },
-        auto_return: 'approved',
-        notification_url: `${API_URL}/api/v1/payments/webhook`,
+      ],
+      external_reference: `currency:${purchaseRow.id}`,
+      back_urls: {
+        success: `${APP_URL}/marketplace?payment=success`,
+        failure: `${APP_URL}/marketplace?payment=failure`,
+        pending: `${APP_URL}/marketplace?payment=pending`,
       },
+      auto_return: 'approved',
+      notification_url: `${API_URL}/api/v1/payments/webhook`,
     })
   } catch (err) {
     await supabase.from('currency_purchases').delete().eq('id', purchaseRow.id)
@@ -372,9 +428,17 @@ async function handleCurrencyWebhook(
   return { handled: true, status: mpStatus }
 }
 
+export interface WebhookClubParam {
+  /** `club_id` of the notification URL, already validated as a uuid by the controller. */
+  clubId: string | undefined
+  /** `club_id` was present but not a uuid. */
+  malformed: boolean
+}
+
 export async function handleWebhook(
   body: Record<string, unknown>,
   dataIdFromQuery: string | undefined,
+  clubParam: WebhookClubParam = { clubId: undefined, malformed: false },
 ) {
   // Only handle payment notifications
   if (body.type !== 'payment') return { handled: false }
@@ -386,28 +450,29 @@ export async function handleWebhook(
   // Notification-level id, used for idempotency (distinct from the MP payment id above)
   const eventId = body.id !== undefined ? String(body.id) : paymentId
 
-  // Get payment details from MP
-  const mpResponse = await fetch(
-    `https://api.mercadopago.com/v1/payments/${paymentId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN ?? ''}`,
-      },
-    },
-  )
+  // Card #75: the seller whose token fetches the payment. No `club_id` means a
+  // platform-collected payment (platform token, as before this card).
+  const seller = await charging.resolveWebhookSeller(clubParam)
+  if (seller.kind === 'reject') {
+    // Nothing is changed and nothing is revealed: the caller got a 200 already.
+    logger.warn({ paymentId, reason: seller.reason }, 'Ignored MercadoPago webhook: seller could not be resolved')
+    return { handled: false, reason: seller.reason }
+  }
 
-  if (!mpResponse.ok) {
+  // Get payment details from MP
+  const { details: mpPayment, httpStatus } = await createMpChargeClient(seller.accessToken).getPayment(paymentId)
+
+  if (!mpPayment) {
     logger.error(
-      { paymentId, status: mpResponse.status },
+      { paymentId, status: httpStatus },
       'Failed to fetch payment details from MercadoPago',
     )
     return { handled: false }
   }
 
-  const mpPayment = (await mpResponse.json()) as Record<string, unknown>
-  const externalReference = mpPayment.external_reference as string
-  const mpStatus = mpPayment.status as string
-  const mpAmount = Number(mpPayment.transaction_amount)
+  const externalReference = mpPayment.external_reference
+  const mpStatus = mpPayment.status
+  const mpAmount = mpPayment.transaction_amount
 
   if (!externalReference) return { handled: false }
 
@@ -415,6 +480,11 @@ export async function handleWebhook(
   // 'currency:' prefix on external_reference so they never collide with a
   // real payments.id (both are plain UUIDs otherwise).
   if (externalReference.startsWith('currency:')) {
+    if (seller.kind === 'club') {
+      // Currency purchases are always the platform's: a club-tagged notification is not one.
+      logger.warn({ paymentId }, 'Ignored MercadoPago webhook: currency purchase notified for a club')
+      return { handled: false, reason: 'club_mismatch' }
+    }
     return handleCurrencyWebhook(externalReference.slice('currency:'.length), eventId, paymentId, mpStatus, mpAmount)
   }
 
@@ -425,13 +495,30 @@ export async function handleWebhook(
   // or four, unlike looking it up by reservation_id alone.
   const { data: existingPayment } = await supabase
     .from('payments')
-    .select('id, mp_event_id, reservation_id, user_id, amount')
+    .select('id, mp_event_id, reservation_id, user_id, amount, club_id, collected_via, marketplace_fee, seller_mp_user_id')
     .eq('id', ourPaymentId)
     .maybeSingle()
 
   if (!existingPayment) {
     logger.error({ ourPaymentId, paymentId }, 'Webhook received for unknown payment')
     return { handled: false }
+  }
+
+  // Card #75: never trust the query alone. The `club_id` that selected the
+  // token must be the club the row was charged for, collected by that club.
+  const validation = charging.validateWebhookPayment(seller, existingPayment)
+  if (!validation.ok) {
+    logger.warn({ ourPaymentId, paymentId, reason: validation.reason }, 'Ignored MercadoPago webhook: club does not match the payment')
+    return { handled: false, reason: validation.reason }
+  }
+  if (
+    seller.kind === 'club' &&
+    mpPayment.collector_id &&
+    existingPayment.seller_mp_user_id &&
+    mpPayment.collector_id !== existingPayment.seller_mp_user_id
+  ) {
+    logger.warn({ ourPaymentId, paymentId }, 'Ignored MercadoPago webhook: collector is not the club account of the payment')
+    return { handled: false, reason: 'seller_mismatch' }
   }
 
   if (existingPayment.mp_event_id === eventId) {
@@ -462,9 +549,25 @@ export async function handleWebhook(
     mpStatus === 'cancelled' ? 'cancelled' :
     'pending'
 
+  const update: Record<string, unknown> = { status: paymentStatus, mp_payment_id: paymentId, mp_event_id: eventId }
+  if (mpPayment.collector_id) update.seller_mp_user_id = mpPayment.collector_id
+  if (seller.kind === 'club') {
+    // The fee Mercado Pago reports applying wins over the one we sent.
+    const storedFee = Number(existingPayment.marketplace_fee ?? 0)
+    const fee = mpPayment.application_fee ?? storedFee
+    if (mpPayment.application_fee !== null && Math.abs(mpPayment.application_fee - storedFee) > 0.01) {
+      logger.warn(
+        { ourPaymentId, paymentId, reportedFee: mpPayment.application_fee, storedFee },
+        'MercadoPago reported a marketplace fee different from the one sent',
+      )
+    }
+    update.marketplace_fee = fee
+    update.net_amount = computeNetAmount(expectedAmount, fee)
+  }
+
   await supabase
     .from('payments')
-    .update({ status: paymentStatus, mp_payment_id: paymentId, mp_event_id: eventId })
+    .update(update)
     .eq('id', ourPaymentId)
     .eq('status', 'pending')
 
@@ -490,10 +593,17 @@ export async function handleWebhook(
 // Card #57: refunds a single approved payment via MercadoPago's refund API.
 // Used both for a player leaving >24h before the match and for the
 // auto-cancel job when a match never fills.
-export async function refundPayment(paymentId: string): Promise<boolean> {
+//
+// Card #75: the refund is made with the token of the account that collected the
+// payment (`collected_via` / club), and accepts an optional `amount` for a
+// PARTIAL refund (MP's refunds endpoint with `{ amount }`; card #76 will use
+// it; NOT verified against the sandbox). A full refund (no amount) sets the
+// payment `refunded`; a partial one leaves it `approved` and records the
+// refund in `metadata.partial_refunds`.
+export async function refundPayment(paymentId: string, amount?: number): Promise<boolean> {
   const { data: payment } = await supabase
     .from('payments')
-    .select('id, mp_payment_id, status')
+    .select('id, mp_payment_id, status, amount, club_id, collected_via, metadata')
     .eq('id', paymentId)
     .single()
 
@@ -501,26 +611,50 @@ export async function refundPayment(paymentId: string): Promise<boolean> {
     return false
   }
 
-  const res = await fetch(
-    `https://api.mercadopago.com/v1/payments/${payment.mp_payment_id}/refunds`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN ?? ''}`,
-        'Content-Type': 'application/json',
-      },
-    },
-  )
+  let partialAmount: number | undefined
+  if (amount !== undefined) {
+    const paid = Number(payment.amount)
+    const cents = Math.round(amount * 100)
+    if (!Number.isFinite(amount) || cents <= 0 || cents > Math.round(paid * 100)) {
+      throw new AppError('Refund amount must be greater than 0 and not exceed the payment', 400, 'VALIDATION_ERROR')
+    }
+    // An amount equal to the payment is a full refund.
+    partialAmount = cents === Math.round(paid * 100) ? undefined : cents / 100
+  }
+
+  let accessToken: string
+  try {
+    accessToken = await charging.resolveRefundToken(payment)
+  } catch (err) {
+    logger.error(
+      { paymentId, code: err instanceof AppError ? err.code : undefined },
+      'Could not obtain the Mercado Pago token of the account that collected the payment',
+    )
+    return false
+  }
+
+  const res = await createMpChargeClient(accessToken).refund(payment.mp_payment_id, partialAmount)
 
   if (!res.ok) {
     logger.error(
-      { paymentId, mpPaymentId: payment.mp_payment_id, status: res.status },
+      { paymentId, mpPaymentId: payment.mp_payment_id, status: res.httpStatus },
       'MercadoPago refund failed',
     )
     return false
   }
 
-  await supabase.from('payments').update({ status: 'refunded' }).eq('id', paymentId)
+  if (partialAmount === undefined) {
+    await supabase.from('payments').update({ status: 'refunded' }).eq('id', paymentId)
+  } else {
+    const previous = (payment.metadata as Record<string, unknown> | null) ?? {}
+    const list = Array.isArray(previous.partial_refunds) ? (previous.partial_refunds as unknown[]) : []
+    await supabase
+      .from('payments')
+      .update({
+        metadata: { ...previous, partial_refunds: [...list, { amount: partialAmount, at: new Date().toISOString() }] },
+      })
+      .eq('id', paymentId)
+  }
   return true
 }
 

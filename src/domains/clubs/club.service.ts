@@ -1,5 +1,6 @@
 import { findCourts } from './club.repository'
 import { findAvailableSlots } from '../reservations/reservation.repository'
+import { getClubPaymentsStatus } from '../payments/payment.service'
 
 export interface ClubAvailabilityCourt {
   court_id: string
@@ -69,4 +70,9 @@ export async function getClubAvailability(
   }
 
   return Array.from(slotsByRange.values()).sort((a, b) => a.start_time.localeCompare(b.start_time))
+}
+
+/** Card #75: can the club charge online? (false only for a `club_account` club with no usable Mercado Pago link.) */
+export async function getClubPaymentsEnabled(clubId: string): Promise<boolean> {
+  return (await getClubPaymentsStatus(clubId)).payments_enabled
 }

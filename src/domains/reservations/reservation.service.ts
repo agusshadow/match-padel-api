@@ -14,6 +14,8 @@ import {
   hasBlockOverlap,
   cancelIfOpen,
   findById,
+  findClubIdOfCourt,
+  findAvailableSlots,
   expirePendingReservations,
 } from './reservation.repository'
 import type { CreateReservationRequest } from './reservation.validator'
@@ -23,7 +25,13 @@ import { loadScheduleContextForCourt } from '../courts/court.repository'
 import { formatLocalDateTime, localDateOf, quoteRangeOrThrow } from '../courts/schedule.service'
 import { matchRepository } from '../matches/match.repository'
 import { matchService } from '../matches/match.service'
-import { refundAllApprovedPayments, type RefundSummary } from '../payments/payment.service'
+import {
+  assertClubCanCharge,
+  getClubPaymentsStatus,
+  refundAllApprovedPayments,
+  type RefundSummary,
+} from '../payments/payment.service'
+import type { TimeSlot } from './reservation.repository'
 
 const MAX_ACTIVE_RESERVATIONS = 3
 export const PENDING_RESERVATION_EXPIRY_MINUTES = 15
@@ -93,6 +101,10 @@ export async function validateAndCreateReservation(
     toDate: localDateOf(new Date(endTime.getTime() - 1)),
   })
   const quote = quoteRangeOrThrow(scheduleContext, data.start_time, data.end_time)
+
+  // 6a. Card #75: a paid reservation of a club that collects on its own Mercado
+  // Pago account needs that account connected. Free flows are never affected.
+  await assertClubCanCharge(court.club_id, quote.total_price)
 
   // 6b. Card #71: the club may have blocked the court for that time.
   if (await hasBlockOverlap(data.court_id, data.start_time, data.end_time)) {
@@ -253,4 +265,17 @@ export async function notifyReservationMoved(input: {
   } catch (err) {
     logger.error(err, 'Failed to send reservation moved notifications')
   }
+}
+
+// ---- Card #75: slots of a court with the club's `payments_enabled` -----------------
+
+/** Slots of a court plus whether its club can charge online (false only for a `club_account` club with no usable link). */
+export async function getCourtSlots(
+  courtId: string,
+  date: string,
+): Promise<{ slots: TimeSlot[]; payments_enabled: boolean }> {
+  const slots = await findAvailableSlots(courtId, date)
+  const clubId = await findClubIdOfCourt(courtId)
+  const payments_enabled = clubId ? (await getClubPaymentsStatus(clubId)).payments_enabled : true
+  return { slots, payments_enabled }
 }

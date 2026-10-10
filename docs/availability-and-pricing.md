@@ -91,6 +91,14 @@ returns both, so the panel can draw them differently.
 - No email: the mail module is built around club-owner application notices and has no player recipient resolution, so
   the player is told in-app only (target — not implemented yet).
 
+## Payments enabled (card #75)
+
+`GET /clubs/:clubId/availability` and `GET /courts/:courtId/slots` keep `data` as the slots array and add
+`meta: { payments_enabled: boolean }`. It is `false` only when the club collects on its own Mercado Pago account
+(`clubs.collection_mode = 'club_account'`) and has no connected, non-expired link; then `POST /reservations` and
+`POST /matches` with a total above 0 answer 409 `CLUB_PAYMENTS_NOT_ENABLED`, so the player app can hide the pay action up
+front. Free (0) slots and `platform_account` clubs are unaffected. See `docs/mercadopago.md`, "Charging".
+
 ## Rollout and compatibility
 
 Card #71's migration is also additive (a new table, an RPC and a trigger that only fires when a block exists); production on the previous API ignores blocks, and none can exist before the new API is released.
