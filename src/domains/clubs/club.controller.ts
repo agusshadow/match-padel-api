@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { findAll, findById, findCourts } from './club.repository'
 import { getClubAvailability, getClubPaymentsEnabled } from './club.service'
+import { getPublicRefundPolicy } from '../payments/refund-policy.service'
 import { NotFoundError } from '../../types/errors'
 
 const GetClubsQuerySchema = z.object({
@@ -50,7 +51,10 @@ export async function getClubById(
 
     if (!club) throw new NotFoundError('Club')
 
-    res.json({ success: true, data: club })
+    // Card #76: additive field, the policy the player will be subject to (already clamped to the platform limits).
+    const refund_policy = await getPublicRefundPolicy(club.id)
+
+    res.json({ success: true, data: { ...club, refund_policy } })
   } catch (err) {
     next(err)
   }
@@ -79,13 +83,15 @@ export async function getClubAvailabilityHandler(
   try {
     const { clubId } = req.params
     const { date } = GetClubAvailabilityQuerySchema.parse(req.query)
-    const [slots, payments_enabled] = await Promise.all([
+    const [slots, payments_enabled, refund_policy] = await Promise.all([
       getClubAvailability(clubId, date),
       getClubPaymentsEnabled(clubId),
+      getPublicRefundPolicy(clubId),
     ])
 
     // Card #75: `data` stays the slots array; the flag travels in `meta`.
-    res.json({ success: true, data: slots, meta: { payments_enabled } })
+    // Card #76: so does the club's refund policy (what the player sees before paying).
+    res.json({ success: true, data: slots, meta: { payments_enabled, refund_policy } })
   } catch (err) {
     next(err)
   }

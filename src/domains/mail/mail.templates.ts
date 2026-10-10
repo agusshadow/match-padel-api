@@ -11,6 +11,7 @@ export const MAIL_TEMPLATES = [
   'team_invitation',
   'mp_connection_expiring',
   'mp_connection_failed',
+  'refund_pending',
 ] as const
 export type MailTemplate = (typeof MAIL_TEMPLATES)[number]
 
@@ -30,6 +31,10 @@ export interface TemplateData {
   expiresInDays?: number | null
   /** `mp_connection_expiring`: days left of the Mercado Pago link. */
   daysLeft?: number | null
+  /** `refund_pending`: how many refunds could not be completed. */
+  refundCount?: number | null
+  /** `refund_pending`: total owed to players, ARS. */
+  refundAmount?: number | null
 }
 
 export interface RenderedMail {
@@ -167,6 +172,27 @@ function contentFor(template: MailTemplate, data: TemplateData): Content {
         ],
         cta: { label: 'Volver a vincular Mercado Pago' },
         afterCta: ['Solo el dueño del club puede vincular la cuenta. Si ya lo hiciste, ignorá este mail.'],
+      }
+    }
+    case 'refund_pending': {
+      const count = data.refundCount && data.refundCount > 0 ? Math.floor(data.refundCount) : 1
+      const amount =
+        data.refundAmount !== null && data.refundAmount !== undefined && data.refundAmount > 0
+          ? `$${data.refundAmount.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : null
+      return {
+        subject: `Hay ${count === 1 ? 'un reembolso pendiente' : `${count} reembolsos pendientes`} en ${club}`,
+        heading: 'No pudimos completar un reembolso',
+        paragraphs: [
+          `Un jugador canceló su reserva en ${club} y, según la política de devoluciones del club, le corresponde un reembolso que no se pudo completar desde la cuenta de Mercado Pago del club.`,
+          'La cancelación quedó registrada y el jugador fue avisado de que el reembolso está pendiente. Revisá que la cuenta del club esté vinculada y tenga saldo disponible; luego el reembolso debe resolverse con el jugador.',
+        ],
+        callout: {
+          title: 'Reembolsos pendientes',
+          body: amount ? `${count} (${amount} en total)` : String(count),
+        },
+        cta: { label: 'Revisar la cuenta de Mercado Pago' },
+        afterCta: ['Solo el dueño del club puede vincular la cuenta de Mercado Pago.'],
       }
     }
     case 'mp_connection_failed':

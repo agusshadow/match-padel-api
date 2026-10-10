@@ -29,8 +29,12 @@ import {
   assertClubCanCharge,
   getClubPaymentsStatus,
   refundAllApprovedPayments,
+  refundPaymentsByPolicy,
+  findApprovedPaymentsForReservation,
   type RefundSummary,
 } from '../payments/payment.service'
+import { toPlayerRefundResult, type PlayerRefundResult } from '../payments/refund-policy.core'
+import { getPublicRefundPolicy, type PublicRefundPolicy } from '../payments/refund-policy.service'
 import type { TimeSlot } from './reservation.repository'
 
 const MAX_ACTIVE_RESERVATIONS = 3
@@ -130,7 +134,17 @@ export async function validateAndCreateReservation(
   return reservation
 }
 
-export async function cancelReservation(id: string, userId: string) {
+// Card #76: the booker cancelling their own reservation now follows the club's
+// refund policy for whatever was paid (before this card it never refunded):
+// 100% before the club's cutoff, its late percentage in money inside the
+// window, nothing once it started. A refund that cannot be completed does not
+// block the cancellation: it is left pending and the club is told. A reservation
+// that hosts a match cancels the match with it (the booker is its creator), so
+// no match stays open on a cancelled court.
+export async function cancelReservation(
+  id: string,
+  userId: string,
+): Promise<Record<string, unknown> & { refund: PlayerRefundResult | null }> {
   const result = await cancel(id, userId).catch((err: Error) => {
     if (err.message === 'NOT_OWNER') {
       throw new ForbiddenError('You can only cancel your own reservations')
@@ -149,10 +163,39 @@ export async function cancelReservation(id: string, userId: string) {
     throw new NotFoundError('Reservation')
   }
 
+  const payments = await findApprovedPaymentsForReservation(id)
+  const summary = await refundPaymentsByPolicy({
+    clubId: result.club_id ?? result.court?.club?.id ?? null,
+    payments: payments.map((p) => ({ id: p.id, user_id: p.user_id, amount: Number(p.amount) })),
+    startsAt: result.start_time,
+  })
+
+  const match = await matchRepository.findByReservationId(id)
+  if (match && match.status !== 'cancelled' && match.status !== 'completed') {
+    await matchRepository.cancel(match.id as string)
+    try {
+      const players = await matchRepository.getPlayers(match.id as string)
+      const otherPlayerIds = (players as Array<{ user_id: string }>)
+        .map((p) => p.user_id)
+        .filter((playerId) => playerId !== userId)
+      if (otherPlayerIds.length > 0) {
+        await notifications.matchCancelled(otherPlayerIds, match.id as string)
+      }
+      const otherPending = summary.outcomes
+        .filter((o) => o.status === 'pending' && o.user_id !== userId)
+        .map((o) => o.user_id)
+      if (otherPending.length > 0) {
+        await notifications.playerRefundPending(otherPending, match.id as string)
+      }
+    } catch (err) {
+      logger.error(err, 'Failed to send reservation cancellation match notifications')
+    }
+  }
+
   // Notify user of cancellation
   notifications.reservationCancelled(userId, id).catch((err) => logger.error(err, 'Failed to send reservationCancelled notification'))
 
-  return result
+  return { ...result, refund: toPlayerRefundResult(summary) }
 }
 
 // Called by the scheduled job (src/jobs/expire-reservations.job.ts). Returns
@@ -186,8 +229,8 @@ async function affectedUserIds(bookerId: string, matchId: string | null): Promis
  *
  * Rules (documented in docs/endpoints.md):
  * - Always a 100% refund of every approved payment, whatever the time left,
- *   and the player is never penalized (no late-cancellation currency logic).
- *   The per-club refund policy is a later card (F3).
+ *   and the player is never penalized. The club's refund policy (card #76)
+ *   only applies to the player's own cancellations.
  * - A reservation of a match cancels the match too (`matchService.cancelByClub`),
  *   so no match stays open on a cancelled reservation.
  * - The status change is a compare-and-set first, so a concurrent second
@@ -273,9 +316,11 @@ export async function notifyReservationMoved(input: {
 export async function getCourtSlots(
   courtId: string,
   date: string,
-): Promise<{ slots: TimeSlot[]; payments_enabled: boolean }> {
+): Promise<{ slots: TimeSlot[]; payments_enabled: boolean; refund_policy: PublicRefundPolicy | null }> {
   const slots = await findAvailableSlots(courtId, date)
   const clubId = await findClubIdOfCourt(courtId)
   const payments_enabled = clubId ? (await getClubPaymentsStatus(clubId)).payments_enabled : true
-  return { slots, payments_enabled }
+  // Card #76: the club's refund policy, shown before the player pays.
+  const refund_policy = clubId ? await getPublicRefundPolicy(clubId) : null
+  return { slots, payments_enabled, refund_policy }
 }

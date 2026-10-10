@@ -143,9 +143,19 @@ Same endpoint, signature verification and idempotency (`payments.mp_event_id`) u
 payment: `collected_via = 'club'` -> `getClubAccessToken(club_id)`; `platform` or null -> the platform token. If the club
 token cannot be obtained (expired link) the refund returns `false` (logged, payment left `approved`), which the
 callers already treat as "needs a manual refund". Full refund: `POST /v1/payments/{id}/refunds` without body, payment
-becomes `refunded`. **Optional `amount`** (for card #76; not used by any flow yet): same endpoint with `{ amount }`,
-payment stays `approved` and the refund is appended to `metadata.partial_refunds`; an amount of 0 or above the payment
-is a 400, an amount equal to the payment is a full refund.
+becomes `refunded` (and, since card #76, `refund_status = 'full'`, `refunded_amount = amount`). **Optional `amount`**:
+same endpoint with `{ amount }`, payment stays `approved` and the refund is appended to `metadata.partial_refunds`; an
+amount of 0 or above the payment is a 400, an amount equal to the payment is a full refund.
+
+Card #76 uses the partial refund for a player's cancellation inside the club's late window
+(`refundPaymentsByPolicy`, policy in `docs/refund-policy.md`): the refund is `round(paid x late_refund_percent / 100, 2)`
+from the club's account (the account that collected the payment, `collected_via = 'club'`). If the refund cannot be
+completed (club link expired or revoked, no balance, Mercado Pago rejects it, network error) the cancellation still
+goes through, the payment gets `refund_status = 'pending'` plus `refund_error` (an internal code such as
+`CLUB_ACCOUNT_UNAVAILABLE:MP_ACCOUNT_EXPIRED` or `MP_REFUND_REJECTED:<http status>`), the club's owners are notified
+(in-app and the `refund_pending` email) and the player's response says the refund is pending. There is no automatic
+retry and no endpoint to settle a pending refund yet (target — not implemented yet): a later club cancellation of the
+same reservation retries it (100%), otherwise it is handled by hand in Mercado Pago.
 
 ### Enforcement
 
@@ -193,7 +203,13 @@ privileges (a change to every direct `select *` of the clubs row), left for a fo
   club check meaningful.
 - Partial refund: `POST /v1/payments/{id}/refunds` with `{ amount }`; that refunds are made with the seller's token; that
   refund of a marketplace payment does or does not return the fee (open question of the scope document).
-- Whether a `x-idempotency-key` is needed on refunds (the existing flow never sent one).
+- Whether a `x-idempotency-key` is needed on refunds (the existing flow never sent one). Card #76 matters here: two
+  concurrent cancellations of the same payment could both send a refund.
+- Card #76: partial refunds in the late window have **never been run against Mercado Pago**. Unverified: that a refund
+  with `{ amount }` below the payment is accepted for a payment made through a seller's token with a
+  `marketplace_fee`; whether the platform's fee is returned proportionally on a partial refund; the exact error
+  Mercado Pago answers when the seller has no available balance (only the HTTP status is recorded), and that it is not
+  a retryable status; and that several partial refunds of one payment are accepted (the policy only ever makes one).
 - A club-account preference's `back_urls` and `auto_return` behave as for the platform account.
 
 ## Unverified assumptions (check in the card #73 spike)

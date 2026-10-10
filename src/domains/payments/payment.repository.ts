@@ -153,3 +153,83 @@ export async function paymentTotals(filters: Omit<PaymentFilters, 'page' | 'limi
     payments: Number(row?.payments ?? 0),
   }
 }
+
+// ---- Card #76: refund policy per club ------------------------------------------------------
+
+export interface ClubRefundPolicyRow {
+  refund_hours_before_start: number
+  refund_late_percent: number
+}
+
+/** Stored policy columns of a club, `null` when the club does not exist. */
+export async function findClubRefundPolicyRow(clubId: string): Promise<ClubRefundPolicyRow | null> {
+  const { data, error } = await supabase
+    .from('clubs')
+    .select('refund_hours_before_start, refund_late_percent')
+    .eq('id', clubId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return {
+    refund_hours_before_start: Number(data.refund_hours_before_start),
+    refund_late_percent: Number(data.refund_late_percent),
+  }
+}
+
+export async function updateClubRefundPolicy(
+  clubId: string,
+  policy: { hours_before_start: number; late_refund_percent: number },
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('clubs')
+    .update({
+      refund_hours_before_start: policy.hours_before_start,
+      refund_late_percent: policy.late_refund_percent,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', clubId)
+    .select('id')
+    .maybeSingle()
+  if (error) throw error
+  return data !== null
+}
+
+/** Clubs whose stored policy is outside the given limits (they are clamped at evaluation time). */
+export async function countClubsOutsideLimits(limits: {
+  max_hours_before_start: number
+  min_late_refund_percent: number
+}): Promise<number> {
+  const { count, error } = await supabase
+    .from('clubs')
+    .select('id', { count: 'exact', head: true })
+    .or(
+      `refund_hours_before_start.gt.${limits.max_hours_before_start},refund_late_percent.lt.${limits.min_late_refund_percent}`,
+    )
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function updatePaymentRefundState(
+  paymentId: string,
+  record: { refund_status: string; refunded_amount: number; refund_error: string | null },
+): Promise<void> {
+  const { error } = await supabase
+    .from('payments')
+    .update({
+      refund_status: record.refund_status,
+      refunded_amount: record.refunded_amount,
+      refund_error: record.refund_error,
+    })
+    .eq('id', paymentId)
+  if (error) throw error
+}
+
+export async function findClubOwnerUserIds(clubId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('club_staff')
+    .select('user_id')
+    .eq('club_id', clubId)
+    .eq('role', 'owner')
+  if (error) throw error
+  return (data ?? []).map((r) => r.user_id as string)
+}

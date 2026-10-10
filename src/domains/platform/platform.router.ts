@@ -29,6 +29,9 @@ router.post('/clubs/:clubId/unsuspend', superadminOnly, controller.unsuspendClub
 router.patch('/clubs/:clubId/commission', superadminOnly, controller.setClubCommission)
 router.patch('/clubs/:clubId/collection-mode', superadminOnly, controller.setClubCollectionMode)
 router.get('/payments', superadminOnly, controller.listPayments)
+// Card #76: platform limits of the clubs' refund policies, superadmin only.
+router.get('/settings/refund-policy', superadminOnly, controller.getRefundPolicyLimits)
+router.put('/settings/refund-policy', superadminOnly, controller.putRefundPolicyLimits)
 router.get('/users', superadminOnly, controller.listUsers)
 router.get('/audit-log', superadminOnly, controller.getAuditLog)
 

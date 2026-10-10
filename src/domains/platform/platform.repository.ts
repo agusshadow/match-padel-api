@@ -277,3 +277,36 @@ export async function countDocumentsByClubIds(clubIds: string[]): Promise<Map<st
   }
   return result
 }
+
+// ---- Card #76: platform_settings (key/value, API only) ----------------------------------------
+
+export interface PlatformSettingRow {
+  key: string
+  value: unknown
+  updated_by: string | null
+  updated_at: string
+}
+
+export async function findPlatformSetting(key: string): Promise<PlatformSettingRow | null> {
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .select('key, value, updated_by, updated_at')
+    .eq('key', key)
+    .maybeSingle()
+  if (error) throw error
+  return (data as PlatformSettingRow | null) ?? null
+}
+
+export async function upsertPlatformSetting(
+  key: string,
+  value: Record<string, unknown>,
+  updatedBy: string,
+): Promise<PlatformSettingRow> {
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .upsert({ key, value, updated_by: updatedBy, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .select('key, value, updated_by, updated_at')
+    .single()
+  if (error) throw error
+  return data as PlatformSettingRow
+}

@@ -84,7 +84,7 @@ returns both, so the panel can draw them differently.
   reservation, which moved with its players. Booker and match players are notified in-app.
 - **Cancel** always refunds 100% of every approved payment (MercadoPago refund per payment, `refundPayment`) whatever
   the time left, and never applies the late-cancellation currency rule: the club's decision does not penalize the
-  player. The per-club refund policy is a later card (F3). A reservation of a match cancels the match too
+  player. The club's refund policy (card #76, `docs/refund-policy.md`) applies only to the PLAYER's own cancellations, never to this one. A reservation of a match cancels the match too
   (`matchService.cancelByClub`: refunds all payers, sets the match `cancelled`), so no match stays on a cancelled
   reservation. Pending (unpaid) payment rows are left as they are; a player who still pays an old checkout link after
   the cancellation is the same pre-existing gap as with the expiry job (the payment would need a manual refund).

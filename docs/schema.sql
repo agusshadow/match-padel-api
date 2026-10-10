@@ -89,6 +89,8 @@ create table public.clubs (
   settings      jsonb not null default '{}', -- card #67: settings.opening_hours = weekly draft { mon: [{open,close}], ... }; since card #70 it is the fallback of courts with no court_schedules rows
   commission_percent numeric(5,2) not null default 0 check (commission_percent >= 0 and commission_percent <= 100), -- card #75: platform commission on each charge; default 0, set by the superadmin
   collection_mode text not null default 'club_account' check (collection_mode in ('platform_account', 'club_account')), -- card #75: existing clubs were backfilled to 'platform_account' (charges go to the platform's token); new clubs default to 'club_account'
+  refund_hours_before_start smallint not null default 24 check (refund_hours_before_start >= 0 and refund_hours_before_start <= 720), -- card #76: cancelling at least this long before the start refunds 100%
+  refund_late_percent numeric(5,2) not null default 0 check (refund_late_percent >= 0 and refund_late_percent <= 100), -- card #76: share refunded in money when cancelling inside that window (0 = today's behaviour)
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -371,8 +373,23 @@ create table public.payments (
   commission_percent numeric(5,2) check (commission_percent is null or (commission_percent >= 0 and commission_percent <= 100)), -- card #75: rate frozen at charge time (null = platform-collected)
   marketplace_fee numeric(10,2) check (marketplace_fee is null or marketplace_fee >= 0), -- card #75
   net_amount      numeric(10,2),                               -- card #75: amount - marketplace_fee, before Mercado Pago's own fee
-  collected_via   text not null default 'platform' check (collected_via in ('platform', 'club')) -- card #75
+  collected_via   text not null default 'platform' check (collected_via in ('platform', 'club')), -- card #75
+  refund_status   text check (refund_status is null or refund_status in ('none', 'partial', 'full', 'pending', 'failed')), -- card #76: null = never processed by the refund policy; 'pending' = owed but the refund could not be completed
+  refunded_amount numeric(10,2) not null default 0 check (refunded_amount >= 0), -- card #76: money returned to the payer so far
+  refund_error    text                                         -- card #76: why a refund is pending (internal code, never a token)
 );
+
+-- platform_settings: key/value settings of the platform (card #76). API only (service_role).
+-- 'refund_policy_minimums' = { "max_hours_before_start": 48, "min_late_refund_percent": 0 }: limits of the clubs' refund policies.
+create table public.platform_settings (
+  key         text primary key,
+  value       jsonb not null,
+  updated_by  uuid references users(id) on delete set null,
+  updated_at  timestamptz not null default now()
+);
+insert into public.platform_settings (key, value)
+values ('refund_policy_minimums', '{"max_hours_before_start": 48, "min_late_refund_percent": 0}'::jsonb)
+on conflict (key) do nothing;
 
 -- matches
 create table public.matches (
@@ -671,6 +688,7 @@ alter table court_blocks enable row level security; -- card #71
 alter table club_invitations enable row level security; -- card #72: no policies, API only
 alter table club_mp_accounts enable row level security; -- card #74: no policies, no client grants, API only
 alter table mp_oauth_states enable row level security; -- card #74: no policies, no client grants, API only
+alter table platform_settings enable row level security; -- card #76: no policies, no client grants, API only
 alter table court_reservations enable row level security;
 alter table payments enable row level security;
 alter table matches enable row level security;
@@ -744,6 +762,7 @@ grant select on table court_schedule_exceptions, court_price_rules to authentica
 create policy "court_blocks_staff_read" on court_blocks for select to authenticated
   using (public.is_club_member(club_id) or public.is_platform_staff());
 revoke all on table court_blocks from anon, authenticated;
+revoke all on table platform_settings from anon, authenticated; -- card #76: API only (service_role)
 grant select on table court_blocks to authenticated;
 
 -- Card #70: atomic "replace the whole set", executable by service_role only.

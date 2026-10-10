@@ -150,6 +150,41 @@ export const notifications = {
     )
   },
 
+  // Card #76: a player's refund could not be completed from the club's account.
+  refundPending(
+    ownerIds: string[],
+    input: { clubId: string; count: number; amount: number; paymentIds: string[] },
+  ) {
+    const what = input.count === 1 ? 'un reembolso pendiente' : `${input.count} reembolsos pendientes`
+    return notificationRepository.createBulk(
+      ownerIds.map((userId) => ({
+        user_id: userId,
+        type: 'system' as NotificationType,
+        title: 'Reembolso pendiente',
+        body: `Hay ${what} por $${input.amount.toFixed(2)}. Revisá la cuenta de Mercado Pago del club.`,
+        data: {
+          kind: 'refund_pending',
+          club_id: input.clubId,
+          payment_ids: input.paymentIds,
+          amount: input.amount,
+        },
+      })),
+    )
+  },
+
+  // Card #76: the match was cancelled and this player's refund is waiting for the club.
+  playerRefundPending(userIds: string[], matchId: string | null) {
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'system' as NotificationType,
+        title: 'Reembolso en proceso',
+        body: 'Tu reembolso está pendiente: el club tiene que completarlo.',
+        data: { kind: 'refund_pending', match_id: matchId },
+      })),
+    )
+  },
+
   // Card #23 (R14): a partner used to be registered into a tournament team
   // without ever being told.
   tournamentTeamRegistered(partnerId: string, tournamentId: string, teamName: string | null) {

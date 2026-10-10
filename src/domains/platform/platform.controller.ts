@@ -6,7 +6,9 @@ import {
   platformPaymentsQuerySchema,
   setCollectionModeSchema,
   setCommissionSchema,
+  setPlatformRefundLimitsSchema,
 } from '../payments/payment.validator'
+import { getPlatformRefundLimits, setPlatformRefundLimits } from '../payments/refund-policy.service'
 import type { LifecycleAction } from './platform.service'
 import type { PlatformRole } from '../../types/access'
 import { ForbiddenError } from '../../types/errors'
@@ -176,6 +178,26 @@ export async function listPayments(req: Request, res: Response, next: NextFuncti
     const query = platformPaymentsQuerySchema.parse(req.query)
     const { data, meta } = await paymentAdmin.listPlatformPayments(query)
     res.json({ success: true, data, meta })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ---- Card #76: platform limits of the clubs' refund policies (superadmin) ---------
+
+export async function getRefundPolicyLimits(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.json({ success: true, data: await getPlatformRefundLimits() })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function putRefundPolicyLimits(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const body = setPlatformRefundLimitsSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await setPlatformRefundLimits(userId, body) })
   } catch (err) {
     next(err)
   }

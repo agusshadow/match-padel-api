@@ -16,6 +16,14 @@ import {
   type ClubPaymentsStatus,
 } from './charging.core'
 import * as paymentRepository from './payment.repository'
+import {
+  createRefundPolicyCore,
+  type PolicyRefundPayment,
+  type PolicyRefundSummary,
+  type AttemptRefundResult,
+} from './refund-policy.core'
+import { resolveEffectivePolicy } from './refund-policy.service'
+import { notifyRefundPending } from '../mail/mail.service'
 
 const APP_URL = process.env.APP_URL ?? 'https://match-padel-web.vercel.app'
 const API_URL = process.env.API_URL ?? 'https://match-padel-api.railway.app'
@@ -214,7 +222,6 @@ export async function createMatchPaymentPreference(matchId: string, userId: stri
 // in match.service.ts). Multiple tiers would be a natural follow-up, not
 // built here to keep this card's scope tight.
 export const CURRENCY_PACK = { amountArs: 500, currencyAmount: 100 }
-export const ARS_PER_CURRENCY_UNIT = CURRENCY_PACK.amountArs / CURRENCY_PACK.currencyAmount
 
 // Real-money top-up of the internal currency — kept in its own table
 // (currency_purchases) rather than the reservation-shaped `payments` table.
@@ -591,16 +598,19 @@ export async function handleWebhook(
 }
 
 // Card #57: refunds a single approved payment via MercadoPago's refund API.
-// Used both for a player leaving >24h before the match and for the
-// auto-cancel job when a match never fills.
+// Used for a player leaving, a match cancelled by its creator, the club's own
+// cancellation and the auto-cancel job when a match never fills.
 //
 // Card #75: the refund is made with the token of the account that collected the
 // payment (`collected_via` / club), and accepts an optional `amount` for a
-// PARTIAL refund (MP's refunds endpoint with `{ amount }`; card #76 will use
-// it; NOT verified against the sandbox). A full refund (no amount) sets the
-// payment `refunded`; a partial one leaves it `approved` and records the
-// refund in `metadata.partial_refunds`.
-export async function refundPayment(paymentId: string, amount?: number): Promise<boolean> {
+// PARTIAL refund (MP's refunds endpoint with `{ amount }`; card #76 uses it for
+// the late window of a club's policy; NOT verified against the sandbox). A full
+// refund (no amount) sets the payment `refunded`; a partial one leaves it
+// `approved` and records the refund in `metadata.partial_refunds`.
+//
+// Card #76: `attemptRefund` returns WHY a refund did not happen, so a policy
+// refund can be left `pending` with a reason. It never throws.
+async function attemptRefund(paymentId: string, amount?: number): Promise<AttemptRefundResult> {
   const { data: payment } = await supabase
     .from('payments')
     .select('id, mp_payment_id, status, amount, club_id, collected_via, metadata')
@@ -608,7 +618,7 @@ export async function refundPayment(paymentId: string, amount?: number): Promise
     .single()
 
   if (!payment || payment.status !== 'approved' || !payment.mp_payment_id) {
-    return false
+    return { ok: false, error: 'PAYMENT_NOT_REFUNDABLE' }
   }
 
   let partialAmount: number | undefined
@@ -616,7 +626,7 @@ export async function refundPayment(paymentId: string, amount?: number): Promise
     const paid = Number(payment.amount)
     const cents = Math.round(amount * 100)
     if (!Number.isFinite(amount) || cents <= 0 || cents > Math.round(paid * 100)) {
-      throw new AppError('Refund amount must be greater than 0 and not exceed the payment', 400, 'VALIDATION_ERROR')
+      return { ok: false, error: 'INVALID_AMOUNT' }
     }
     // An amount equal to the payment is a full refund.
     partialAmount = cents === Math.round(paid * 100) ? undefined : cents / 100
@@ -626,25 +636,35 @@ export async function refundPayment(paymentId: string, amount?: number): Promise
   try {
     accessToken = await charging.resolveRefundToken(payment)
   } catch (err) {
+    const code = err instanceof AppError ? err.code : undefined
     logger.error(
-      { paymentId, code: err instanceof AppError ? err.code : undefined },
+      { paymentId, code },
       'Could not obtain the Mercado Pago token of the account that collected the payment',
     )
-    return false
+    return { ok: false, error: `CLUB_ACCOUNT_UNAVAILABLE${code ? `:${code}` : ''}` }
   }
 
-  const res = await createMpChargeClient(accessToken).refund(payment.mp_payment_id, partialAmount)
+  let res: { ok: boolean; httpStatus: number }
+  try {
+    res = await createMpChargeClient(accessToken).refund(payment.mp_payment_id, partialAmount)
+  } catch (err) {
+    logger.error({ paymentId, mpPaymentId: payment.mp_payment_id }, 'MercadoPago refund request failed')
+    return { ok: false, error: 'MP_REFUND_REQUEST_FAILED' }
+  }
 
   if (!res.ok) {
     logger.error(
       { paymentId, mpPaymentId: payment.mp_payment_id, status: res.httpStatus },
       'MercadoPago refund failed',
     )
-    return false
+    return { ok: false, error: `MP_REFUND_REJECTED:${res.httpStatus}` }
   }
 
   if (partialAmount === undefined) {
-    await supabase.from('payments').update({ status: 'refunded' }).eq('id', paymentId)
+    await supabase
+      .from('payments')
+      .update({ status: 'refunded', refund_status: 'full', refunded_amount: Number(payment.amount), refund_error: null })
+      .eq('id', paymentId)
   } else {
     const previous = (payment.metadata as Record<string, unknown> | null) ?? {}
     const list = Array.isArray(previous.partial_refunds) ? (previous.partial_refunds as unknown[]) : []
@@ -655,40 +675,76 @@ export async function refundPayment(paymentId: string, amount?: number): Promise
       })
       .eq('id', paymentId)
   }
-  return true
+  return { ok: true }
 }
+
+export async function refundPayment(paymentId: string, amount?: number): Promise<boolean> {
+  const result = await attemptRefund(paymentId, amount)
+  if (!result.ok && result.error === 'INVALID_AMOUNT') {
+    throw new AppError('Refund amount must be greater than 0 and not exceed the payment', 400, 'VALIDATION_ERROR')
+  }
+  return result.ok
+}
+
+// Card #76: refund policy per club. Wires the pure core (refund-policy.core.ts)
+// to the real policy lookup, Mercado Pago refund and notifications.
+const refundPolicy = createRefundPolicyCore({
+  resolvePolicy: resolveEffectivePolicy,
+  attemptRefund,
+  recordRefund: (paymentId, record) => paymentRepository.updatePaymentRefundState(paymentId, record),
+  notifyRefundPending: async ({ clubId, outcomes }) => {
+    const count = outcomes.length
+    const amount = outcomes.reduce((sum, o) => sum + Math.round(o.amount * 100), 0) / 100
+    const ownerIds = await paymentRepository.findClubOwnerUserIds(clubId)
+    // In-app and email are independent: one failing never blocks the other.
+    await Promise.all([
+      notifications
+        .refundPending(ownerIds, { clubId, count, amount, paymentIds: outcomes.map((o) => o.payment_id) })
+        .catch((err) => logger.error(err, 'Failed to create the refund_pending notification')),
+      notifyRefundPending({ clubId, count, amount }),
+    ])
+  },
+  now: () => new Date(),
+  onError: (message, context) => logger.error(context, message),
+})
+
+export type { PolicyRefundSummary, PolicyRefundPayment }
+
+/**
+ * Refunds payments of a cancellation initiated by a PLAYER (leaving, creator
+ * cancelling the match, booker cancelling the reservation) according to the
+ * club's policy: 100% before the cutoff, the late percentage inside the window,
+ * nothing after the start. A refund that cannot be completed leaves the payment
+ * `pending` (never throws) and the club's owners are notified.
+ */
+export function refundPaymentsByPolicy(input: {
+  clubId: string | null
+  payments: PolicyRefundPayment[]
+  startsAt: Date | string
+  cancelledAt?: Date
+}): Promise<PolicyRefundSummary> {
+  return refundPolicy.refundByPolicy(input)
+}
+
+// Card #76: a payment the policy already settled (`none`, `partial`, `full`) has
+// nothing left to refund; `pending`/`failed` ones are still owed and are retried
+// by a club cancellation. Rows from before the card have a null refund_status.
+const STILL_REFUNDABLE = 'refund_status.is.null,refund_status.in.(pending,failed)'
 
 export async function findApprovedPayment(reservationId: string, userId: string) {
   const { data, error } = await supabase
     .from('payments')
-    .select('id, status, amount')
+    .select('id, user_id, status, amount')
     .eq('reservation_id', reservationId)
     .eq('user_id', userId)
     .eq('status', 'approved')
+    .or(STILL_REFUNDABLE)
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error) throw error
   return data
-}
-
-// Card #63: a player leaving <24h before the match gets no real refund, but
-// half their share back as internal currency instead — softens the penalty
-// without undoing the deterrent, and nudges them toward spending it in the
-// marketplace instead of just losing it outright.
-const LATE_CANCELLATION_CREDIT_RATE = 0.5
-
-export async function creditLateCancellationCurrency(userId: string, paymentAmountArs: number): Promise<number> {
-  const currencyAmount = Math.round((paymentAmountArs * LATE_CANCELLATION_CREDIT_RATE) / ARS_PER_CURRENCY_UNIT)
-  if (currencyAmount <= 0) return 0
-
-  const { error } = await supabase.rpc('credit_currency', {
-    p_user_id: userId,
-    p_amount: currencyAmount,
-    p_reason: 'late_cancellation_credit',
-  })
-  if (error) throw error
-
-  return currencyAmount
 }
 
 export async function findApprovedPaymentsForReservation(reservationId: string) {
@@ -697,6 +753,7 @@ export async function findApprovedPaymentsForReservation(reservationId: string) 
     .select('id, user_id, status, amount')
     .eq('reservation_id', reservationId)
     .eq('status', 'approved')
+    .or(STILL_REFUNDABLE)
 
   if (error) throw error
   return data ?? []
@@ -714,20 +771,25 @@ export interface RefundSummary {
 
 // Card #71: club-initiated cancellations return everything that was paid, to
 // every payer (a match has up to four), regardless of how close the start is.
+// Card #76: this stays 100%: the club's policy only applies to the player's own cancellations.
 export async function refundAllApprovedPayments(reservationId: string): Promise<RefundSummary> {
   const approved = await findApprovedPaymentsForReservation(reservationId)
   const summary: RefundSummary = { payments: approved.length, refunded: 0, failed: [], amount_refunded: 0 }
   let cents = 0
   for (const payment of approved) {
-    const ok = await refundPayment(payment.id).catch((err) => {
+    const result = await attemptRefund(payment.id).catch((err): AttemptRefundResult => {
       logger.error(err, `Failed to refund payment ${payment.id} on club cancellation`)
-      return false
+      return { ok: false, error: 'REFUND_ERROR' }
     })
-    if (ok) {
+    if (result.ok) {
       summary.refunded += 1
       cents += Math.round(Number(payment.amount) * 100)
     } else {
       summary.failed.push(payment.id)
+      // Card #76: keep the reason so the club can see the refund is still owed.
+      await paymentRepository
+        .updatePaymentRefundState(payment.id, { refund_status: 'pending', refunded_amount: 0, refund_error: result.error })
+        .catch((err) => logger.error(err, `Failed to record the pending refund of payment ${payment.id}`))
     }
   }
   summary.amount_refunded = cents / 100

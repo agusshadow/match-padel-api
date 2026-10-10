@@ -52,6 +52,9 @@ router.use('/team', teamRouter)
 router.use('/mercadopago', mercadoPagoRouter)
 // Card #75: the club's own payments with fee and net, owner only (no commission editing here).
 router.get('/payments', ownerOnly, controller.listPayments)
+// Card #76: the club's refund policy (within the platform limits). Staff read, owner/admin write.
+router.get('/refund-policy', anyStaff, controller.getRefundPolicy)
+router.put('/refund-policy', ownerOrAdmin, controller.putRefundPolicy)
 router.get('/', anyStaff, controller.getClub)
 router.patch('/', ownerOrAdmin, controller.updateClub)
 

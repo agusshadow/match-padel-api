@@ -75,10 +75,11 @@ export async function getAvailableSlots(
     const { courtId } = req.params
     const { date } = GetSlotsSchema.parse({ court_id: courtId, date: req.query.date })
 
-    const { slots, payments_enabled } = await getCourtSlots(courtId, date)
+    const { slots, payments_enabled, refund_policy } = await getCourtSlots(courtId, date)
 
     // Card #75: `data` stays the slots array; the flag travels in `meta`.
-    res.json({ success: true, data: slots, meta: { payments_enabled } })
+    // Card #76: so does the club's refund policy.
+    res.json({ success: true, data: slots, meta: { payments_enabled, refund_policy } })
   } catch (err) {
     next(err)
   }
