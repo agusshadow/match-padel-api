@@ -43,6 +43,16 @@ Transactional email (optional, see `docs/email.md`):
 | `MAIL_DEV_RECIPIENT` | none | Non-production: redirect every email to this address |
 | `CLUB_PANEL_URL` | `https://match-padel-admin.vercel.app` | Club panel URL used in email links |
 
+Mercado Pago account of each club (optional, card #74, see `docs/mercadopago.md`; without the first four the club Mercado Pago endpoints answer 503 `MP_NOT_CONFIGURED`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MP_APP_ID` | none | Application ID of the Mercado Pago Marketplace app |
+| `MP_APP_SECRET` | none | Client secret of that app |
+| `MP_OAUTH_REDIRECT_URI` | none | Static redirect URL registered in the app: `https://<api-host>/api/v1/mercadopago/oauth/callback` |
+| `MP_TOKEN_ENCRYPTION_KEY` | none | 32 bytes, base64: AES-256-GCM key for the stored tokens |
+| `MP_OAUTH_PKCE` | `false` | `true` sends a PKCE challenge (only if the app has PKCE enabled) |
+
 ## Working on this repo
 
 - `main` and `develop` accept **no direct commits or pushes**. Work on a branch from `develop` and open a pull request against it (squash merge). Releases go through a `release/vX.Y.Z` branch (merge commit). Details in `CLAUDE.md`.

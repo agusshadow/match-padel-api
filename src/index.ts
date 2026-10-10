@@ -21,9 +21,11 @@ import accessRouter from './domains/access/access.router'
 import clubAdminRouter from './domains/club-admin/club-admin.router'
 import platformRouter from './domains/platform/platform.router'
 import { invitationsRouter } from './domains/team/team.router'
+import { mercadoPagoPublicRouter } from './domains/club-mercadopago/club-mercadopago.router'
 import { expireReservationsJob } from './jobs/expire-reservations.job'
 import { autoCancelUnfilledMatchesJob } from './jobs/auto-cancel-unfilled-matches.job'
 import { assignAndExpireChallengesJob } from './jobs/assign-and-expire-challenges.job'
+import { refreshMpTokensJob } from './jobs/refresh-mp-tokens.job'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -80,6 +82,7 @@ v1.use('/me', accessRouter)
 v1.use('/club-admin/:clubId', clubAdminRouter)
 v1.use('/platform', platformRouter)
 v1.use('/invitations', invitationsRouter)
+v1.use('/mercadopago', mercadoPagoPublicRouter)
 
 app.use('/api/v1', v1)
 
@@ -97,6 +100,7 @@ app.listen(PORT, () => {
 expireReservationsJob.start()
 autoCancelUnfilledMatchesJob.start()
 assignAndExpireChallengesJob.start()
+refreshMpTokensJob.start()
 
 // Last-resort safety net: log and keep the process alive instead of letting an
 // unhandled rejection or a truly uncaught exception crash the whole API for every

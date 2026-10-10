@@ -197,6 +197,9 @@ Card #67 (and #70 for schedules, exceptions and price rules): club data, courts 
 | DELETE | `/api/v1/club-admin/:clubId/team/invitations/:id` | requireClubRole owner | Card #72. Revokes a pending or expired invitation; 200 `{ id, email, role, status: 'revoked', expires_at, created_at, invited_by }` (already revoked: same answer). 409 `INVITATION_ALREADY_ACCEPTED` (remove the member instead). Audited (`team.invitation_revoked`) | `revokeInvitation` |
 | PATCH | `/api/v1/club-admin/:clubId/team/members/:userId` | requireClubRole owner | Card #72. Body `{ role: 'admin' \| 'staff' }` (strict). 200 the member (same shape as in `GET /team`). 403 `CANNOT_MODIFY_OWNER`, 403 `CANNOT_MODIFY_SELF`, 404 if the user is not a member. Same role is a no-op (no audit). Audited (`team.member_role_changed`, `before`/`after`) | `changeMemberRole` |
 | DELETE | `/api/v1/club-admin/:clubId/team/members/:userId` | requireClubRole owner | Card #72. Removes the membership; 200 `{ user_id }`. Same 403/404 as PATCH. Audited (`team.member_removed`) | `removeMember` |
+| GET | `/api/v1/club-admin/:clubId/mercadopago` | requireClubRole owner | Card #74. Status of the club's Mercado Pago link, never tokens. 200 `{ connected: boolean, status: 'connected' \| 'expiring' \| 'expired' \| 'revoked' \| 'error' \| null, mp_user_id: string \| null, expires_at: string \| null, days_left: number \| null, live_mode: boolean \| null, last_refresh_at: string \| null, last_error: string \| null }`. Not linked: `connected: false` and every other field `null`. `status` is derived: `expired` once `expires_at` is past, `expiring` at 30 days or less, `revoked`/`error` come from the last renewal; `connected` is false for `expired` and `revoked`. `Cache-Control: no-store`. 503 `MP_NOT_CONFIGURED`. Not verified against the MP sandbox | `getStatus` (`club-mercadopago.controller.ts`) |
+| POST | `/api/v1/club-admin/:clubId/mercadopago/connect` | requireClubRole owner (rate limit 10/min per IP) | Card #74. No body. Club must be `approved` (409 otherwise). Creates a single-use `state` (valid 10 min, only its SHA-256 is stored) and returns 200 `{ authorization_url }`: the panel redirects the owner there. 503 `MP_NOT_CONFIGURED` | `connect` |
+| DELETE | `/api/v1/club-admin/:clubId/mercadopago` | requireClubRole owner | Card #74. Deletes the stored link (re-linking is `connect` again). Idempotent: 200 `{ disconnected: true, was_connected: boolean }`. Audited (`club.mp_disconnected`) only when something was removed. Does not revoke the authorization at Mercado Pago (the seller can do it from their MP account). 503 `MP_NOT_CONFIGURED` | `disconnect` |
 
 ## platform — `/api/v1/platform` (`platform.router.ts`, card #66)
 
@@ -249,6 +252,14 @@ Mounted in `platform.router.ts` behind `requireRole(['superadmin'])`: a reviewer
 |---|---|---|---|---|
 | GET | `/api/v1/invitations/preview?token=` | none (rate limit 30/min per IP) | Context for the panel's register/login page. 200 `{ club_name, role: 'admin' \| 'staff', email_hint (e.g. `m***@gmail.com`), expired }`; `Cache-Control: no-store`. Unknown, revoked and accepted tokens all answer 404 `INVITATION_INVALID` | `previewInvitation` (`team.controller.ts`) |
 
+## mercadopago — `/api/v1/mercadopago` (`club-mercadopago.router.ts`, card #74)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/mercadopago/oauth/callback?code=&state=` | none (public, rate limit 20/min per IP) | Browser redirect from Mercado Pago after the owner authorizes (or denies). Validates and consumes the `state` (unknown / used / expired are refused), re-checks that the user is still owner and the club approved, exchanges the code (`POST https://api.mercadopago.com/oauth/token`), stores both tokens encrypted and audits `club.mp_connected`. Always answers **302** to `<CLUB_PANEL_URL>/<clubId>/mercadopago?status=connected` or `?status=error&reason=<reason>` (`access_denied`, `invalid_request`, `invalid_state`, `state_expired`, `state_used`, `club_not_available`, `not_owner`, `exchange_failed`, `storage_failed`); when the state is unknown there is no club, so the redirect is `<CLUB_PANEL_URL>/mercadopago?status=error&reason=...`. No token is ever in the URL. Only a missing configuration answers JSON 503 `MP_NOT_CONFIGURED`. `Cache-Control: no-store`, `Referrer-Policy: no-referrer` | `oauthCallback` |
+
+Also a daily job (`refresh-mp-tokens`, 03:30 America/Argentina/Buenos_Aires) renews the links that end within 30 days; see `docs/mercadopago.md`. `getClubAccessToken(clubId)` (`club-mercadopago.service.ts`) is an internal provider for the charging flows (card #75), not an endpoint.
+
 ## Unmounted routers
 
 Not imported by `src/index.ts`, so none of their routes exist:
@@ -285,6 +296,7 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | club-admin | `/api/v1/club-admin/:clubId` | yes | yes | yes | yes | yes |
 | platform | `/api/v1/platform` | yes | yes | yes | yes | yes |
 | team | `/api/v1/club-admin/:clubId/team`, `/api/v1/invitations`, `POST /api/v1/me/invitations/accept` | yes (`invitationsRouter` is the public one) | yes | yes | yes | yes |
+| club-mercadopago | `/api/v1/club-admin/:clubId/mercadopago`, `/api/v1/mercadopago` | yes (`mercadoPagoPublicRouter` is the public one) | yes | yes | yes | yes |
 | audit | not mounted (used by the services) | no | no | yes (`recordAudit`) | yes | no |
 
 No domain has a `__tests__/` folder.

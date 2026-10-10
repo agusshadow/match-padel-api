@@ -9,6 +9,8 @@ export const MAIL_TEMPLATES = [
   'suspended',
   'reinstated',
   'team_invitation',
+  'mp_connection_expiring',
+  'mp_connection_failed',
 ] as const
 export type MailTemplate = (typeof MAIL_TEMPLATES)[number]
 
@@ -26,6 +28,8 @@ export interface TemplateData {
   inviterName?: string | null
   /** `team_invitation`: days until the link expires. */
   expiresInDays?: number | null
+  /** `mp_connection_expiring`: days left of the Mercado Pago link. */
+  daysLeft?: number | null
 }
 
 export interface RenderedMail {
@@ -151,6 +155,32 @@ function contentFor(template: MailTemplate, data: TemplateData): Content {
         ],
       }
     }
+    case 'mp_connection_expiring': {
+      const days = data.daysLeft !== null && data.daysLeft !== undefined && data.daysLeft >= 0 ? Math.floor(data.daysLeft) : null
+      const when = days === null ? 'pronto' : days === 0 ? 'hoy' : days === 1 ? 'en 1 día' : `en ${days} días`
+      return {
+        subject: `La cuenta de Mercado Pago de ${club} vence ${when}`,
+        heading: 'Tu cuenta de Mercado Pago está por vencer',
+        paragraphs: [
+          `La vinculación de la cuenta de Mercado Pago de ${club} con ${BRAND} vence ${when} y no pudimos renovarla automáticamente.`,
+          'Para seguir cobrando en tu cuenta, volvé a vincularla desde el panel. Solo lleva un minuto y no perdés ningún dato.',
+        ],
+        cta: { label: 'Volver a vincular Mercado Pago' },
+        afterCta: ['Solo el dueño del club puede vincular la cuenta. Si ya lo hiciste, ignorá este mail.'],
+      }
+    }
+    case 'mp_connection_failed':
+      return {
+        subject: `Hay que volver a vincular Mercado Pago en ${club}`,
+        heading: 'La vinculación con Mercado Pago dejó de funcionar',
+        paragraphs: [
+          `La vinculación de la cuenta de Mercado Pago de ${club} con ${BRAND} venció o fue revocada, y no pudimos renovarla.`,
+          'Hasta que la vuelvas a vincular no vamos a poder acreditar cobros en tu cuenta. Podés hacerlo desde el panel en un minuto.',
+        ],
+        ...(note ? { callout: { title: 'Detalle', body: note } } : {}),
+        cta: { label: 'Volver a vincular Mercado Pago' },
+        afterCta: ['Solo el dueño del club puede vincular la cuenta. Si ya lo hiciste, ignorá este mail.'],
+      }
   }
 }
 

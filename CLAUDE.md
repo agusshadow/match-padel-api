@@ -31,6 +31,7 @@ src/
 │   ├── club-admin/   ← club panel API, /club-admin/:clubId (onboarding, courts, documents: card #67; schedules, exceptions, price rules: card #70; calendar, move/cancel, blocks: card #71)
 │   ├── courts/       ← public slots route, effective schedule/price resolution (schedule.service.ts, pure) and its loader (card #70)
 │   ├── team/         ← club team: invitations, members, accept (card #72), under /club-admin/:clubId/team, /invitations and /me/invitations/accept
+│   ├── club-mercadopago/ ← Mercado Pago account of each club: OAuth link, encrypted tokens, renewal, `getClubAccessToken` (card #74), under /club-admin/:clubId/mercadopago and /mercadopago/oauth/callback
 │   ├── audit/        ← recordAudit / audit_log
 │   ├── catalogs/     ← gamification catalogs admin (achievements, challenges, cosmetics, images), under /platform/catalogs, superadmin only (card #78)
 │   ├── mail/         ← transactional email (Resend), templates, email_log, notifyApplicationStatusChange (card #69)
@@ -102,6 +103,8 @@ See `.env.example`. Never hardcode values. Always access them via `process.env.N
 Required today: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `PORT`. Also `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN` depending on the environment. (`JWT_SECRET` used to be listed but the code does not use it.)
 
 Transactional email (card #69, `docs/email.md`; also the team invitation link, card #72) adds optional `RESEND_API_KEY`, `MAIL_FROM`, `MAIL_MODE`, `APP_ENV`, `MAIL_DEV_RECIPIENT` and `CLUB_PANEL_URL`; without a key the mail module only logs.
+
+The club's Mercado Pago link (card #74, `docs/mercadopago.md`) adds optional `MP_APP_ID`, `MP_APP_SECRET`, `MP_OAUTH_REDIRECT_URI`, `MP_TOKEN_ENCRYPTION_KEY` (32 bytes base64) and `MP_OAUTH_PKCE`; without the first four its endpoints answer 503 `MP_NOT_CONFIGURED`. Never log a token or the client secret.
 
 `SUPABASE_ANON_KEY` backs an isolated client (`supabaseAuth` in `src/lib/supabase.ts`) used only to mint sessions in `auth.controller.ts` (`signInWithPassword`). Never call session-mutating auth methods on the `service_role` client (`supabase`): supabase-js swaps its Authorization header to the authenticated user's token as soon as a session is established, silently downgrading every later `.from(...)` call in the process from `service_role` to that user.
 
@@ -205,11 +208,13 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 - Card #71 (migration `20261010154511_court_blocks`, dev only until the next release): `court_blocks`, the `create_court_blocks` RPC and a trigger on `court_reservations` that refuses a booking or move over a block. `GET /club-admin/:clubId/calendar`, `PATCH .../reservations/:id/move`, `POST .../reservations/:id/cancel` (club cancellation: always 100% refund, match cancelled with it, in-app notification) and `/blocks`; slots carry `unavailable_reason` and booking returns 409 `COURT_BLOCKED`. See `docs/availability-and-pricing.md`.
 - Card #72 (migration `20261010155448_club_team_invitations`, dev only until the next release): `club_invitations` (RLS on, no policies; only the token's SHA-256 is stored) and the `accept_club_invitation` RPC. Club team: `GET /club-admin/:clubId/team` (owner/admin), owner-only writes (invite, resend, revoke, change role, remove), `POST /me/invitations/accept` and public `GET /invitations/preview`; `team_invitation` email. Reception can no longer confirm/complete reservations. The owner role is not invitable. See `docs/club-lifecycle.md` (Team) and `docs/permissions.md`.
 - Card #78 (migration `20261010160513_gamification_catalogs`, dev only until the next release): `is_active`/`created_at`/`updated_at` on `achievements`, `updated_at` on `challenges` and `cosmetics`, `accept_match_score` awards from `achievements.condition` (only active ones), `purchase_cosmetic` raises `COSMETIC_INACTIVE`, owner/participant read policies and the public `catalog-assets` bucket. `/platform/catalogs` (superadmin only) edits the three catalogs; deactivating never touches what players own. See `docs/catalogs.md`.
+- Card #74 (migration `20261010161419_club_mercadopago_accounts`, dev only until the next release): `club_mp_accounts` (the club's Mercado Pago seller tokens, AES-256-GCM encrypted with `MP_TOKEN_ENCRYPTION_KEY`, RLS on, no policies, no client grants) and `mp_oauth_states` (single-use anti-CSRF state). `POST/GET/DELETE /club-admin/:clubId/mercadopago` (owner only), public `GET /mercadopago/oauth/callback`, daily renewal job `refresh-mp-tokens`, `getClubAccessToken(clubId)` for card #75, `mp_connection_expiring`/`mp_connection_failed` emails. Written from the Mercado Pago documentation and **not verified against the MP sandbox** (card #73). The existing charging flows still use the global `MP_ACCESS_TOKEN`. See `docs/mercadopago.md`.
 - If an API change affects `match-padel-web`, the API PR is merged first and the web PR references it under "Related PR".
 
 ## Documentation map
 
 - `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
+- `docs/mercadopago.md` — the club's Mercado Pago link: flow, env vars, storage, renewal, token provider, what the human must configure (card #74).
 - `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".
 - `supabase/migrations/` — the versioned history of the database: the exact migrations recorded in production plus the ones added since. Source of truth. `docs/schema.sql` is a readable view derived from it.
 

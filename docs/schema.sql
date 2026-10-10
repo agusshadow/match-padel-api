@@ -292,6 +292,46 @@ create index club_invitations_club_idx on public.club_invitations (club_id, crea
 create index club_invitations_invited_by_idx on public.club_invitations (invited_by);
 create index club_invitations_accepted_by_idx on public.club_invitations (accepted_by);
 
+-- club_mp_accounts (card #74): Mercado Pago seller account of each club. Tokens are AES-256-GCM ciphertext
+-- (`v1:` prefix) written by the API; the key is MP_TOKEN_ENCRYPTION_KEY, never in the DB. API only (RLS on,
+-- no policies, every client grant revoked). `status` is a stored hint; the API derives the effective one from `expires_at`.
+create table public.club_mp_accounts (
+  club_id           uuid primary key references clubs(id) on delete cascade,
+  mp_user_id        text not null,
+  access_token_enc  text not null,
+  refresh_token_enc text not null,
+  public_key        text,
+  scope             text,
+  expires_at        timestamptz not null,
+  live_mode         boolean,
+  status            text not null default 'connected',
+  last_refresh_at   timestamptz,
+  last_error        text,
+  last_notified_at  timestamptz,
+  connected_by      uuid references users(id) on delete set null,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  constraint club_mp_accounts_status_check
+    check (status in ('connected', 'expiring', 'expired', 'revoked', 'error'))
+);
+create index club_mp_accounts_expires_idx on public.club_mp_accounts (expires_at);
+create index club_mp_accounts_connected_by_idx on public.club_mp_accounts (connected_by);
+
+-- mp_oauth_states (card #74): single-use anti-CSRF `state` of the Mercado Pago OAuth round trip. Only the
+-- SHA-256 of the state is stored; valid 10 minutes. API only (RLS on, no policies, no client grants).
+create table public.mp_oauth_states (
+  state_hash        text primary key,
+  club_id           uuid not null references clubs(id) on delete cascade,
+  user_id           uuid not null references users(id) on delete cascade,
+  code_verifier_enc text, -- PKCE verifier, encrypted; null when MP_OAUTH_PKCE is off
+  created_at        timestamptz not null default now(),
+  expires_at        timestamptz not null default (now() + interval '10 minutes'),
+  used_at           timestamptz
+);
+create index mp_oauth_states_club_idx on public.mp_oauth_states (club_id);
+create index mp_oauth_states_user_idx on public.mp_oauth_states (user_id);
+create index mp_oauth_states_expires_idx on public.mp_oauth_states (expires_at);
+
 -- court_reservations (Supabase Realtime enabled here)
 create table public.court_reservations (
   id            uuid primary key default uuid_generate_v4(),
@@ -620,6 +660,8 @@ alter table court_schedule_exceptions enable row level security; -- card #70
 alter table court_price_rules enable row level security; -- card #70
 alter table court_blocks enable row level security; -- card #71
 alter table club_invitations enable row level security; -- card #72: no policies, API only
+alter table club_mp_accounts enable row level security; -- card #74: no policies, no client grants, API only
+alter table mp_oauth_states enable row level security; -- card #74: no policies, no client grants, API only
 alter table court_reservations enable row level security;
 alter table payments enable row level security;
 alter table matches enable row level security;
@@ -950,6 +992,7 @@ create trigger set_updated_at before update on tournaments for each row execute 
 create trigger set_updated_at before update on achievements for each row execute function update_updated_at(); -- card #78
 create trigger set_updated_at before update on challenges for each row execute function update_updated_at(); -- card #78
 create trigger set_updated_at before update on cosmetics for each row execute function update_updated_at(); -- card #78
+create trigger set_updated_at before update on club_mp_accounts for each row execute function update_updated_at(); -- card #74
 
 -- ============================================================
 -- FUNCTION: accept_match_score (card #21 atomic score+ELO; card #54 awards

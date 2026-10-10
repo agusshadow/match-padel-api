@@ -4,6 +4,7 @@ import { loadAccess, requireClubRole } from '../../middleware/access.middleware'
 import { uploadClubDocument } from '../../middleware/upload'
 import * as controller from './club-admin.controller'
 import teamRouter from '../team/team.router'
+import mercadoPagoRouter from '../club-mercadopago/club-mercadopago.router'
 
 // Mounted at /api/v1/club-admin/:clubId, hence mergeParams to see `clubId`.
 const router = Router({ mergeParams: true })
@@ -47,6 +48,8 @@ router.delete('/documents/:id', ownerOrAdmin, controller.deleteDocument)
 router.get('/documents/:id/url', ownerOrAdmin, controller.getDocumentUrl)
 // Card #72: club team (owner/admin read, owner writes). Own role checks inside.
 router.use('/team', teamRouter)
+// Card #74: Mercado Pago account of the club. Owner only (each route has its own check).
+router.use('/mercadopago', mercadoPagoRouter)
 router.get('/', anyStaff, controller.getClub)
 router.patch('/', ownerOrAdmin, controller.updateClub)
 
