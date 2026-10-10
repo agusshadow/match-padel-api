@@ -484,50 +484,48 @@ create policy "courts_public_read" on courts for select using (is_active = true)
 -- court_schedules: public read
 create policy "schedules_public_read" on court_schedules for select using (is_active = true);
 
--- court_reservations: user sees and manages their own
-create policy "reservations_own_read" on court_reservations for select using (auth.uid() = user_id);
-create policy "reservations_own_insert" on court_reservations for insert with check (auth.uid() = user_id);
-create policy "reservations_own_update" on court_reservations for update using (auth.uid() = user_id);
+-- court_reservations: the owner and staff read; writes only through the API
+-- (card #65: no direct client inserts or updates)
+create policy "reservations_own_or_staff_read" on court_reservations for select using (
+  user_id = auth.uid()
+  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
+);
 
--- NOTE (03/10/2026): the policies below on matches, match_players, notifications,
--- tournaments, tournament_teams and tournament_matches are copied from what
--- production really has. Several are more permissive than intended (they come
--- from supabase/migrations/20260924022039_fix_rls_policies.sql,
--- 20260924022822_create_notifications_table.sql and
--- 20260924022856_create_tournaments_tables.sql); tightening them is a pending
--- change that needs a go-ahead on production.
+-- Card #65: clients holding the anon key cannot write to the business tables;
+-- the API (service_role, bypasses RLS) is the only writer. The admin panel reads
+-- some tables directly as a signed-in staff user, so those reads are kept for
+-- staff (users.role in club_staff / super_admin).
 
--- matches: readable by everyone; creator inserts/updates their own
-create policy "matches_public_read" on matches for select using (true);
-create policy "matches_own_insert" on matches for insert with check (auth.uid() = created_by);
-create policy "matches_own_update" on matches for update using (auth.uid() = created_by);
+-- matches: the creator, the players of the match and staff read; no client writes
+create policy "matches_participants_or_staff_read" on matches for select using (
+  created_by = auth.uid()
+  or exists (select 1 from match_players mp where mp.match_id = matches.id and mp.user_id = auth.uid())
+  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
+);
 
--- match_players
-create policy "match_players_public_read" on match_players for select using (true);
-create policy "match_players_own_insert" on match_players for insert with check (auth.uid() = user_id);
+-- match_players: a player sees their own rows, staff see all; no client writes
+create policy "match_players_own_or_staff_read" on match_players for select using (
+  user_id = auth.uid()
+  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
+);
 
 -- match_chats: same
 create policy "chats_participants_read" on match_chats for select using (
   exists (select 1 from match_players where match_id = match_chats.match_id and user_id = auth.uid())
 );
 
--- tournaments: public read (drafts included), any signed-in user creates, creator updates
-create policy "tournaments_public_read" on tournaments for select using (true);
-create policy "tournaments_auth_insert" on tournaments for insert with check (auth.uid() is not null);
-create policy "tournaments_creator_update" on tournaments for update
-  using (auth.uid() = created_by) with check (auth.uid() = created_by);
+-- tournaments: drafts visible to their creator and staff, the rest to everyone; no client writes
+create policy "tournaments_read" on tournaments for select using (
+  status <> 'draft'
+  or created_by = auth.uid()
+  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
+);
 
--- tournament_teams: public read; a player registers/leaves their own team
+-- tournament_teams: public read; no client writes
 create policy "tournament_teams_public_read" on tournament_teams for select using (true);
-create policy "tournament_teams_auth_insert" on tournament_teams for insert
-  with check ((auth.uid() = player1_id) or (auth.uid() = player2_id));
-create policy "tournament_teams_player_delete" on tournament_teams for delete
-  using ((auth.uid() = player1_id) or (auth.uid() = player2_id));
 
--- tournament_matches: public read. The write policy is FOR ALL TO public (not
--- service_role), so the anon key can write — known issue, copied from production.
+-- tournament_matches: public read; no client writes
 create policy "tournament_matches_public_read" on tournament_matches for select using (true);
-create policy "tournament_matches_service_write" on tournament_matches for all with check (true);
 
 -- achievements: public catalog
 create policy "achievements_public_read" on achievements for select using (true);
@@ -553,12 +551,11 @@ create policy "user_cosmetics_own_read" on user_cosmetics for select using (user
 -- currency_purchases: own purchases only
 create policy "currency_purchases_own_read" on currency_purchases for select using (user_id = auth.uid());
 
--- notifications: owner reads/updates; two redundant INSERT policies with check(true)
--- let any anon-key client insert (known issue, copied from production)
+-- notifications: the owner reads and updates their own; only the API creates them.
+-- (The *_own_* and users_*_own_* policies are duplicates of each other, kept as in
+-- production; the open INSERT policies were removed by card #65.)
 create policy "notifications_own_read" on notifications for select using (auth.uid() = user_id);
 create policy "notifications_own_update" on notifications for update using (auth.uid() = user_id);
-create policy "notifications_service_insert" on notifications for insert with check (true);
-create policy "service_role_insert_notifications" on notifications for insert with check (true);
 create policy "users_read_own_notifications" on notifications for select using (auth.uid() = user_id);
 create policy "users_update_own_notifications" on notifications for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
