@@ -150,6 +150,20 @@ create table public.club_documents (
 create index club_documents_club_idx on public.club_documents (club_id, created_at);
 create index clubs_status_idx on public.clubs (status);
 
+-- email_log: one row per transactional email attempt (card #69). API only (service_role).
+create table public.email_log (
+  id           uuid primary key default gen_random_uuid(),
+  to_email     text not null,
+  template     text not null,
+  club_id      uuid references clubs(id) on delete set null,
+  status       text not null check (status in ('sent', 'failed', 'skipped')),
+  provider_id  text,
+  error        text,
+  created_at   timestamptz not null default now()
+);
+create index email_log_club_created_idx on public.email_log (club_id, created_at desc);
+create index email_log_created_idx on public.email_log (created_at desc);
+
 -- courts
 create table public.courts (
   id            uuid primary key default uuid_generate_v4(),
@@ -490,6 +504,7 @@ alter table platform_staff enable row level security; -- card #66
 alter table audit_log enable row level security; -- card #66: no policies, API only
 alter table club_status_history enable row level security; -- card #67: no policies, API only
 alter table club_documents enable row level security; -- card #67: no policies, API only
+alter table email_log enable row level security; -- card #69: no policies, API only
 alter table courts enable row level security;
 alter table court_schedules enable row level security;
 alter table court_reservations enable row level security;

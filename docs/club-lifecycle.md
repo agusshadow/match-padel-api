@@ -54,6 +54,13 @@ schedule model (`court_schedules` already exists and is what slot generation rea
 Private bucket `club-documents` (10 MB, PDF/JPEG/PNG/WebP), key `<clubId>/<uuid>-<safe filename>`. Only the API writes;
 files are read through 10-minute signed URLs for the club owner/admin, reviewers and superadmins.
 
+## Emails
+
+Every status change that has a template emails the club owner(s) through `notifyApplicationStatusChange`
+(`src/domains/mail/mail.service.ts`, see `docs/email.md`). Today only `submit` calls it (`pending`,
+`application_received`); the review actions must call it with `approved`, `rejected` (note = reason) and
+`changes_requested` (note = reviewer notes) after the transition succeeds. It never throws.
+
 ## Notes for the release
 
 The migration is additive. Between applying it to production and releasing this code, a club created with the old

@@ -4,6 +4,7 @@ import type { ClubStatus } from '../../types/access'
 import { buildMeta } from '../../lib/pagination'
 import { logger } from '../../lib/logger'
 import { recordAudit } from '../audit/audit.service'
+import { notifyApplicationStatusChange } from '../mail/mail.service'
 import * as repository from './club-admin.repository'
 import type { ReservationStatus } from './club-admin.repository'
 import type {
@@ -577,5 +578,7 @@ export async function submitApplication(clubId: string, actorId: string) {
     entityId: clubId,
     metadata: { from: club.status, to: 'pending' },
   })
+  // Fire-and-forget: the mail never delays nor fails the submission (it never throws).
+  void notifyApplicationStatusChange({ clubId, toStatus: 'pending' })
   return updated
 }

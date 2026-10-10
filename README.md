@@ -32,6 +32,17 @@ There is no test framework yet (see "Real state vs. target" in `CLAUDE.md`).
 
 See `.env.example`. Required: `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. In deployed environments also set `CORS_ORIGIN`, `APP_URL`, `API_URL` and `MP_ACCESS_TOKEN`. Never commit `.env` or share the service role key.
 
+Transactional email (optional, see `docs/email.md`):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RESEND_API_KEY` | none | Resend API key. Without it the mail module only logs |
+| `MAIL_FROM` | `Match Padel <no-reply@matchpadel.com.ar>` | Sender (verified domain in Resend) |
+| `MAIL_MODE` | `send` with a key, `log` without | `send` or `log` |
+| `APP_ENV` | falls back to `NODE_ENV` | Outside `production`, subjects get `[DEV]` |
+| `MAIL_DEV_RECIPIENT` | none | Non-production: redirect every email to this address |
+| `CLUB_PANEL_URL` | `https://match-padel-admin.vercel.app` | Club panel URL used in email links |
+
 ## Working on this repo
 
 - `main` and `develop` accept **no direct commits or pushes**. Work on a branch from `develop` and open a pull request against it (squash merge). Releases go through a `release/vX.Y.Z` branch (merge commit). Details in `CLAUDE.md`.
