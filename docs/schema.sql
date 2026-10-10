@@ -86,7 +86,7 @@ create table public.clubs (
   status        club_status not null default 'draft', -- card #67: only 'approved' (and is_active) clubs are public; existing rows were backfilled to 'approved'
   legal_name    text,  -- card #67
   tax_id        text,  -- card #67
-  settings      jsonb not null default '{}', -- card #67: settings.opening_hours = weekly draft { mon: [{open,close}], ... } (F2 replaces it)
+  settings      jsonb not null default '{}', -- card #67: settings.opening_hours = weekly draft { mon: [{open,close}], ... }; since card #70 it is the fallback of courts with no court_schedules rows
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -177,16 +177,71 @@ create table public.courts (
   updated_at    timestamptz not null default now()
 );
 
--- court_schedule: time availability per court
+-- court_schedules: weekly opening intervals per court (card #70 extends it).
+-- Club-local wall clock (UTC-3). close_time '24:00' = midnight. Several
+-- intervals per day allowed; a court with no active rows inherits the club's
+-- settings.opening_hours (see docs/availability-and-pricing.md).
 create table public.court_schedules (
   id            uuid primary key default uuid_generate_v4(),
   court_id      uuid not null references courts(id) on delete cascade,
   day_of_week   smallint not null check (day_of_week between 0 and 6), -- 0=Sunday
   open_time     time not null,
   close_time    time not null,
-  slot_minutes  smallint not null default 90,
-  is_active     boolean not null default true
+  slot_minutes  smallint not null default 60, -- card #70: default 60 (was 90)
+  is_active     boolean not null default true,
+  constraint court_schedules_slot_minutes_check check (slot_minutes in (30, 60, 90, 120)) not valid,
+  constraint court_schedules_time_range_check check (close_time > open_time) not valid
 );
+create unique index court_schedules_court_day_open_uidx on public.court_schedules (court_id, day_of_week, open_time);
+
+-- courts (card #70): unique (id, club_id) so an exception proves its court belongs to its club
+-- alter table courts add constraint courts_id_club_id_key unique (id, club_id);
+
+-- court_schedule_exceptions (card #70): a date on which the club (court_id null) or one court
+-- is closed or has other hours. One row per (court or club, date); court-level beats club-level.
+create table public.court_schedule_exceptions (
+  id            uuid primary key default gen_random_uuid(),
+  club_id       uuid not null references clubs(id) on delete cascade,
+  court_id      uuid,
+  date          date not null,
+  closed        boolean not null default true,
+  open_time     time,
+  close_time    time,
+  slot_minutes  smallint check (slot_minutes is null or slot_minutes in (30, 60, 90, 120)),
+  reason        text,
+  created_by    uuid references users(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  constraint court_schedule_exceptions_court_fkey
+    foreign key (court_id, club_id) references courts (id, club_id) on delete cascade,
+  constraint court_schedule_exceptions_hours_check
+    check (closed or (open_time is not null and close_time is not null and close_time > open_time))
+);
+create unique index court_schedule_exceptions_club_date_uidx
+  on court_schedule_exceptions (club_id, date) where court_id is null;
+create unique index court_schedule_exceptions_court_date_uidx
+  on court_schedule_exceptions (court_id, date) where court_id is not null;
+create index court_schedule_exceptions_club_date_idx on court_schedule_exceptions (club_id, date);
+create index court_schedule_exceptions_created_by_idx on court_schedule_exceptions (created_by);
+
+-- court_price_rules (card #70): hourly price by day and time band. Highest priority covering
+-- the slot start wins; fallback courts.price_per_hour.
+create table public.court_price_rules (
+  id              uuid primary key default gen_random_uuid(),
+  court_id        uuid not null references courts(id) on delete cascade,
+  name            text not null,
+  days_of_week    smallint[] not null,
+  start_time      time not null,
+  end_time        time not null,
+  price_per_hour  numeric(10,2) not null check (price_per_hour > 0),
+  priority        smallint not null default 0,
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint court_price_rules_days_check
+    check (cardinality(days_of_week) > 0 and days_of_week <@ array[0,1,2,3,4,5,6]::smallint[]),
+  constraint court_price_rules_time_range_check check (end_time > start_time)
+);
+create index court_price_rules_court_idx on court_price_rules (court_id);
 
 -- court_reservations (Supabase Realtime enabled here)
 create table public.court_reservations (
@@ -507,6 +562,8 @@ alter table club_documents enable row level security; -- card #67: no policies, 
 alter table email_log enable row level security; -- card #69: no policies, API only
 alter table courts enable row level security;
 alter table court_schedules enable row level security;
+alter table court_schedule_exceptions enable row level security; -- card #70
+alter table court_price_rules enable row level security; -- card #70
 alter table court_reservations enable row level security;
 alter table payments enable row level security;
 alter table matches enable row level security;
@@ -564,8 +621,44 @@ create policy "courts_public_read" on courts for select to anon, authenticated
 create policy "courts_staff_read" on courts for select to authenticated
   using (public.is_club_member(club_id) or public.is_platform_staff());
 
--- court_schedules: public read
-create policy "schedules_public_read" on court_schedules for select using (is_active = true);
+-- Card #70: schedules, exceptions and price rules. Staff of the club and platform staff read;
+-- players read through the API only (service_role). No client writes.
+create policy "court_schedules_staff_read" on court_schedules for select to authenticated
+  using (public.is_court_club_member(court_id) or public.is_platform_staff());
+create policy "court_schedule_exceptions_staff_read" on court_schedule_exceptions for select to authenticated
+  using (public.is_club_member(club_id) or public.is_platform_staff());
+create policy "court_price_rules_staff_read" on court_price_rules for select to authenticated
+  using (public.is_court_club_member(court_id) or public.is_platform_staff());
+revoke all on table court_schedule_exceptions, court_price_rules from anon, authenticated;
+grant select on table court_schedule_exceptions, court_price_rules to authenticated;
+
+-- Card #70: atomic "replace the whole set", executable by service_role only.
+create or replace function public.replace_court_schedule(p_court_id uuid, p_rows jsonb)
+returns void language plpgsql set search_path = public as $$
+begin
+  delete from public.court_schedules where court_id = p_court_id;
+  insert into public.court_schedules (court_id, day_of_week, open_time, close_time, slot_minutes, is_active)
+  select p_court_id, r.day_of_week, r.open_time, r.close_time, r.slot_minutes, true
+  from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb))
+    as r(day_of_week smallint, open_time time, close_time time, slot_minutes smallint);
+end; $$;
+
+create or replace function public.replace_court_price_rules(p_court_id uuid, p_rows jsonb)
+returns void language plpgsql set search_path = public as $$
+begin
+  delete from public.court_price_rules where court_id = p_court_id;
+  insert into public.court_price_rules
+    (court_id, name, days_of_week, start_time, end_time, price_per_hour, priority, is_active)
+  select p_court_id, r.name, r.days_of_week, r.start_time, r.end_time, r.price_per_hour,
+         coalesce(r.priority, 0), coalesce(r.is_active, true)
+  from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb))
+    as r(name text, days_of_week smallint[], start_time time, end_time time,
+         price_per_hour numeric, priority smallint, is_active boolean);
+end; $$;
+revoke execute on function public.replace_court_schedule(uuid, jsonb) from public, anon, authenticated;
+revoke execute on function public.replace_court_price_rules(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.replace_court_schedule(uuid, jsonb) to service_role;
+grant execute on function public.replace_court_price_rules(uuid, jsonb) to service_role;
 
 -- Card #66: security definer helpers used by the policies below (executable by
 -- authenticated only). "Staff" means membership of the row's club via

@@ -42,13 +42,13 @@ Card #61: `users.xp`/`users.level` (engagement, separate from `elo` which is ski
 | GET | `/api/v1/clubs` | none | Card #67: every public club read (this section, `/courts/:courtId/slots`, `POST /reservations`, `/matches` creation, `/tournaments` list and detail) only sees clubs with `status = 'approved'` and `is_active`; anything else answers as if it did not exist. List clubs (paginated, `meta` with `totalPages`); includes `lat`/`lng` (nullable — for the map view, Trello card #49) | `getClubes` (`club.controller.ts`) |
 | GET | `/api/v1/clubs/:id` | none | Club detail with courts; includes `lat`/`lng` | `getClubById` |
 | GET | `/api/v1/clubs/:clubId/courts` | none | Courts of a club | `getClubCourts` |
-| GET | `/api/v1/clubs/:clubId/availability?date=YYYY-MM-DD` | none | Combined slot availability across every active court of the club for one day — each slot lists the specific courts free at that time with their exact price, plus a `min_price` for a "starting from" display before a court is picked | `getClubAvailabilityHandler` (calls `getClubAvailability` in `club.service.ts`, which reuses `findAvailableSlots` per court) |
+| GET | `/api/v1/clubs/:clubId/availability?date=YYYY-MM-DD` | none | Combined slot availability across every active court of the club for one day — each slot lists the specific courts free at that time with their exact price, plus a `min_price` (lowest hourly rate) and, since card #70, a `min_total_price` (lowest total of the slot) for a "starting from" display. Each court entry has `price_per_hour` (rate applied at that slot: price rule, else the court's base price) and `price` (total of the slot). Hours, exceptions and prices follow `docs/availability-and-pricing.md` | `getClubAvailabilityHandler` (calls `getClubAvailability` in `club.service.ts`, which reuses `findAvailableSlots` per court) |
 
 ## courts — `/api/v1/courts` (`court.router.ts`)
 
 | Method | Path | Auth | Purpose | Handler |
 |---|---|---|---|---|
-| GET | `/api/v1/courts/:courtId/slots?date=YYYY-MM-DD` | none | Available time slots of a court for a date | `getAvailableSlots` (`reservations/reservation.controller.ts`) |
+| GET | `/api/v1/courts/:courtId/slots?date=YYYY-MM-DD` | none | Time slots of a court for a club-local date: `[{ start_time, end_time, available, price_per_hour, price }]` (card #70: from the effective schedule, `price` = total of the slot with the price rules applied; closed days and exceptions return `[]`) | `getAvailableSlots` (`reservations/reservation.controller.ts`) |
 
 ## reservations — `/api/v1/reservations` (`reservation.router.ts`)
 
@@ -58,7 +58,7 @@ Card #61: `users.xp`/`users.level` (engagement, separate from `elo` which is ski
 |---|---|---|---|---|
 | GET | `/api/v1/reservations` | requireAuth | My reservations (paginated) | `getMyReservations` (`reservation.controller.ts`) |
 | GET | `/api/v1/reservations/:id` | requireAuth | Reservation detail | `getReservationById` |
-| POST | `/api/v1/reservations` | requireAuth | Create a reservation (201) | `createReservation` |
+| POST | `/api/v1/reservations` | requireAuth | Create a reservation (201). Card #70: the range must be whole, contiguous slots of the court's effective schedule, else 409 `OUTSIDE_SCHEDULE`, or 409 `COURT_CLOSED` on a closed exception; `total_price` is computed on the server from the price rules (sum of the slot prices) and stored, never rewritten by later rule changes | `createReservation` |
 | DELETE | `/api/v1/reservations/:id` | requireAuth | Cancel a reservation | `cancelReservationHandler` |
 
 ## matches — `/api/v1/matches` (`match.router.ts`)
@@ -168,13 +168,22 @@ The club panel's API. `:clubId` must be a UUID (400 otherwise); the caller needs
 | POST | `/api/v1/club-admin/:clubId/submit` | requireClubRole owner | Card #67. Moves the club from `draft` or `changes_requested` to `pending`; history + audit (`club.submitted`). Returns the club. 422 `APPLICATION_INCOMPLETE` with `details: { missing: ['club.legal_name', ...], steps }` when something is missing; 409 `CONFLICT` from any other status | `submitApplication` |
 | GET | `/api/v1/club-admin/:clubId/courts` | requireClubRole owner/admin | Card #67. Courts of the club (all, active or not), ordered by name: `[{ id, club_id, name, surface, is_indoor, price_per_hour, is_active, created_at, updated_at }]` | `listCourts` |
 | POST | `/api/v1/club-admin/:clubId/courts` | requireClubRole owner/admin | Body `{ name, surface: 'indoor' \| 'outdoor' \| 'panoramic', is_indoor? (default true), price_per_hour (> 0), is_active? (default true) }` (strict). 201 with the court. Audited (`court.created`). 409 when the club is not editable | `createCourt` |
-| PATCH | `/api/v1/club-admin/:clubId/courts/:id` | requireClubRole owner/admin | Partial update of the same fields (at least one). 404 if the court is not in this club. Audited (`court.updated`) | `updateCourt` |
+| PATCH | `/api/v1/club-admin/:clubId/courts/:id` | requireClubRole owner/admin | Partial update of the same fields (at least one). 404 if the court is not in this club. Audited (`court.updated`). Card #70: the response is the court plus `warning: null | { code: 'COURT_HAS_FUTURE_RESERVATIONS', future_reservations }` (set when `is_active` goes to `false` and the court has pending/confirmed reservations from now on; nothing is cancelled) | `updateCourt` |
 | DELETE | `/api/v1/club-admin/:clubId/courts/:id` | requireClubRole owner/admin | `{ id }`. 409 `CONFLICT` if the court has reservations (deactivate it instead). Audited (`court.deleted`) | `deleteCourt` |
 | POST | `/api/v1/club-admin/:clubId/documents` | requireClubRole owner/admin | Multipart: file field `file` (PDF/JPEG/PNG/WebP, max 10 MB, content checked against its type) and text field `kind` (`tax_id` \| `company_registration` \| `id_document` \| `other`, default `other`). Stored in the private `club-documents` bucket under `<clubId>/<uuid>-<safe filename>`. 201 with the document (same shape as in `onboarding.documents`). Max 20 per club. 409 when the club is not editable. Audited (`club.document_uploaded`) | `uploadDocument` |
 | DELETE | `/api/v1/club-admin/:clubId/documents/:id` | requireClubRole owner/admin | `{ id }`; removes the file and the row. 409 when the club is not editable. Audited (`club.document_deleted`) | `deleteDocument` |
 | GET | `/api/v1/club-admin/:clubId/documents/:id/url` | requireClubRole owner/admin | `{ url, expiresIn: 600 }` (signed URL, 10 minutes). Platform staff use `GET /platform/clubs/:clubId/documents/:id/url` | `getDocumentUrl` |
 
-Card #67: club data, courts and documents can only be changed while the club is `draft`, `changes_requested` or `approved`; in `pending`, `rejected` and `suspended` the writes answer 409 `CONFLICT` with a message (reads keep working). See `docs/club-lifecycle.md`.
+| GET | `/api/v1/club-admin/:clubId/courts/:courtId/schedule` | requireClubRole owner/admin/staff | Card #70. `{ court_id, source: 'court' \| 'club' \| 'none', intervals: [{ day_of_week, open_time, close_time, slot_minutes }] }`. `source: 'club'` = the court has no rows and inherits the club's `opening_hours` (60 min slots). `day_of_week` 0 = Sunday ... 6 = Saturday, `HH:MM` club-local, `close_time` may be `24:00` | `getCourtSchedule` |
+| PUT | `/api/v1/club-admin/:clubId/courts/:courtId/schedule` | requireClubRole owner/admin | Card #70. Body `{ intervals: [{ day_of_week, open_time, close_time, slot_minutes (30/60/90/120, default 60) }] }` (strict, max 28) replaces the whole weekly schedule atomically. 400 `VALIDATION_ERROR` with `details.errors` for overlaps, open >= close or an interval shorter than one slot. An empty list removes the court's own schedule (it inherits the club hours again). Same response as GET. Audited (`court.schedule_replaced`). 409 when the club is not editable | `replaceCourtSchedule` |
+| GET | `/api/v1/club-admin/:clubId/schedule-exceptions?court_id=&from=&to=` | requireClubRole owner/admin/staff | Card #70. `[{ id, club_id, court_id (null = whole club), date, closed, open_time, close_time, slot_minutes, reason, created_by, created_at }]` by date; `from` defaults to today (club-local), max 500 rows | `listExceptions` |
+| POST | `/api/v1/club-admin/:clubId/schedule-exceptions` | requireClubRole owner/admin | Card #70. Body `{ date, date_to? (inclusive, max 92 days), court_id? (null/omitted = whole club), closed? (default true), open_time?, close_time?, slot_minutes?, reason? }` (strict; `open_time`/`close_time` required when `closed` is false and rejected when true). Replaces any exception already set for the same court/club and dates. 201 `{ exceptions: [...], warning: null \| { code: 'EXCEPTION_HAS_RESERVATIONS', affected_reservations } }` (closing a day never cancels reservations). 400 for past dates. Audited (`schedule_exception.created`) | `createExceptions` |
+| DELETE | `/api/v1/club-admin/:clubId/schedule-exceptions/:id` | requireClubRole owner/admin | Card #70. `{ id }`. 404 if it is not in this club. Audited (`schedule_exception.deleted`) | `deleteException` |
+| GET | `/api/v1/club-admin/:clubId/courts/:courtId/price-rules` | requireClubRole owner/admin/staff | Card #70. `{ court_id, base_price_per_hour, rules: [{ id, name, days_of_week, start_time, end_time, price_per_hour, priority, is_active }] }` | `getPriceRules` |
+| PUT | `/api/v1/club-admin/:clubId/courts/:courtId/price-rules` | requireClubRole owner/admin | Card #70. Body `{ rules: [{ name, days_of_week: [0..6], start_time, end_time (24:00 allowed), price_per_hour > 0, priority? (-100..100, default 0), is_active? (default true) }] }` (strict, max 30) replaces the set atomically. 400 `VALIDATION_ERROR` when two active rules share a day, overlap in time and have the same priority. Same response as GET. Audited (`court.price_rules_replaced`) | `replacePriceRules` |
+| GET | `/api/v1/club-admin/:clubId/courts/:courtId/preview?date=YYYY-MM-DD` | requireClubRole owner/admin/staff | Card #70. What a player would be offered that day, before reservations: `{ court_id, date, day_of_week, source: 'court_exception' \| 'club_exception' \| 'court_schedule' \| 'club_hours' \| 'none', closed, closed_reason, base_price_per_hour, slots: [{ start_time, end_time (UTC ISO), start, end (club-local HH:MM), slot_minutes, price_per_hour, price, rule_id, rule_name }] }` | `previewCourtDay` |
+
+Card #67 (and #70 for schedules, exceptions and price rules): club data, courts and documents can only be changed while the club is `draft`, `changes_requested` or `approved`; in `pending`, `rejected` and `suspended` the writes answer 409 `CONFLICT` with a message (reads keep working). See `docs/club-lifecycle.md`.
 
 ## platform — `/api/v1/platform` (`platform.router.ts`, card #66)
 
@@ -223,7 +232,7 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | auth | `/api/v1/auth` | yes | yes (holds logic and Supabase queries) | unused | unused | unused (`auth.validator.ts`; the controller defines its own schemas) |
 | users | `/api/v1/users` | yes | yes | no | yes | no |
 | clubs | `/api/v1/clubs` | yes | yes | no | yes | no (schema inline in the controller) |
-| courts | `/api/v1/courts` | yes | no (reuses `reservation.controller.ts`) | no | no | no |
+| courts | `/api/v1/courts` | yes | no (reuses `reservation.controller.ts`) | yes (`schedule.service.ts`, pure: effective schedule and prices, card #70) | yes (`court.repository.ts`, loads the schedule context) | no |
 | reservations | `/api/v1/reservations` | yes | yes | yes | yes | yes |
 | matches | `/api/v1/matches` | yes | yes | yes | yes | no |
 | tournaments | `/api/v1/tournaments` | yes | yes | yes | yes | no (schemas inline in the controller) |
