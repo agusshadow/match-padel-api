@@ -17,6 +17,9 @@ import paymentRouter from './domains/payments/payment.router'
 import achievementsRouter from './domains/achievements/achievements.router'
 import challengesRouter from './domains/challenges/challenges.router'
 import marketplaceRouter from './domains/marketplace/marketplace.router'
+import accessRouter from './domains/access/access.router'
+import clubAdminRouter from './domains/club-admin/club-admin.router'
+import platformRouter from './domains/platform/platform.router'
 import { expireReservationsJob } from './jobs/expire-reservations.job'
 import { autoCancelUnfilledMatchesJob } from './jobs/auto-cancel-unfilled-matches.job'
 import { assignAndExpireChallengesJob } from './jobs/assign-and-expire-challenges.job'
@@ -72,6 +75,9 @@ v1.use('/payments', paymentRouter)
 v1.use('/achievements', achievementsRouter)
 v1.use('/challenges', challengesRouter)
 v1.use('/marketplace', marketplaceRouter)
+v1.use('/me', accessRouter)
+v1.use('/club-admin/:clubId', clubAdminRouter)
+v1.use('/platform', platformRouter)
 
 app.use('/api/v1', v1)
 
