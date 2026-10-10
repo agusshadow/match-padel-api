@@ -1,0 +1,14 @@
+{
+  // Typechecks the one-off operator scripts. Kept apart from the root tsconfig on purpose:
+  // the root one only includes `src/**/*`, so `npm run build` neither compiles nor ships these.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["../node_modules", "../dist"]
+}

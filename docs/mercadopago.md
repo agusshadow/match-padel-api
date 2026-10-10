@@ -11,6 +11,10 @@ client), `src/lib/secret-box.ts` (AES-256-GCM) and `src/jobs/refresh-mp-tokens.j
 
 Card #75 (charging, commission and webhooks per seller) builds on it: see "Charging" below.
 
+> **Running the sandbox spike (card #73)**: step-by-step runbook, helper script and findings template are in
+> [`docs/mp-sandbox-spike.md`](./mp-sandbox-spike.md) (`scripts/mp-sandbox-spike.ts`). The "Unverified" lists below are
+> what it confirms or denies; update them with its findings.
+
 ## Flow
 
 ```
