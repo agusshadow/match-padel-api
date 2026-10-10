@@ -19,7 +19,7 @@ Scope reference: `match-padel-web/docs/club-platform-scope.md`.
 - Club membership is per club (`club_staff` has `unique(club_id, user_id)`): one person can be owner of several clubs and staff of another.
 - `users.role` is kept because the player app still reads it. The new routes ignore it: platform roles come only from `platform_staff` and club roles only from `club_staff`.
 - A platform **superadmin acts as `superadmin` in every club** (`requireClubRole` always passes, `GET /me/access` lists every club with role `superadmin`).
-- A **reviewer** has no club access of its own. Since card #67 it can list clubs in every status and get the signed URL of an application document; the review actions arrive with the next card.
+- A **reviewer** has no club access of its own. Since card #68 it works only on clubs in `pending` and `changes_requested`: it lists them, reads their detail and documents, and approves, rejects or asks for changes. It never sees approved, rejected or suspended clubs, nor commissions or catalogs (a club outside its scope is 404, a status filter outside its scope is 403).
 
 ## How to grant a superadmin
 
@@ -61,9 +61,14 @@ A caller with no membership in `:clubId` (including an owner of a different club
 | Action | Endpoint | Reviewer | Superadmin |
 |---|---|---|---|
 | Global summary | `GET /summary` | - | Y |
-| List clubs (every status, `status` filter) | `GET /clubs` | Y | Y |
+| List clubs (superadmin: every status; reviewer: only `pending`/`changes_requested`) | `GET /clubs` | Y (scoped) | Y |
+| Applications inbox | `GET /applications` | Y (scoped) | Y |
+| Application detail with documents and history | `GET /applications/:clubId` | Y (scoped) | Y |
+| Approve / request changes / reject an application | `POST /applications/:clubId/approve`, `/request-changes`, `/reject` | Y (scoped) | Y |
+| Re-open a rejected application | `POST /clubs/:clubId/reopen` | - | Y |
+| Suspend / reinstate an approved club | `POST /clubs/:clubId/suspend`, `/unsuspend` | - | Y |
 | Create a club (born `approved`) | `POST /clubs` | - | Y |
-| Signed URL of an application document | `GET /clubs/:clubId/documents/:id/url` | Y | Y |
+| Signed URL of an application document | `GET /clubs/:clubId/documents/:id/url` | Y (scoped) | Y |
 | Activate / deactivate a club | `PATCH /clubs/:id/active` | - | Y |
 | List users | `GET /users` | - | Y |
 | Audit log | `GET /audit-log` | - | Y |
@@ -79,7 +84,7 @@ new owner with `POST /auth/register`, then `POST /me/clubs`. Only the owner of t
 
 Every write above calls `recordAudit` (`src/domains/audit/audit.service.ts`) after it succeeds: actor, club, `action`
 (`club.created`, `club.updated`, `club.activated`, `club.deactivated`, `reservation.status_changed`), entity and a
-`metadata` payload with the change. Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). A failure to write the audit entry is logged and never fails the operation.
+`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). A failure to write the audit entry is logged and never fails the operation.
 `audit_log` has RLS enabled with no policies, so only the API can read or write it.
 
 ## Database side (RLS)

@@ -59,3 +59,25 @@ export const clubDocumentParamsSchema = z.object({
   clubId: z.string().uuid(),
   id: z.string().uuid(),
 })
+
+// ---- Card #68: application review ------------------------------------------
+
+export const listApplicationsQuerySchema = paginationSchema.extend({
+  /** One status, or `all`. Default `pending`. A reviewer is limited to `pending` and `changes_requested`. */
+  status: z.enum([...CLUB_STATUSES, 'all']).optional(),
+  search: z.string().trim().max(100).optional(),
+})
+export type ListApplicationsQuery = z.infer<typeof listApplicationsQuerySchema>
+
+export const applicationParamsSchema = z.object({
+  clubId: z.string().uuid(),
+})
+
+const noteText = z.string().trim().min(5).max(2000)
+
+export const approveApplicationSchema = z.object({ note: noteText.optional() }).strict()
+export const requestChangesSchema = z.object({ note: noteText }).strict()
+export const rejectApplicationSchema = z.object({ reason: noteText }).strict()
+export const suspendClubSchema = z.object({ reason: noteText }).strict()
+export const unsuspendClubSchema = z.object({ note: noteText.optional() }).strict()
+export const reopenClubSchema = z.object({ note: noteText.optional() }).strict()

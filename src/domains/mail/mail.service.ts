@@ -154,12 +154,24 @@ const STATUS_TEMPLATES: Partial<Record<ClubStatus, MailTemplate>> = {
   changes_requested: 'changes_requested',
   approved: 'approved',
   rejected: 'rejected',
+  suspended: 'suspended',
+}
+
+/**
+ * Template for a status change. `suspended` to `approved` is a reinstatement,
+ * not a first approval, so it needs the previous status to be told apart.
+ */
+export function templateForStatusChange(fromStatus: ClubStatus | null | undefined, toStatus: ClubStatus): MailTemplate | null {
+  if (fromStatus === 'suspended' && toStatus === 'approved') return 'reinstated'
+  return STATUS_TEMPLATES[toStatus] ?? null
 }
 
 export interface NotifyApplicationStatusChangeInput {
   clubId: string
+  /** Previous status; only needed to tell a reinstatement (`suspended` to `approved`) from a first approval. */
+  fromStatus?: ClubStatus | null
   toStatus: ClubStatus
-  /** Reviewer notes (`changes_requested`) or reason (`rejected`). */
+  /** Reviewer notes (`changes_requested`) or reason (`rejected`, `suspended`); optional note for `approved`. */
   note?: string | null
 }
 
@@ -167,13 +179,13 @@ export interface NotifyApplicationStatusChangeInput {
  * Tells the owner(s) of a club that its application changed status. Call it
  * AFTER the status change succeeded and do not rely on its result: it never
  * throws and never fails the caller, it only logs. Statuses without a template
- * (`draft`, `suspended`) are ignored.
+ * (`draft`) are ignored.
  *
  * Fire-and-forget usage: `void notifyApplicationStatusChange({ ... })`.
  */
 export async function notifyApplicationStatusChange(input: NotifyApplicationStatusChangeInput): Promise<void> {
   try {
-    const template = STATUS_TEMPLATES[input.toStatus]
+    const template = templateForStatusChange(input.fromStatus, input.toStatus)
     if (!template) return
 
     const [clubName, owners] = await Promise.all([

@@ -45,11 +45,15 @@ dev service so mail behaves as non-production.
 | `changes_requested` | a reviewer asks for corrections | `note` = reviewer notes |
 | `approved` | the application is approved | club name |
 | `rejected` | the application is rejected | `note` = reason |
+| `suspended` | a superadmin suspends an approved club | `note` = reason |
+| `reinstated` | a superadmin lifts the suspension (`suspended` to `approved`) | `note` = optional note |
 
 `notifyApplicationStatusChange({ clubId, toStatus, note })` (exported from `mail.service.ts`) resolves the owners of the
 club (`club_staff.role = 'owner'`, email from the Supabase auth admin API), picks the template for `toStatus` and sends
-one email per owner. `draft` and `suspended` have no template and are ignored. Today `submit` calls it for `pending`;
-the review actions card must call it for the other statuses, after the transition and the history entry succeeded.
+one email per owner. `draft` has no template and is ignored. `fromStatus` is optional but needed to tell a reinstatement (`suspended` to
+`approved`, template `reinstated`) from a first approval (`approved`); `templateForStatusChange(from, to)` is the pure
+rule. Callers: `submit` (`pending`), and the platform review/suspend actions (card #68), after the transition and the
+history entry succeeded.
 
 ## Adding a template
 
