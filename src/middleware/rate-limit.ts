@@ -48,3 +48,21 @@ export const acceptInvitationLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
 })
+
+// Card #74: starting the Mercado Pago link creates a state row, and the public
+// OAuth callback exchanges a code with Mercado Pago, so both are limited per IP.
+export const mpConnectLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})
+
+export const mpCallbackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})

@@ -269,3 +269,53 @@ export async function notifyTeamInvitation(input: NotifyTeamInvitationInput): Pr
     return false
   }
 }
+
+// ---- Card #74: Mercado Pago link of the club ---------------------------------
+
+/** Link of the club's Mercado Pago screen in the panel. */
+export function buildMercadoPagoPanelUrl(panelUrl: string, clubId: string): string {
+  return `${panelUrl.replace(/\/+$/, '')}/${encodeURIComponent(clubId)}/mercadopago`
+}
+
+export interface NotifyMpConnectionInput {
+  clubId: string
+  template: 'mp_connection_expiring' | 'mp_connection_failed'
+  daysLeft: number | null
+  /** Internal failure code; never shown to the owner as is (the email carries no technical detail). */
+  reason?: string | null
+}
+
+/**
+ * Tells the club owner(s) that the Mercado Pago link is about to expire or
+ * broke. Never throws; use it fire-and-forget (`void notifyMpConnectionProblem(...)`).
+ */
+export async function notifyMpConnectionProblem(input: NotifyMpConnectionInput): Promise<void> {
+  try {
+    const [clubName, owners] = await Promise.all([
+      repository.findClubName(input.clubId),
+      repository.findClubOwners(input.clubId),
+    ])
+    if (owners.length === 0) {
+      logger.warn({ clubId: input.clubId, template: input.template }, '[mail] club has no owner with an email, nothing to send')
+      return
+    }
+    const panelUrl = buildMercadoPagoPanelUrl(getMailConfig().clubPanelUrl, input.clubId)
+    await Promise.all(
+      owners.map((owner) =>
+        sendMail({
+          to: owner.email,
+          template: input.template,
+          clubId: input.clubId,
+          data: {
+            clubName: clubName ?? '',
+            recipientName: owner.firstName,
+            panelUrl,
+            daysLeft: input.daysLeft,
+          },
+        }),
+      ),
+    )
+  } catch (err) {
+    logger.error({ clubId: input.clubId, template: input.template, err: describeError(err) }, '[mail] failed to notify Mercado Pago link problem')
+  }
+}

@@ -47,6 +47,8 @@ dev service so mail behaves as non-production.
 | `rejected` | the application is rejected | `note` = reason |
 | `suspended` | a superadmin suspends an approved club | `note` = reason |
 | `reinstated` | a superadmin lifts the suspension (`suspended` to `approved`) | `note` = optional note |
+| `mp_connection_expiring` | the daily Mercado Pago renewal failed and the link still has days left (card #74). At most once every 7 days per club | `clubName`, `daysLeft`, `panelUrl` = `<CLUB_PANEL_URL>/<clubId>/mercadopago` |
+| `mp_connection_failed` | the Mercado Pago link expired or was revoked and cannot be renewed (card #74). Once, when it breaks | `clubName`, `panelUrl` as above |
 | `team_invitation` | the owner invites a person to the club team (card #72), and on resend | `clubName`, `roleLabel` (Administrador / Recepción), `inviterName`, `expiresInDays`, `panelUrl` = the accept link |
 
 `notifyApplicationStatusChange({ clubId, toStatus, note })` (exported from `mail.service.ts`) resolves the owners of the
@@ -61,6 +63,10 @@ history entry succeeded.
 provider accepted the email (`false` in `log` mode, without a key or on failure; it never throws). The raw token is
 only in the email body: `email_log` records no body and the logger never receives it. In non-production with
 `MAIL_DEV_RECIPIENT` the link goes to that mailbox.
+
+`notifyMpConnectionProblem({ clubId, template, daysLeft, reason })` (card #74, `mail.service.ts`) sends the two
+Mercado Pago templates to every owner of the club. It never throws and is called fire-and-forget by the renewal logic
+(`src/domains/club-mercadopago/club-mercadopago.core.ts`); the email carries no technical detail or token.
 
 ## Adding a template
 
