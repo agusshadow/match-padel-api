@@ -1,0 +1,1 @@
+revoke update (full_name) on public.users from authenticated;
