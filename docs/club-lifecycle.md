@@ -65,11 +65,13 @@ also hidden.
 | `location` | `address`, `city`, `lat` and `lng` |
 | `contact` | `phone`, `email` |
 | `courts` | at least one active court with `price_per_hour > 0` |
-| `schedule` | `opening_hours` with at least one day with an interval |
+| `schedule` | `opening_hours` with at least one day with an interval, **or** (card #70) at least one active court with its own weekly schedule (`PUT /courts/:courtId/schedule`) |
 | `documents` | at least one document |
 
-`opening_hours` is a weekly **draft** stored in `clubs.settings.opening_hours`; F2 replaces it with the per-court
-schedule model (`court_schedules` already exists and is what slot generation reads).
+`opening_hours` is a weekly **draft** stored in `clubs.settings.opening_hours`. Since card #70 the per-court schedule
+(`court_schedules`) is the real model and `opening_hours` is only the fallback of courts that have no rows of their own;
+the step is complete with either. Editing schedules, exceptions and prices follows the same status rules as courts
+(editable in `draft`, `changes_requested` and `approved`; 409 otherwise). See `docs/availability-and-pricing.md`.
 
 ## Documents
 

@@ -8,6 +8,8 @@ import {
   findApprovedPaymentsForReservation,
   creditLateCancellationCurrency,
 } from '../payments/payment.service'
+import * as courtRepository from '../courts/court.repository'
+import { localDateOf, quoteRangeOrThrow } from '../courts/schedule.service'
 import { logger } from '../../lib/logger'
 import { NotFoundError, ForbiddenError, ConflictError, ValidationError } from '../../types/errors'
 import { AppError } from '../../types/errors'
@@ -72,9 +74,16 @@ export const matchService = {
       throw new ConflictError('This time slot conflicts with an existing reservation')
     }
 
-    const durationHours =
-      (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
-    const totalPrice = Math.round(court.price_per_hour * durationHours * 100) / 100
+    // Card #70: the match's court time must be whole slots of the court's
+    // effective schedule, priced by the court's price rules (server side).
+    const scheduleContext = await courtRepository.loadScheduleContextForCourt({
+      courtId: data.court_id,
+      clubId: court.club_id,
+      basePricePerHour: court.price_per_hour,
+      fromDate: localDateOf(startTime),
+      toDate: localDateOf(new Date(endTime.getTime() - 1)),
+    })
+    const totalPrice = quoteRangeOrThrow(scheduleContext, data.start_time, data.end_time).total_price
 
     const reservation = await reservationRepository.create({
       court_id: data.court_id,

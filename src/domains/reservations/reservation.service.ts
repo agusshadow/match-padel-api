@@ -10,12 +10,14 @@ import {
   create,
   cancel,
   countActiveByUser,
-  findAvailableSlots,
+  hasOverlap,
   expirePendingReservations,
 } from './reservation.repository'
 import type { CreateReservationRequest } from './reservation.validator'
 import { notifications } from '../notifications/notification.service'
 import { logger } from '../../lib/logger'
+import { loadScheduleContextForCourt } from '../courts/court.repository'
+import { localDateOf, quoteRangeOrThrow } from '../courts/schedule.service'
 
 const MAX_ACTIVE_RESERVATIONS = 3
 export const PENDING_RESERVATION_EXPIRY_MINUTES = 15
@@ -75,37 +77,24 @@ export async function validateAndCreateReservation(
     )
   }
 
-  // 6. Check slot availability — ensure no overlap
-  const dateStr = data.start_time.slice(0, 10)
-  const slots = await findAvailableSlots(data.court_id, dateStr)
-  const requestedSlot = slots.find(
-    (s) => s.start_time === data.start_time && s.end_time === data.end_time,
-  )
+  // 6. The range must be whole slots of the court's effective schedule
+  // (weekly hours, exceptions, club fallback) — card #70. This also prices it.
+  const scheduleContext = await loadScheduleContextForCourt({
+    courtId: data.court_id,
+    clubId: court.club_id,
+    basePricePerHour: court.price_per_hour,
+    fromDate: localDateOf(startTime),
+    toDate: localDateOf(new Date(endTime.getTime() - 1)),
+  })
+  const quote = quoteRangeOrThrow(scheduleContext, data.start_time, data.end_time)
 
-  // If slot system doesn't perfectly match (e.g. custom times), do direct conflict check
-  if (requestedSlot !== undefined && !requestedSlot.available) {
+  // 7. No overlap with another pending or confirmed reservation
+  if (await hasOverlap(data.court_id, data.start_time, data.end_time)) {
     throw new ConflictError('This time slot is no longer available')
   }
 
-  if (requestedSlot === undefined) {
-    // Custom time range — do a direct overlap query
-    const { data: conflicts, error: confErr } = await supabase
-      .from('court_reservations')
-      .select('id')
-      .eq('court_id', data.court_id)
-      .in('status', ['pending', 'confirmed'])
-      .lt('start_time', data.end_time)
-      .gt('end_time', data.start_time)
-
-    if (confErr) throw confErr
-
-    if (conflicts && conflicts.length > 0) {
-      throw new ConflictError('This time slot conflicts with an existing reservation')
-    }
-  }
-
-  // 7. Calculate total price
-  const totalPrice = Math.round(court.price_per_hour * durationHours * 100) / 100
+  // Total computed on the server from the price rules; never from the client.
+  const totalPrice = quote.total_price
 
   // 8. Create the reservation
   const reservation = await create({

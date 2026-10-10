@@ -6,13 +6,19 @@ export interface ClubAvailabilityCourt {
   name: string
   surface: string
   is_indoor: boolean
+  /** Hourly rate applied to this slot for this court (price rule, else the court's base price). */
   price_per_hour: number
+  /** Total price of this slot for this court, 2 decimals (card #70). */
+  price: number
 }
 
 export interface ClubAvailabilitySlot {
   start_time: string
   end_time: string
+  /** Lowest hourly rate among the free courts (unchanged meaning: "from $X / hour"). */
   min_price: number
+  /** Lowest total price of the slot among the free courts (card #70). */
+  min_total_price: number
   courts: ClubAvailabilityCourt[]
 }
 
@@ -42,17 +48,20 @@ export async function getClubAvailability(
         name: court.name,
         surface: court.surface,
         is_indoor: court.is_indoor,
-        price_per_hour: court.price_per_hour,
+        price_per_hour: slot.price_per_hour,
+        price: slot.price,
       }
 
       if (existing) {
         existing.courts.push(courtEntry)
-        existing.min_price = Math.min(existing.min_price, court.price_per_hour)
+        existing.min_price = Math.min(existing.min_price, slot.price_per_hour)
+        existing.min_total_price = Math.min(existing.min_total_price, slot.price)
       } else {
         slotsByRange.set(key, {
           start_time: slot.start_time,
           end_time: slot.end_time,
-          min_price: court.price_per_hour,
+          min_price: slot.price_per_hour,
+          min_total_price: slot.price,
           courts: [courtEntry],
         })
       }

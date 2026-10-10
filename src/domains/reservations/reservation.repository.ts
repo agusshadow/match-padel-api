@@ -1,5 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import type { CreateReservationRequest } from './reservation.validator'
+import { loadPublicScheduleContext } from '../courts/court.repository'
+import { resolveDay } from '../courts/schedule.service'
 
 export interface ReservationWithJoins {
   id: string
@@ -33,6 +35,10 @@ export interface TimeSlot {
   start_time: string
   end_time: string
   available: boolean
+  /** Hourly rate applied to this slot (card #70: price rule at the slot start, else the court's price). */
+  price_per_hour: number
+  /** Total for the slot, 2 decimals. */
+  price: number
 }
 
 export interface FindByUserOptions {
@@ -103,94 +109,62 @@ export async function findById(id: string): Promise<ReservationWithJoins | null>
   return data as unknown as ReservationWithJoins
 }
 
-// Club opening hours are stored in Argentina local time (no DST). Every club is
-// currently in Argentina, so a fixed offset is used instead of a per-club timezone.
-const ARGENTINA_UTC_OFFSET = '-03:00'
-
+/**
+ * Slots of a court on a club-local date, with price and availability.
+ * Card #70: hours, exceptions and prices come from the effective schedule
+ * (`courts/schedule.service.ts`); the court's weekly rows no longer have to be
+ * a single interval per day.
+ */
 export async function findAvailableSlots(courtId: string, date: string): Promise<TimeSlot[]> {
-  // Get day of week (0 = Sunday, 6 = Saturday) from the date
-  const dateObj = new Date(`${date}T00:00:00Z`)
-  const dayOfWeek = dateObj.getUTCDay()
+  // Card #67: a court of a club that is not approved and active has no public slots.
+  const loaded = await loadPublicScheduleContext(courtId, date)
+  if (!loaded) return []
 
-  // Get schedule for this court on this day
-  const { data: schedule, error: schedErr } = await supabase
-    .from('court_schedules')
-    .select('open_time, close_time, slot_minutes, court:courts!inner(club:clubs!inner(status, is_active))')
-    .eq('court_id', courtId)
-    .eq('day_of_week', dayOfWeek)
-    .eq('is_active', true)
-    // Card #67: a court of a club that is not approved and active has no public slots.
-    .eq('court.club.status', 'approved')
-    .eq('court.club.is_active', true)
-    .single()
+  const day = resolveDay(loaded.context, date)
+  if (day.slots.length === 0) return []
 
-  if (schedErr || !schedule) {
-    // No schedule for this day = no slots
-    return []
-  }
+  const slots: TimeSlot[] = day.slots.map((s) => ({
+    start_time: s.start_time,
+    end_time: s.end_time,
+    available: true,
+    price_per_hour: s.price_per_hour,
+    price: s.price,
+  }))
 
-  // Generate all slots
-  const slots: TimeSlot[] = []
-  const [openH, openM] = schedule.open_time.split(':').map(Number)
-  const [closeH, closeM] = schedule.close_time.split(':').map(Number)
-  const slotMinutes = schedule.slot_minutes ?? 60
-
-  let currentMinutes = openH * 60 + openM
-  const closeMinutes = closeH * 60 + closeM
-
-  while (currentMinutes + slotMinutes <= closeMinutes) {
-    const startH = Math.floor(currentMinutes / 60)
-    const startMin = currentMinutes % 60
-    const endMinutes = currentMinutes + slotMinutes
-    const endH = Math.floor(endMinutes / 60)
-    const endMin = endMinutes % 60
-
-    // Interpret the wall-clock time as Argentina local time, then normalize to UTC
-    // (toISOString) so it compares correctly against reservation timestamps and `now`.
-    const startTime = new Date(
-      `${date}T${String(startH).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00${ARGENTINA_UTC_OFFSET}`,
-    ).toISOString()
-    const endTime = new Date(
-      `${date}T${String(endH).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00${ARGENTINA_UTC_OFFSET}`,
-    ).toISOString()
-
-    slots.push({ start_time: startTime, end_time: endTime, available: true })
-    currentMinutes += slotMinutes
-  }
-
-  if (slots.length === 0) return []
-
-  // Get existing reservations for this court on this date
-  const dayStart = `${date}T00:00:00.000Z`
-  const dayEnd = `${date}T23:59:59.999Z`
-
+  // Reservations overlapping the offered window (slots can run up to midnight,
+  // which is the next UTC day, so a UTC day filter would miss them).
+  const windowStart = slots[0].start_time
+  const windowEnd = slots[slots.length - 1].end_time
   const { data: existing, error: resErr } = await supabase
     .from('court_reservations')
     .select('start_time, end_time')
     .eq('court_id', courtId)
     .in('status', ['pending', 'confirmed'])
-    .gte('start_time', dayStart)
-    .lte('start_time', dayEnd)
+    .lt('start_time', windowEnd)
+    .gt('end_time', windowStart)
 
   if (resErr) throw resErr
 
-  // Mark slots as unavailable where they overlap with existing reservations
-  const reservations = existing ?? []
-  const now = new Date().toISOString()
+  // Compare instants, not strings: PostgREST returns `+00:00`, slots are `...Z`.
+  const reservations = (existing ?? []).map((r) => ({
+    start: new Date(r.start_time as string).getTime(),
+    end: new Date(r.end_time as string).getTime(),
+  }))
+  const now = Date.now()
 
   for (const slot of slots) {
+    const start = new Date(slot.start_time).getTime()
+    const end = new Date(slot.end_time).getTime()
+
     // Past slots are also unavailable
-    if (slot.start_time <= now) {
+    if (start <= now) {
       slot.available = false
       continue
     }
 
-    for (const res of reservations) {
-      // Overlap check: slot starts before res ends AND slot ends after res starts
-      if (slot.start_time < res.end_time && slot.end_time > res.start_time) {
-        slot.available = false
-        break
-      }
+    // Overlap check: slot starts before res ends AND slot ends after res starts
+    if (reservations.some((res) => start < res.end && end > res.start)) {
+      slot.available = false
     }
   }
 

@@ -52,6 +52,8 @@ The migration backfills every `users.role = 'super_admin'` as `superadmin`. A cl
 | Onboarding status, steps, history | `GET /onboarding` | Y | Y | - | - | Y |
 | Submit the application | `POST /submit` | Y | - | - | - | Y |
 | List / create / edit / delete courts | `GET`, `POST /courts`, `PATCH`, `DELETE /courts/:id` | Y | Y | - | - | Y |
+| Read a court's schedule, price rules, exceptions and day preview (card #70) | `GET /courts/:courtId/schedule`, `/price-rules`, `/preview`, `GET /schedule-exceptions` | Y | Y | Y | - | Y |
+| Replace a court's schedule or price rules, create / delete exceptions (card #70) | `PUT /courts/:courtId/schedule`, `PUT /courts/:courtId/price-rules`, `POST`, `DELETE /schedule-exceptions` | Y | Y | - | - | Y |
 | Upload / delete / get URL of a document | `POST /documents`, `DELETE /documents/:id`, `GET /documents/:id/url` | Y | Y | - | - | Y |
 
 A caller with no membership in `:clubId` (including an owner of a different club) gets `403 FORBIDDEN`; a malformed id is `400`.
@@ -84,7 +86,7 @@ new owner with `POST /auth/register`, then `POST /me/clubs`. Only the owner of t
 
 Every write above calls `recordAudit` (`src/domains/audit/audit.service.ts`) after it succeeds: actor, club, `action`
 (`club.created`, `club.updated`, `club.activated`, `club.deactivated`, `reservation.status_changed`), entity and a
-`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). A failure to write the audit entry is logged and never fails the operation.
+`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. A failure to write the audit entry is logged and never fails the operation.
 `audit_log` has RLS enabled with no policies, so only the API can read or write it.
 
 ## Database side (RLS)
@@ -99,3 +101,9 @@ Card #67 (migration `20261010150929_admin_club_onboarding`): the public read pol
 members of the club (`is_club_member`) and any platform staff (`is_platform_staff`) read every state. `courts` follows
 the same split (public only for courts of a public club). `club_status_history` and `club_documents` have RLS enabled and
 no policies (API only); the `club-documents` bucket is private. See `docs/club-lifecycle.md`.
+
+Card #70 (migration `20261010153252_court_schedules_exceptions_price_rules`): `court_schedules`, `court_schedule_exceptions`
+and `court_price_rules` have RLS enabled. Members of the club (`is_club_member` / `is_court_club_member`) and platform staff
+read; nobody writes from the client; players read prices and slots only through the public availability endpoints (service
+role). The old public read policy of `court_schedules` was removed (the API never used it). The RPCs
+`replace_court_schedule` / `replace_court_price_rules` are executable by `service_role` only.
