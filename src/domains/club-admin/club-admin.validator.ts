@@ -129,3 +129,108 @@ export const documentParamsSchema = z.object({
   clubId: z.string().uuid(),
   id: z.string().uuid(),
 })
+
+// ---- Card #70: schedules, exceptions and price rules ------------------------
+
+const OPEN_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+/** `24:00` means midnight (close of the day). */
+const CLOSE_TIME_PATTERN = /^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+function isRealDate(value: string): boolean {
+  const d = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
+}
+
+const dateSchema = z
+  .string()
+  .regex(DATE_PATTERN, 'date must be YYYY-MM-DD')
+  .refine(isRealDate, { message: 'date is not a valid calendar date' })
+
+const dayOfWeekSchema = z.number().int().min(0).max(6)
+const slotMinutesSchema = z.union([z.literal(30), z.literal(60), z.literal(90), z.literal(120)])
+
+export const courtScheduleParamsSchema = z.object({
+  clubId: z.string().uuid(),
+  courtId: z.string().uuid(),
+})
+
+export const scheduleIntervalSchema = z
+  .object({
+    /** 0 = Sunday ... 6 = Saturday */
+    day_of_week: dayOfWeekSchema,
+    open_time: z.string().regex(OPEN_TIME_PATTERN, 'open_time must be HH:MM'),
+    close_time: z.string().regex(CLOSE_TIME_PATTERN, 'close_time must be HH:MM (24:00 allowed)'),
+    slot_minutes: slotMinutesSchema.default(60),
+  })
+  .strict()
+
+export const replaceScheduleSchema = z
+  .object({ intervals: z.array(scheduleIntervalSchema).max(28) })
+  .strict()
+export type ReplaceScheduleInput = z.infer<typeof replaceScheduleSchema>
+
+export const createExceptionSchema = z
+  .object({
+    date: dateSchema,
+    /** Inclusive end of a range; one exception row is created per day. */
+    date_to: dateSchema.optional(),
+    /** Omitted or null = the whole club. */
+    court_id: z.string().uuid().nullable().optional(),
+    closed: z.boolean().default(true),
+    open_time: z.string().regex(OPEN_TIME_PATTERN, 'open_time must be HH:MM').optional(),
+    close_time: z.string().regex(CLOSE_TIME_PATTERN, 'close_time must be HH:MM (24:00 allowed)').optional(),
+    slot_minutes: slotMinutesSchema.optional(),
+    reason: z.string().trim().max(200).nullable().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    if (v.date_to !== undefined && v.date_to < v.date) {
+      ctx.addIssue({ code: 'custom', path: ['date_to'], message: 'date_to must not be before date' })
+    }
+    if (!v.closed) {
+      if (v.open_time === undefined || v.close_time === undefined) {
+        ctx.addIssue({ code: 'custom', path: ['open_time'], message: 'open_time and close_time are required when closed is false' })
+      } else if (v.open_time >= v.close_time) {
+        ctx.addIssue({ code: 'custom', path: ['close_time'], message: 'open_time must be before close_time' })
+      }
+    } else if (v.open_time !== undefined || v.close_time !== undefined || v.slot_minutes !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['closed'], message: 'open_time, close_time and slot_minutes only apply when closed is false' })
+    }
+  })
+export type CreateExceptionInput = z.infer<typeof createExceptionSchema>
+
+export const listExceptionsQuerySchema = z.object({
+  court_id: z.string().uuid().optional(),
+  from: dateSchema.optional(),
+  to: dateSchema.optional(),
+})
+export type ListExceptionsQuery = z.infer<typeof listExceptionsQuerySchema>
+
+export const exceptionParamsSchema = z.object({
+  clubId: z.string().uuid(),
+  id: z.string().uuid(),
+})
+
+export const priceRuleSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    days_of_week: z
+      .array(dayOfWeekSchema)
+      .min(1)
+      .max(7)
+      .refine((days) => new Set(days).size === days.length, { message: 'days_of_week must not repeat days' }),
+    start_time: z.string().regex(OPEN_TIME_PATTERN, 'start_time must be HH:MM'),
+    end_time: z.string().regex(CLOSE_TIME_PATTERN, 'end_time must be HH:MM (24:00 allowed)'),
+    price_per_hour: z.number().positive().max(10_000_000),
+    priority: z.number().int().min(-100).max(100).default(0),
+    is_active: z.boolean().default(true),
+  })
+  .strict()
+  .refine((r) => r.start_time < r.end_time, { message: 'start_time must be before end_time', path: ['end_time'] })
+
+export const replacePriceRulesSchema = z.object({ rules: z.array(priceRuleSchema).max(30) }).strict()
+export type ReplacePriceRulesInput = z.infer<typeof replacePriceRulesSchema>
+
+export const previewQuerySchema = z.object({ date: dateSchema })
+export type PreviewQuery = z.infer<typeof previewQuerySchema>

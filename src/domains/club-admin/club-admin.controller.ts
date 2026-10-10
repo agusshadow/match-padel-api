@@ -4,6 +4,13 @@ import * as service from './club-admin.service'
 import { ValidationError } from '../../types/errors'
 import {
   clubParamsSchema,
+  courtScheduleParamsSchema,
+  createExceptionSchema,
+  exceptionParamsSchema,
+  listExceptionsQuerySchema,
+  previewQuerySchema,
+  replacePriceRulesSchema,
+  replaceScheduleSchema,
   courtParamsSchema,
   createCourtSchema,
   createMyClubSchema,
@@ -191,6 +198,89 @@ export async function getDocumentUrl(req: Request, res: Response, next: NextFunc
   try {
     const { clubId, id } = documentParamsSchema.parse(req.params)
     res.json({ success: true, data: await service.getDocumentUrl(clubId, id) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ---- Card #70: schedules, exceptions and price rules ------------------------
+
+export async function getCourtSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
+    res.json({ success: true, data: await service.getCourtSchedule(clubId, courtId) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function replaceCourtSchedule(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
+    const input = replaceScheduleSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.replaceCourtSchedule(clubId, courtId, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function listExceptions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const query = listExceptionsQuerySchema.parse(req.query)
+    res.json({ success: true, data: await service.listExceptions(clubId, query) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function createExceptions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const input = createExceptionSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.status(201).json({ success: true, data: await service.createExceptions(clubId, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function deleteException(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, id } = exceptionParamsSchema.parse(req.params)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.deleteException(clubId, id, userId) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function getPriceRules(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
+    res.json({ success: true, data: await service.getPriceRules(clubId, courtId) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function replacePriceRules(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
+    const input = replacePriceRulesSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.replacePriceRules(clubId, courtId, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function previewCourtDay(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
+    const { date } = previewQuerySchema.parse(req.query)
+    res.json({ success: true, data: await service.previewCourtDay(clubId, courtId, date) })
   } catch (err) {
     next(err)
   }

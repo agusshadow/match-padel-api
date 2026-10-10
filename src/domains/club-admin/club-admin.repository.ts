@@ -477,3 +477,184 @@ export async function signDocumentUrl(path: string, expiresInSeconds: number): P
   if (error || !data) return null
   return data.signedUrl
 }
+
+// ---- Card #70: schedules, exceptions and price rules ------------------------
+
+export interface ScheduleRow {
+  day_of_week: number
+  open_time: string
+  close_time: string
+  slot_minutes: number
+}
+
+export async function listCourtSchedule(courtId: string): Promise<ScheduleRow[]> {
+  const { data, error } = await supabase
+    .from('court_schedules')
+    .select('day_of_week, open_time, close_time, slot_minutes')
+    .eq('court_id', courtId)
+    .eq('is_active', true)
+    .order('day_of_week')
+    .order('open_time')
+  if (error) throw error
+  return (data ?? []) as ScheduleRow[]
+}
+
+/** Atomic delete + insert through `replace_court_schedule` (service_role only). */
+export async function replaceCourtSchedule(courtId: string, rows: ScheduleRow[]): Promise<void> {
+  const { error } = await supabase.rpc('replace_court_schedule', { p_court_id: courtId, p_rows: rows })
+  if (error) throw error
+}
+
+/** Number of active courts of the club that have at least one active weekly row. */
+export async function countCourtsWithSchedule(clubId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('court_schedules')
+    .select('court_id, court:courts!inner(club_id, is_active)')
+    .eq('is_active', true)
+    .eq('court.club_id', clubId)
+    .eq('court.is_active', true)
+  if (error) throw error
+  return new Set((data ?? []).map((r) => r.court_id as string)).size
+}
+
+export interface ExceptionRow {
+  id: string
+  club_id: string
+  court_id: string | null
+  date: string
+  closed: boolean
+  open_time: string | null
+  close_time: string | null
+  slot_minutes: number | null
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+const EXCEPTION_COLUMNS =
+  'id, club_id, court_id, date, closed, open_time, close_time, slot_minutes, reason, created_by, created_at'
+
+export async function listExceptions(
+  clubId: string,
+  filters: { courtId?: string; from: string; to?: string },
+): Promise<ExceptionRow[]> {
+  let query = supabase
+    .from('court_schedule_exceptions')
+    .select(EXCEPTION_COLUMNS)
+    .eq('club_id', clubId)
+    .gte('date', filters.from)
+    .order('date')
+    .order('court_id', { nullsFirst: true })
+    .limit(500)
+  if (filters.to) query = query.lte('date', filters.to)
+  if (filters.courtId) query = query.eq('court_id', filters.courtId)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as ExceptionRow[]
+}
+
+export async function findExceptionInClub(clubId: string, id: string): Promise<ExceptionRow | null> {
+  const { data, error } = await supabase
+    .from('court_schedule_exceptions')
+    .select(EXCEPTION_COLUMNS)
+    .eq('id', id)
+    .eq('club_id', clubId)
+    .maybeSingle()
+  if (error) throw error
+  return (data as ExceptionRow | null) ?? null
+}
+
+/** Replaces any exception already set for the same court (or club) and dates, then inserts. */
+export async function replaceExceptions(
+  clubId: string,
+  courtId: string | null,
+  dates: string[],
+  fields: {
+    closed: boolean
+    open_time: string | null
+    close_time: string | null
+    slot_minutes: number | null
+    reason: string | null
+    created_by: string
+  },
+): Promise<ExceptionRow[]> {
+  let del = supabase.from('court_schedule_exceptions').delete().eq('club_id', clubId).in('date', dates)
+  del = courtId ? del.eq('court_id', courtId) : del.is('court_id', null)
+  const { error: delErr } = await del
+  if (delErr) throw delErr
+
+  const { data, error } = await supabase
+    .from('court_schedule_exceptions')
+    .insert(dates.map((date) => ({ club_id: clubId, court_id: courtId, date, ...fields })))
+    .select(EXCEPTION_COLUMNS)
+    .order('date')
+  if (error) throw error
+  return (data ?? []) as ExceptionRow[]
+}
+
+export async function deleteException(id: string): Promise<void> {
+  const { error } = await supabase.from('court_schedule_exceptions').delete().eq('id', id)
+  if (error) throw error
+}
+
+export interface PriceRuleRow {
+  id: string
+  court_id: string
+  name: string
+  days_of_week: number[]
+  start_time: string
+  end_time: string
+  price_per_hour: number
+  priority: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function listPriceRules(courtId: string): Promise<PriceRuleRow[]> {
+  const { data, error } = await supabase
+    .from('court_price_rules')
+    .select('id, court_id, name, days_of_week, start_time, end_time, price_per_hour, priority, is_active, created_at, updated_at')
+    .eq('court_id', courtId)
+    .order('priority', { ascending: false })
+    .order('start_time')
+    .order('created_at')
+  if (error) throw error
+  return ((data ?? []) as PriceRuleRow[]).map((r) => ({ ...r, price_per_hour: Number(r.price_per_hour) }))
+}
+
+/** Atomic delete + insert through `replace_court_price_rules` (service_role only). */
+export async function replacePriceRules(
+  courtId: string,
+  rows: Array<{
+    name: string
+    days_of_week: number[]
+    start_time: string
+    end_time: string
+    price_per_hour: number
+    priority: number
+    is_active: boolean
+  }>,
+): Promise<void> {
+  const { error } = await supabase.rpc('replace_court_price_rules', { p_court_id: courtId, p_rows: rows })
+  if (error) throw error
+}
+
+/** Pending or confirmed reservations of a court (or of the whole club) starting in [from, to). */
+export async function countOpenReservations(
+  clubId: string,
+  courtId: string | null,
+  range: { from?: string; to?: string },
+): Promise<number> {
+  let query = supabase
+    .from('court_reservations')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId)
+    .in('status', ['pending', 'confirmed'])
+  if (courtId) query = query.eq('court_id', courtId)
+  if (range.from) query = query.gte('start_time', range.from)
+  if (range.to) query = query.lt('start_time', range.to)
+  const { count, error } = await query
+  if (error) throw error
+  return count ?? 0
+}
