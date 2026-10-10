@@ -1,7 +1,14 @@
 // Pure rendering of the transactional emails (Spanish). No I/O: `render` takes
 // everything it needs, so it can be checked with a script and reused anywhere.
 
-export const MAIL_TEMPLATES = ['application_received', 'changes_requested', 'approved', 'rejected'] as const
+export const MAIL_TEMPLATES = [
+  'application_received',
+  'changes_requested',
+  'approved',
+  'rejected',
+  'suspended',
+  'reinstated',
+] as const
 export type MailTemplate = (typeof MAIL_TEMPLATES)[number]
 
 export interface TemplateData {
@@ -10,7 +17,7 @@ export interface TemplateData {
   recipientName?: string | null
   /** URL of the club panel (the caller resolves it from `CLUB_PANEL_URL`). */
   panelUrl: string
-  /** Reviewer notes (`changes_requested`) or reason (`rejected`). */
+  /** Reviewer notes (`changes_requested`), reason (`rejected`, `suspended`) or optional note (`reinstated`). */
   note?: string | null
 }
 
@@ -98,6 +105,26 @@ function contentFor(template: MailTemplate, data: TemplateData): Content {
         paragraphs: [`Revisamos la solicitud de ${club} y, lamentablemente, no pudimos aprobarla.`],
         callout: { title: 'Motivo', body: note ?? 'No se indicó un motivo.' },
         afterCta: ['Si creés que se trata de un error o querés más información, respondé a este mail y lo vemos.'],
+      }
+    case 'suspended':
+      return {
+        subject: `${club} fue suspendido en Match Padel`,
+        heading: 'Suspendimos tu club',
+        paragraphs: [
+          `Suspendimos ${club} en Match Padel. Mientras esté suspendido los jugadores no lo ven en la app y no se pueden editar sus datos.`,
+        ],
+        callout: { title: 'Motivo', body: note ?? 'No se indicó un motivo.' },
+        afterCta: ['Si querés más información o creés que se trata de un error, respondé a este mail y lo vemos.'],
+      }
+    case 'reinstated':
+      return {
+        subject: `${club} volvió a estar activo en Match Padel`,
+        heading: 'Tu club volvió a estar activo',
+        paragraphs: [
+          `Levantamos la suspensión de ${club}. Los jugadores ya pueden volver a encontrarlo en la app y podés seguir gestionándolo desde el panel.`,
+        ],
+        ...(note ? { callout: { title: 'Nota', body: note } } : {}),
+        cta: { label: 'Ir al panel del club' },
       }
   }
 }

@@ -49,7 +49,8 @@ export async function findRecentReservations(limit: number): Promise<unknown[]> 
 
 export async function listClubs(options: {
   search?: string
-  status?: string
+  /** Restricts to these statuses (an empty list matches nothing). */
+  statuses?: string[]
   page: number
   limit: number
 }): Promise<{ data: PlatformClubRow[]; total: number }> {
@@ -59,7 +60,7 @@ export async function listClubs(options: {
     .select(CLUB_COLUMNS, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(from, to)
-  if (options.status) query = query.eq('status', options.status)
+  if (options.statuses) query = query.in('status', options.statuses)
   if (options.search) {
     query = query.or(
       `name.ilike.%${options.search}%,city.ilike.%${options.search}%,slug.ilike.%${options.search}%`,
@@ -180,4 +181,99 @@ export async function findClubNamesByIds(ids: string[]): Promise<Array<{ id: str
   const { data, error } = await supabase.from('clubs').select('id, name').in('id', ids)
   if (error) throw error
   return data ?? []
+}
+
+// ---- Card #68: application inbox -------------------------------------------
+
+export interface ApplicationRow {
+  id: string
+  name: string
+  city: string
+  legal_name: string | null
+  tax_id: string | null
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listApplications(options: {
+  search?: string
+  statuses?: string[]
+  oldestFirst: boolean
+  page: number
+  limit: number
+}): Promise<{ data: ApplicationRow[]; total: number }> {
+  const { from, to } = rangeFor(options.page, options.limit)
+  let query = supabase
+    .from('clubs')
+    .select('id, name, city, legal_name, tax_id, status, created_at, updated_at', { count: 'exact' })
+    .order('updated_at', { ascending: options.oldestFirst })
+    .order('id')
+    .range(from, to)
+  if (options.statuses) query = query.in('status', options.statuses)
+  if (options.search) {
+    const s = options.search
+    query = query.or(`name.ilike.%${s}%,city.ilike.%${s}%,legal_name.ilike.%${s}%,tax_id.ilike.%${s}%`)
+  }
+  const { data, error, count } = await query
+  if (error) throw error
+  return { data: (data ?? []) as ApplicationRow[], total: count ?? 0 }
+}
+
+export interface OwnerProfile {
+  id: string
+  first_name: string | null
+  last_name: string | null
+}
+
+/** The first-registered owner of each club (a club may have several). */
+export async function findOwnersByClubIds(clubIds: string[]): Promise<Map<string, OwnerProfile>> {
+  const owners = new Map<string, OwnerProfile>()
+  if (clubIds.length === 0) return owners
+  const { data, error } = await supabase
+    .from('club_staff')
+    .select('club_id, user_id, created_at')
+    .eq('role', 'owner')
+    .in('club_id', clubIds)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  const firstOwner = new Map<string, string>()
+  for (const row of data ?? []) {
+    if (!firstOwner.has(row.club_id as string)) firstOwner.set(row.club_id as string, row.user_id as string)
+  }
+  const profiles = await findUsersByIds([...new Set(firstOwner.values())])
+  const byId = new Map(profiles.map((p) => [p.id, p]))
+  for (const [clubId, userId] of firstOwner) {
+    const profile = byId.get(userId)
+    owners.set(clubId, { id: userId, first_name: profile?.first_name ?? null, last_name: profile?.last_name ?? null })
+  }
+  return owners
+}
+
+/** Instant of the latest transition to `pending` per club (the last submission). */
+export async function findSubmittedAtByClubIds(clubIds: string[]): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  if (clubIds.length === 0) return result
+  const { data, error } = await supabase
+    .from('club_status_history')
+    .select('club_id, created_at')
+    .eq('to_status', 'pending')
+    .in('club_id', clubIds)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  for (const row of data ?? []) {
+    if (!result.has(row.club_id as string)) result.set(row.club_id as string, row.created_at as string)
+  }
+  return result
+}
+
+export async function countDocumentsByClubIds(clubIds: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  if (clubIds.length === 0) return result
+  const { data, error } = await supabase.from('club_documents').select('club_id').in('club_id', clubIds)
+  if (error) throw error
+  for (const row of data ?? []) {
+    result.set(row.club_id as string, (result.get(row.club_id as string) ?? 0) + 1)
+  }
+  return result
 }

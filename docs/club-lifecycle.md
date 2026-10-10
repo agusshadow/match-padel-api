@@ -13,7 +13,7 @@ Every change is written to `club_status_history` (club, actor, from, to, note) a
 | `pending` | Submitted, waiting for a reviewer | No | **No** (409) | `approved`, `rejected`, `changes_requested` |
 | `changes_requested` | A reviewer asked for corrections | No | Yes | `pending` |
 | `approved` | Live | Yes (while `is_active`) | Yes | `suspended` |
-| `rejected` | Final refusal, with a reason | No | **No** (409) | none |
+| `rejected` | Refusal, with a reason | No | **No** (409) | `draft` (superadmin re-opens it) |
 | `suspended` | Taken down by the platform | No | **No** (409) | `approved` |
 
 "Visible to players" means every public read (`/clubs`, `/courts/:id/slots`, reservations and matches creation,
@@ -27,8 +27,30 @@ always read their club, whatever its state (`GET /me/access`, `/club-admin/:club
 | (none) to `draft` | Any signed-in user, becomes owner | `POST /me/clubs` | card #67 |
 | (none) to `approved` | Superadmin | `POST /platform/clubs` | card #66, status since #67 |
 | `draft` / `changes_requested` to `pending` | Club owner (or superadmin) | `POST /club-admin/:clubId/submit` | card #67 |
-| `pending` to `approved` / `rejected` / `changes_requested` | Reviewer or superadmin | review endpoints | next card |
-| `approved` to `suspended` and back | Superadmin | platform endpoint | next card |
+| `pending` to `approved` | Reviewer or superadmin | `POST /platform/applications/:clubId/approve` | card #68 |
+| `pending` to `changes_requested` | Reviewer or superadmin (note required) | `POST /platform/applications/:clubId/request-changes` | card #68 |
+| `pending` to `rejected` | Reviewer or superadmin (reason required) | `POST /platform/applications/:clubId/reject` | card #68 |
+| `rejected` to `draft` | Superadmin | `POST /platform/clubs/:clubId/reopen` | card #68 |
+| `approved` to `suspended` | Superadmin (reason required) | `POST /platform/clubs/:clubId/suspend` | card #68 |
+| `suspended` to `approved` | Superadmin | `POST /platform/clubs/:clubId/unsuspend` | card #68 |
+
+Every transition above is reachable. Each one: checks the current status (409 `CONFLICT` otherwise), updates with a
+compare-and-set on the expected status (a concurrent review gets 409 instead of overwriting), writes
+`club_status_history` (actor, from, to, note), calls `recordAudit` and fires the email, in that order.
+
+**Rejection is not final.** A rejection can come from a fixable cause (a wrong document, a typo in the tax id), and
+without a way back the owner would have to abandon the club and register a new one. A superadmin can re-open it to
+`draft` (reviewers cannot, so a reviewer's refusal is only overturned by a higher role); the owner then edits and
+submits again, and the history keeps `rejected` to `draft` to `pending`. `rejected` clubs stay read-only until then.
+
+The history of a club that goes back and forth reads, oldest first: `null` to `draft`, `draft` to `pending`,
+`pending` to `changes_requested` (reviewer note), `changes_requested` to `pending`, `pending` to `approved`.
+
+## Reviewer scope
+
+A reviewer only sees clubs in `pending` and `changes_requested` (inbox, detail, documents, `GET /platform/clubs`).
+Anything else is hidden: a club outside the scope answers 404, a status filter outside it answers 403.
+A superadmin sees every status.
 
 `PATCH /platform/clubs/:id/active` (superadmin) is independent of the status: an approved club that is not active is
 also hidden.
@@ -57,9 +79,9 @@ files are read through 10-minute signed URLs for the club owner/admin, reviewers
 ## Emails
 
 Every status change that has a template emails the club owner(s) through `notifyApplicationStatusChange`
-(`src/domains/mail/mail.service.ts`, see `docs/email.md`). Today only `submit` calls it (`pending`,
-`application_received`); the review actions must call it with `approved`, `rejected` (note = reason) and
-`changes_requested` (note = reviewer notes) after the transition succeeds. It never throws.
+(`src/domains/mail/mail.service.ts`, see `docs/email.md`) after the transition succeeded: `submit` (`pending`),
+the review actions (`approved`, `rejected` with the reason, `changes_requested` with the reviewer notes), `suspend`
+(`suspended`, reason) and `unsuspend` (`reinstated`). `reopen` (`draft`) sends nothing. It never throws.
 
 ## Notes for the release
 

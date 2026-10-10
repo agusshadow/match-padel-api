@@ -1,4 +1,6 @@
-import { AppError, ConflictError, NotFoundError, ValidationError } from '../../types/errors'
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../types/errors'
+import type { ClubStatus, PlatformRole } from '../../types/access'
+import { notifyApplicationStatusChange } from '../mail/mail.service'
 import { buildMeta, sanitizeSearch } from '../../lib/pagination'
 import { logger } from '../../lib/logger'
 import { listAuditLog, recordAudit } from '../audit/audit.service'
@@ -6,6 +8,7 @@ import * as repository from './platform.repository'
 import * as clubAdminRepository from '../club-admin/club-admin.repository'
 import type {
   CreateClubInput,
+  ListApplicationsQuery,
   ListAuditLogQuery,
   ListClubsQuery,
   ListUsersQuery,
@@ -31,9 +34,39 @@ export async function getSummary() {
   return { clubs, courts, reservations, pendingReservations, matches, users, recentReservations }
 }
 
-export async function listClubs(query: ListClubsQuery) {
+// ---- Card #68: what each platform role may see -----------------------------
+
+/** The only statuses a reviewer can see: clubs waiting for (or returned from) a review. */
+export const REVIEW_STATUSES: readonly ClubStatus[] = ['pending', 'changes_requested']
+
+/** Pure: can a caller with this platform role see a club in this status? */
+export function canSeeStatus(role: PlatformRole, status: ClubStatus): boolean {
+  return role === 'superadmin' || REVIEW_STATUSES.includes(status)
+}
+
+/**
+ * Pure: statuses to filter by for a requested filter. `undefined` means no
+ * filter (superadmin, `all`). A reviewer asking for a status outside
+ * `REVIEW_STATUSES` is refused instead of silently getting an empty list.
+ */
+export function resolveStatusFilter(role: PlatformRole, requested: ClubStatus | 'all' | undefined): ClubStatus[] | undefined {
+  if (requested === undefined || requested === 'all') {
+    return role === 'superadmin' ? undefined : [...REVIEW_STATUSES]
+  }
+  if (!canSeeStatus(role, requested)) {
+    throw new ForbiddenError('Reviewers can only see applications that are pending or have changes requested')
+  }
+  return [requested]
+}
+
+export async function listClubs(query: ListClubsQuery, role: PlatformRole) {
   const search = query.search ? sanitizeSearch(query.search) : undefined
-  const { data, total } = await repository.listClubs({ ...query, search: search || undefined })
+  const { data, total } = await repository.listClubs({
+    page: query.page,
+    limit: query.limit,
+    search: search || undefined,
+    statuses: resolveStatusFilter(role, query.status),
+  })
   return { data, meta: buildMeta(query.page, query.limit, total) }
 }
 
@@ -134,10 +167,165 @@ export async function getAuditLog(query: ListAuditLogQuery) {
 }
 
 /** Signed URL of a club's application document (reviewers and superadmins). */
-export async function getClubDocumentUrl(clubId: string, documentId: string) {
+export async function getClubDocumentUrl(clubId: string, documentId: string, role: PlatformRole) {
+  await requireVisibleClub(clubId, role)
   const doc = await clubAdminRepository.findDocumentInClub(clubId, documentId)
   if (!doc) throw new NotFoundError('Document')
   const url = await clubAdminRepository.signDocumentUrl(doc.file_path, clubAdminRepository.DOCUMENT_URL_TTL_SECONDS)
   if (!url) throw new AppError('Could not generate the document URL', 500, 'INTERNAL_ERROR')
   return { url, expiresIn: clubAdminRepository.DOCUMENT_URL_TTL_SECONDS }
+}
+
+// ---- Card #68: application inbox, detail and review actions ----------------
+
+async function requireVisibleClub(clubId: string, role: PlatformRole) {
+  const club = await clubAdminRepository.findClub(clubId)
+  // 404 (not 403) for what a reviewer must not see: it does not reveal the club exists.
+  if (!club || !canSeeStatus(role, club.status)) throw new NotFoundError('Application')
+  return club
+}
+
+function fullName(first: string | null, last: string | null): string | null {
+  const name = [first, last].filter(Boolean).join(' ').trim()
+  return name.length > 0 ? name : null
+}
+
+export async function listApplications(query: ListApplicationsQuery, role: PlatformRole) {
+  const status = query.status ?? 'pending'
+  const search = query.search ? sanitizeSearch(query.search) : undefined
+  const { data, total } = await repository.listApplications({
+    page: query.page,
+    limit: query.limit,
+    search: search || undefined,
+    statuses: resolveStatusFilter(role, status),
+    // The inbox works first-in first-out; other lists show the latest activity first.
+    oldestFirst: status === 'pending',
+  })
+
+  const ids = data.map((row) => row.id)
+  const [owners, submittedAt, documents] = await Promise.all([
+    repository.findOwnersByClubIds(ids),
+    repository.findSubmittedAtByClubIds(ids),
+    repository.countDocumentsByClubIds(ids),
+  ])
+  const emails = new Map<string, string | null>()
+  await Promise.all(
+    [...new Set([...owners.values()].map((o) => o.id))].map(async (userId) => {
+      emails.set(userId, await repository.findEmail(userId))
+    }),
+  )
+
+  const rows = data.map((club) => {
+    const owner = owners.get(club.id)
+    return {
+      id: club.id,
+      name: club.name,
+      city: club.city,
+      legal_name: club.legal_name,
+      tax_id: club.tax_id,
+      status: club.status,
+      owner: owner ? { ...owner, email: emails.get(owner.id) ?? null } : null,
+      submitted_at: submittedAt.get(club.id) ?? null,
+      documents_count: documents.get(club.id) ?? 0,
+    }
+  })
+  return { data: rows, meta: buildMeta(query.page, query.limit, total) }
+}
+
+export async function getApplication(clubId: string, role: PlatformRole) {
+  const club = await requireVisibleClub(clubId, role)
+  const [courts, documents, history, owners, submittedAt] = await Promise.all([
+    clubAdminRepository.listCourts(clubId),
+    clubAdminRepository.listDocuments(clubId),
+    clubAdminRepository.listStatusHistory(clubId),
+    repository.findOwnersByClubIds([clubId]),
+    repository.findSubmittedAtByClubIds([clubId]),
+  ])
+  const owner = owners.get(clubId)
+  const signedDocuments = await Promise.all(
+    documents.map(async (doc) => ({
+      id: doc.id,
+      kind: doc.kind,
+      file_name: doc.file_name,
+      mime_type: doc.mime_type,
+      size_bytes: doc.size_bytes,
+      uploaded_by: doc.uploaded_by,
+      created_at: doc.created_at,
+      url: await clubAdminRepository.signDocumentUrl(doc.file_path, clubAdminRepository.DOCUMENT_URL_TTL_SECONDS),
+    })),
+  )
+  return {
+    club,
+    owner: owner ? { ...owner, email: await repository.findEmail(owner.id) } : null,
+    courts,
+    documents: signedDocuments,
+    history,
+    submitted_at: submittedAt.get(clubId) ?? null,
+    documents_expires_in: clubAdminRepository.DOCUMENT_URL_TTL_SECONDS,
+  }
+}
+
+export type LifecycleAction = 'approve' | 'request_changes' | 'reject' | 'reopen' | 'suspend' | 'unsuspend'
+
+interface LifecycleTransition {
+  from: ClubStatus
+  to: ClubStatus
+  audit: string
+  /** Who may run it: `reviewer` means reviewer or superadmin. Enforced by the router. */
+  role: PlatformRole
+}
+
+/** The platform-driven part of the club lifecycle (docs/club-lifecycle.md). Pure data. */
+export const LIFECYCLE_TRANSITIONS: Record<LifecycleAction, LifecycleTransition> = {
+  approve: { from: 'pending', to: 'approved', audit: 'club.approved', role: 'reviewer' },
+  request_changes: { from: 'pending', to: 'changes_requested', audit: 'club.changes_requested', role: 'reviewer' },
+  reject: { from: 'pending', to: 'rejected', audit: 'club.rejected', role: 'reviewer' },
+  reopen: { from: 'rejected', to: 'draft', audit: 'club.reopened', role: 'superadmin' },
+  suspend: { from: 'approved', to: 'suspended', audit: 'club.suspended', role: 'superadmin' },
+  unsuspend: { from: 'suspended', to: 'approved', audit: 'club.unsuspended', role: 'superadmin' },
+}
+
+export async function applyLifecycleAction(
+  action: LifecycleAction,
+  clubId: string,
+  actorId: string,
+  role: PlatformRole,
+  note: string | null,
+) {
+  const transition = LIFECYCLE_TRANSITIONS[action]
+  if (transition.role === 'superadmin' && role !== 'superadmin') {
+    throw new ForbiddenError('You do not have permission to perform this action')
+  }
+
+  const club = await requireVisibleClub(clubId, role)
+  if (club.status !== transition.from) {
+    throw new ConflictError(`A club in status ${club.status} cannot be moved to ${transition.to}`)
+  }
+
+  // Compare-and-set on the expected status: a concurrent review makes this 409 instead of overwriting it.
+  const updated = await clubAdminRepository.transitionStatus(clubId, [transition.from], transition.to)
+  if (!updated) throw new ConflictError('The application status changed, reload and try again')
+
+  try {
+    await clubAdminRepository.insertStatusHistory({
+      clubId,
+      actorId,
+      fromStatus: transition.from,
+      toStatus: transition.to,
+      note,
+    })
+  } catch (err) {
+    logger.error({ err, clubId, to: transition.to }, '[platform] failed to record status history')
+  }
+  await recordAudit({
+    actorId,
+    clubId,
+    action: transition.audit,
+    entity: 'club',
+    entityId: clubId,
+    metadata: { from: transition.from, to: transition.to, note },
+  })
+  // Fire-and-forget: the mail never delays nor fails the review (it never throws).
+  void notifyApplicationStatusChange({ clubId, fromStatus: transition.from, toStatus: transition.to, note })
+  return updated
 }
