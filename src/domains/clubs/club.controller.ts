@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { findAll, findById, findCourts } from './club.repository'
-import { getClubAvailability } from './club.service'
+import { getClubAvailability, getClubPaymentsEnabled } from './club.service'
 import { NotFoundError } from '../../types/errors'
 
 const GetClubsQuerySchema = z.object({
@@ -79,9 +79,13 @@ export async function getClubAvailabilityHandler(
   try {
     const { clubId } = req.params
     const { date } = GetClubAvailabilityQuerySchema.parse(req.query)
-    const slots = await getClubAvailability(clubId, date)
+    const [slots, payments_enabled] = await Promise.all([
+      getClubAvailability(clubId, date),
+      getClubPaymentsEnabled(clubId),
+    ])
 
-    res.json({ success: true, data: slots })
+    // Card #75: `data` stays the slots array; the flag travels in `meta`.
+    res.json({ success: true, data: slots, meta: { payments_enabled } })
   } catch (err) {
     next(err)
   }

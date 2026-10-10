@@ -50,6 +50,8 @@ router.get('/documents/:id/url', ownerOrAdmin, controller.getDocumentUrl)
 router.use('/team', teamRouter)
 // Card #74: Mercado Pago account of the club. Owner only (each route has its own check).
 router.use('/mercadopago', mercadoPagoRouter)
+// Card #75: the club's own payments with fee and net, owner only (no commission editing here).
+router.get('/payments', ownerOnly, controller.listPayments)
 router.get('/', anyStaff, controller.getClub)
 router.patch('/', ownerOrAdmin, controller.updateClub)
 

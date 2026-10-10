@@ -421,3 +421,10 @@ export async function expirePendingReservations(olderThanMinutes: number): Promi
   if (error) throw error
   return (data ?? []).map((r) => r.id as string)
 }
+
+/** Card #75: the club of a court (null if the court does not exist). */
+export async function findClubIdOfCourt(courtId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('courts').select('club_id').eq('id', courtId).maybeSingle()
+  if (error) throw error
+  return (data?.club_id as string | undefined) ?? null
+}

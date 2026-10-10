@@ -63,6 +63,7 @@ The migration backfills every `users.role = 'super_admin'` as `superadmin`. A cl
 | See the team (members and open invitations) (card #72) | `GET /team` | Y | Y | - | - | Y |
 | Invite, resend, revoke an invitation; change a member's role; remove a member (card #72) | `POST /team/invitations`, `POST /team/invitations/:id/resend`, `DELETE /team/invitations/:id`, `PATCH`, `DELETE /team/members/:userId` | Y | - | - | - | Y |
 | Mercado Pago account of the club: status, start the link, disconnect (card #74) | `GET /mercadopago`, `POST /mercadopago/connect`, `DELETE /mercadopago` | Y | - | - | - | Y |
+| The club's own payments with fee and net (card #75; read only, the commission is the platform's) | `GET /payments` | Y | - | - | - | Y |
 
 Reception (`staff`) only sees, moves and cancels existing reservations (calendar, list, move, cancel) and reads schedules, prices and blocks: it never creates reservations, changes prices or schedules, confirms/completes reservations, or touches the team. The Administrador manages courts, schedules, prices, calendar, reservations, blocks and tournaments but not the team nor (future) the Mercado Pago account; both are owner-only. The team routes enforce this with `requireClubRole(['owner'])` for writes and `['owner', 'admin']` for the read. Every route in `club-admin.router.ts` was checked against this table in card #72; the only deviation found (Reception could confirm/complete reservations through `PATCH /reservations/:id`) is fixed in `updateReservationStatus`.
 
@@ -84,6 +85,8 @@ A caller with no membership in `:clubId` (including an owner of a different club
 | Activate / deactivate a club | `PATCH /clubs/:id/active` | - | Y |
 | List users | `GET /users` | - | Y |
 | Audit log | `GET /audit-log` | - | Y |
+| Set a club's commission and collection mode (card #75) | `PATCH /clubs/:clubId/commission`, `PATCH /clubs/:clubId/collection-mode` | - | Y |
+| List every payment with fee, net and totals (card #75) | `GET /payments` | - | Y |
 | Gamification catalogs: list, read, create, edit, activate / deactivate achievements, challenges and cosmetics; upload catalog images (card #78) | `/catalogs/{achievements,challenges,cosmetics}[/:id[/activate\|/deactivate]]`, `POST /catalogs/assets` | - | Y |
 
 ### Any signed-in user
@@ -99,7 +102,7 @@ new owner with `POST /auth/register`, then `POST /me/clubs`. Only the owner of t
 
 Every write above calls `recordAudit` (`src/domains/audit/audit.service.ts`) after it succeeds: actor, club, `action`
 (`club.created`, `club.updated`, `club.activated`, `club.deactivated`, `reservation.status_changed`), entity and a
-`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. Card #78 adds `catalog.{achievement,challenge,cosmetic}_{created,updated,activated,deactivated}` (entity `achievement` / `challenge` / `cosmetic`; metadata `{ code, before, after }`) and `catalog.asset_uploaded`. Card #74 adds `club.mp_connected` (entity `club_mp_account`; metadata `{ mp_user_id, live_mode, expires_at, relinked, previous_mp_user_id }`, never a token) and `club.mp_disconnected` (`{ mp_user_id, status }`); the automatic renewal is not audited (it is logged without secrets). Card #72 adds `team.invitation_created`, `team.invitation_resent`, `team.invitation_revoked`, `team.invitation_accepted` (entity `club_invitation`, `before`/`after` status and role; never the token) and `team.member_role_changed`, `team.member_removed` (entity `club_staff`, `before`/`after` role, `user_id`). A failure to write the audit entry is logged and never fails the operation.
+`metadata` payload with the change. Card #68 adds `club.approved`, `club.changes_requested`, `club.rejected`, `club.reopened`, `club.suspended` and `club.unsuspended` (metadata `{ from, to, note }`). Card #67 adds `club.submitted`, `court.created`, `court.updated`, `court.deleted`, `club.document_uploaded` and `club.document_deleted` (and `club.created` also comes from `POST /me/clubs`). Card #70 adds `court.schedule_replaced`, `court.price_rules_replaced`, `schedule_exception.created` and `schedule_exception.deleted`. Card #71 adds `reservation.moved` (`from`/`to` court and times), `reservation.cancelled_by_club` (`from`, `to`, `reason`, `via`, `match_id`, `refund`; also written when the status PATCH cancels), `court_block.created` and `court_block.deleted`. Card #78 adds `catalog.{achievement,challenge,cosmetic}_{created,updated,activated,deactivated}` (entity `achievement` / `challenge` / `cosmetic`; metadata `{ code, before, after }`) and `catalog.asset_uploaded`. Card #74 adds `club.mp_connected` (entity `club_mp_account`; metadata `{ mp_user_id, live_mode, expires_at, relinked, previous_mp_user_id }`, never a token) and `club.mp_disconnected` (`{ mp_user_id, status }`); the automatic renewal is not audited (it is logged without secrets). Card #75 adds `club.commission_changed` and `club.collection_mode_changed` (entity `club`; metadata `{ before, after }` with the single changed field). Card #72 adds `team.invitation_created`, `team.invitation_resent`, `team.invitation_revoked`, `team.invitation_accepted` (entity `club_invitation`, `before`/`after` status and role; never the token) and `team.member_role_changed`, `team.member_removed` (entity `club_staff`, `before`/`after` role, `user_id`). A failure to write the audit entry is logged and never fails the operation.
 `audit_log` has RLS enabled with no policies, so only the API can read or write it.
 
 ## Database side (RLS)
@@ -143,3 +146,11 @@ encryption key is only in the API's environment. The public `GET /api/v1/mercado
 unauthenticated by nature (a browser redirect from Mercado Pago); it is protected by the single-use, 10-minute `state`
 (bound to the club and the owner who started the link), re-checks that this user is still the club owner and that the
 club is still approved, and is rate limited (20/min per IP).
+
+Card #75 (migration `20261010162613_club_charges_commission`): `clubs` gains `commission_percent` and `collection_mode`
+(readable like the rest of the club row: the `clubs_public_read` policy exposes them with the row, see
+`docs/mercadopago.md`, "Known exposure"); `payments` gains `club_id`, `seller_mp_user_id`, `commission_percent`,
+`marketplace_fee`, `net_amount` and `collected_via`. New policy `payments_club_read`: members of the payment's club
+(`is_club_member`, which includes platform superadmins) can read its rows from the browser, in addition to the payer
+(`payments_own_read`); nobody writes from the client (no write policy, as before). `payment_totals` is executable by
+`service_role` only. Both listing endpoints are API-only and owner/superadmin-only regardless of that policy.

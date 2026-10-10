@@ -25,6 +25,10 @@ router.post('/applications/:clubId/reject', reviewerOrAbove, controller.rejectAp
 router.post('/clubs/:clubId/reopen', superadminOnly, controller.reopenClub)
 router.post('/clubs/:clubId/suspend', superadminOnly, controller.suspendClub)
 router.post('/clubs/:clubId/unsuspend', superadminOnly, controller.unsuspendClub)
+// Card #75: commission, collection mode and payments, superadmin only.
+router.patch('/clubs/:clubId/commission', superadminOnly, controller.setClubCommission)
+router.patch('/clubs/:clubId/collection-mode', superadminOnly, controller.setClubCollectionMode)
+router.get('/payments', superadminOnly, controller.listPayments)
 router.get('/users', superadminOnly, controller.listUsers)
 router.get('/audit-log', superadminOnly, controller.getAuditLog)
 

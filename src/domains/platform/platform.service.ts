@@ -6,6 +6,8 @@ import { logger } from '../../lib/logger'
 import { listAuditLog, recordAudit } from '../audit/audit.service'
 import * as repository from './platform.repository'
 import * as clubAdminRepository from '../club-admin/club-admin.repository'
+import * as paymentRepository from '../payments/payment.repository'
+import { findMpConnected } from '../payments/payment-admin.service'
 import type {
   CreateClubInput,
   ListApplicationsQuery,
@@ -67,7 +69,21 @@ export async function listClubs(query: ListClubsQuery, role: PlatformRole) {
     search: search || undefined,
     statuses: resolveStatusFilter(role, query.status),
   })
-  return { data, meta: buildMeta(query.page, query.limit, total) }
+  // Card #75: commission and collection mode are the superadmin's; a reviewer never sees them.
+  if (role !== 'superadmin') return { data, meta: buildMeta(query.page, query.limit, total) }
+  const ids = data.map((club) => club.id)
+  const [charging, connected] = await Promise.all([
+    paymentRepository.findClubChargingRows(ids),
+    findMpConnected(ids),
+  ])
+  const chargingById = new Map(charging.map((c) => [c.id, c]))
+  const rows = data.map((club) => ({
+    ...club,
+    commission_percent: chargingById.get(club.id)?.commission_percent ?? 0,
+    collection_mode: chargingById.get(club.id)?.collection_mode ?? 'platform_account',
+    mp_connected: connected.get(club.id) ?? false,
+  }))
+  return { data: rows, meta: buildMeta(query.page, query.limit, total) }
 }
 
 export async function createClub(actorId: string, input: CreateClubInput) {
@@ -242,6 +258,22 @@ export async function getApplication(clubId: string, role: PlatformRole) {
     repository.findSubmittedAtByClubIds([clubId]),
   ])
   const owner = owners.get(clubId)
+  // Card #75: commission, collection mode and link state only for the superadmin.
+  let clubWithCharging: typeof club & {
+    commission_percent?: number
+    collection_mode?: string
+    mp_connected?: boolean
+  } = club
+  if (role === 'superadmin') {
+    const [chargingRow] = await paymentRepository.findClubChargingRows([clubId])
+    const connected = await findMpConnected([clubId])
+    clubWithCharging = {
+      ...club,
+      commission_percent: chargingRow?.commission_percent ?? 0,
+      collection_mode: chargingRow?.collection_mode ?? 'platform_account',
+      mp_connected: connected.get(clubId) ?? false,
+    }
+  }
   const signedDocuments = await Promise.all(
     documents.map(async (doc) => ({
       id: doc.id,
@@ -255,7 +287,7 @@ export async function getApplication(clubId: string, role: PlatformRole) {
     })),
   )
   return {
-    club,
+    club: clubWithCharging,
     owner: owner ? { ...owner, email: await repository.findEmail(owner.id) } : null,
     courts,
     documents: signedDocuments,

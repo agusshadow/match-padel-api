@@ -9,8 +9,7 @@ client), `src/lib/secret-box.ts` (AES-256-GCM) and `src/jobs/refresh-mp-tokens.j
 > in this card was run against Mercado Pago (no credentials were available). Card #73 (the sandbox spike) verifies it.
 > The points most likely to need adjustment are listed under "Unverified assumptions".
 
-The existing charging flows (`payments` domain) still use the global `MP_ACCESS_TOKEN`; card #75 switches them to the
-club's token through `getClubAccessToken`.
+Card #75 (charging, commission and webhooks per seller) builds on it: see "Charging" below.
 
 ## Flow
 
@@ -88,6 +87,114 @@ missing (or the key is not exactly 32 bytes of base64), the three club endpoints
 3. Ends within 5 minutes: renews on demand, **single-flight per club** (concurrent callers share one MP call within a
    process). If that renewal fails but the token is still valid it returns the current token.
 4. Otherwise returns the decrypted access token. Unreadable stored value: 500 `MP_TOKEN_UNREADABLE`.
+
+## Charging with a commission per club (card #75)
+
+Code: `src/domains/payments/charging.core.ts` (pure logic, collaborators injected), `payment.service.ts` (wiring,
+preferences, webhook, refunds), `payment.repository.ts`, `payment-admin.service.ts` (commission / mode / listings),
+`src/lib/mercadopago.ts` (`createMpChargeClient(token)`: preference, get payment, refund; HTTP injectable).
+
+### Model
+
+| Where | Column | Meaning |
+|---|---|---|
+| `clubs` | `collection_mode` | `platform_account`: charges go to the platform's token with no fee (what every existing club does; **all existing clubs were backfilled to it**). `club_account`: charges go to the club's own linked account and carry the commission. **Default for new clubs: `club_account`.** |
+| `clubs` | `commission_percent` | 0..100, 2 decimals. **Default 0 on purpose**: the superadmin sets each club's rate (`PATCH /platform/clubs/:clubId/commission`); nobody pays a commission nobody chose. |
+| `payments` | `club_id` | Club of the charge (backfilled from the reservation). |
+| `payments` | `collected_via` | `platform` or `club`: which account collected it. Default `platform` (so rows written by the previous API, which only ever used the platform token, are correct). |
+| `payments` | `seller_mp_user_id` | Seller's Mercado Pago user: the linked account at charge time, then the payment's `collector_id` from the webhook. |
+| `payments` | `commission_percent`, `marketplace_fee`, `net_amount` | Rate and amounts frozen at charge time. `net_amount = amount - marketplace_fee`, **before Mercado Pago's own processing fee**. The webhook replaces the fee with the `application_fee` Mercado Pago reports when it reports one. |
+
+### Seller resolution (`resolveSeller`)
+
+Given the club of a charge:
+
+1. `platform_account` (or amount 0, or no club): platform token (`MP_ACCESS_TOKEN`), no `marketplace_fee`, plain
+   `notification_url`: exactly the pre-card behaviour. `collected_via = 'platform'`.
+2. `club_account`: `getClubAccessToken(clubId)`. `MP_ACCOUNT_NOT_CONNECTED`, `MP_ACCOUNT_EXPIRED` and
+   `MP_NOT_CONFIGURED` become **409 `CLUB_PAYMENTS_NOT_ENABLED`** for the player (friendly Spanish message,
+   `details.reason` = the underlying code). The club panel keeps seeing the specific `MP_*` codes on its own
+   `/club-admin/:clubId/mercadopago` endpoints. `MP_TOKEN_UNREADABLE` stays a 500 (a server fault).
+   The preference is created with a client built from THAT token:
+   `marketplace_fee = round(amount x commission_percent / 100, 2)` (half up, computed in integer cents; clamped to the
+   amount; **omitted when it is 0**), `notification_url = ${API_URL}/api/v1/payments/webhook?club_id=<uuid>`,
+   `external_reference = payments.id` as always.
+3. **Internal-currency purchases always use the platform token**, no fee and no `club_id`.
+
+The seller is resolved before the `payments` row is inserted, so a club that cannot charge leaves nothing behind.
+
+### Webhook
+
+Same endpoint, signature verification and idempotency (`payments.mp_event_id`) unchanged.
+
+1. `club_id` query param: validated as a uuid by the controller (`malformed` otherwise). Absent means platform-collected.
+2. The payment is fetched with the seller token: the club's (`getClubAccessToken`) or the platform's.
+3. The row found by `external_reference` must agree: club notification needs `payments.club_id = club_id` and
+   `collected_via = 'club'`; a notification with no `club_id` needs `collected_via = 'platform'`. If the payment's
+   `collector_id` and the row's `seller_mp_user_id` are both known and differ, it is ignored too.
+4. Any malformed, unknown, mismatched or unfetchable club: **200, a `warn` log (no token, no body) and no state
+   change.** The query alone is never trusted.
+5. Amount check unchanged. On the update it records `seller_mp_user_id` (`collector_id`) and, for club payments,
+   `marketplace_fee` / `net_amount`.
+
+### Refunds
+
+`refundPayment(paymentId, amount?)` and `refundAllApprovedPayments` use the token of the account that collected the
+payment: `collected_via = 'club'` -> `getClubAccessToken(club_id)`; `platform` or null -> the platform token. If the club
+token cannot be obtained (expired link) the refund returns `false` (logged, payment left `approved`), which the
+callers already treat as "needs a manual refund". Full refund: `POST /v1/payments/{id}/refunds` without body, payment
+becomes `refunded`. **Optional `amount`** (for card #76; not used by any flow yet): same endpoint with `{ amount }`,
+payment stays `approved` and the refund is appended to `metadata.partial_refunds`; an amount of 0 or above the payment
+is a 400, an amount equal to the payment is a full refund.
+
+### Enforcement
+
+For a `club_account` club WITHOUT a connected, non-expired link (or with the OAuth variables missing):
+- club availability and court slots answer `meta.payments_enabled = false`;
+- `POST /reservations` and `POST /matches` with a total above 0 answer 409 `CLUB_PAYMENTS_NOT_ENABLED`;
+- a preference for an older pending reservation answers the same.
+Free (0) flows and `platform_account` clubs are unaffected. `payments_enabled` never decrypts a token (it reads the
+link's status and `expires_at`).
+
+Tournament registration fees (`tournaments.entry_fee`) have **no payment flow in the API yet**, so there is nothing to
+charge for them in this card; card #79/F4 will create it on top of `resolveSeller`.
+
+### Known exposure
+
+`clubs` has table-level `select` for `anon`/`authenticated` and a public read policy for approved, active clubs, so
+`commission_percent` and `collection_mode` are readable through PostgREST by anyone, like every other column of that
+row (`docs/permissions.md`). The API never returns them to players. Hiding them needs a private table or column
+privileges (a change to every direct `select *` of the clubs row), left for a follow-up.
+
+### What the human must configure (card #75)
+
+1. Nothing new in the environment. `API_URL` must be the public URL of the API (it builds `notification_url`) and
+   `MP_WEBHOOK_SECRET` must be the secret of the Marketplace application's webhook configuration, which also
+   receives notifications of the sellers' payments.
+2. In the Mercado Pago application: webhooks (Payments topic) configured for the app, with the same URL
+   (`/api/v1/payments/webhook`) and secret.
+3. The superadmin sets each club's `commission_percent` and, when a club is ready, `collection_mode`
+   (`PATCH /platform/clubs/:clubId/...`). Clubs created before the migration stay in `platform_account`.
+4. The migration `20261010162613_club_charges_commission` reaches production with the next release, before the
+   release PR is merged; it is additive and the API in production keeps working with it.
+
+### Unverified assumptions of the charging flow (card #73 sandbox spike)
+
+- `marketplace_fee` in the preference body is an amount in the transaction currency, accepted by Checkout Pro when the
+  preference is created with the seller's token (and a 0 fee is omitted rather than sent).
+- That the platform's own application (the Marketplace app) can create preferences with a seller's OAuth token and that
+  the fee is credited to the application's owner account.
+- `notification_url` with an existing query string: that Mercado Pago appends `data.id` / `type` with `&` and keeps
+  `club_id`; and that `x-signature` verification of seller payments uses the same webhook secret
+  (`MP_WEBHOOK_SECRET`), with `data.id` unchanged.
+- The payment fields used: `collector_id` as the seller's user id, `fee_details[].type = 'application_fee'` as the
+  marketplace fee, `transaction_amount` as the gross amount (not reduced by the fee).
+- That a payment of a seller can only be read with that seller's token (and 404/401 with another), which is what makes the
+  club check meaningful.
+- Partial refund: `POST /v1/payments/{id}/refunds` with `{ amount }`; that refunds are made with the seller's token; that
+  refund of a marketplace payment does or does not return the fee (open question of the scope document).
+- Whether a `x-idempotency-key` is needed on refunds (the existing flow never sent one).
+- A club-account preference's `back_urls` and `auto_return` behave as for the platform account.
 
 ## Unverified assumptions (check in the card #73 spike)
 

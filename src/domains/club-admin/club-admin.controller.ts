@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
 import type { AuthenticatedRequest } from '../../middleware/auth'
 import * as service from './club-admin.service'
+import { listClubPayments } from '../payments/payment-admin.service'
+import { clubPaymentsQuerySchema } from '../payments/payment.validator'
 import { ValidationError } from '../../types/errors'
 import {
   blockParamsSchema,
@@ -352,6 +354,18 @@ export async function deleteBlock(req: Request, res: Response, next: NextFunctio
     const { clubId, id } = blockParamsSchema.parse(req.params)
     const { userId } = req as AuthenticatedRequest
     res.json({ success: true, data: await service.deleteBlock(clubId, id, userId) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// GET /club-admin/:clubId/payments (card #75, owner only)
+export async function listPayments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const query = clubPaymentsQuerySchema.parse(req.query)
+    const { data, meta } = await listClubPayments(clubId, query)
+    res.json({ success: true, data, meta })
   } catch (err) {
     next(err)
   }
