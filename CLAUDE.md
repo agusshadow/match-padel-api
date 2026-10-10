@@ -221,6 +221,7 @@ Supporting skills: `new-domain`, `db-migration`, `pr-format`, `release`, `trello
 
 - `docs/endpoints.md` — every endpoint that is actually mounted today (method, path, auth, controller), unmounted stubs and known gaps. **Read it before planning.**
 - `docs/mercadopago.md` — the club's Mercado Pago link: flow, env vars, storage, renewal, token provider, what the human must configure (card #74); charging with commission, webhooks per seller, refunds and enforcement (card #75).
+- `docs/mp-sandbox-spike.md` — runbook, findings template and helper script (`scripts/mp-sandbox-spike.ts`, `npm run typecheck:scripts`, not part of the build) for the human-run Mercado Pago sandbox spike (card #73).
 - `docs/refund-policy.md` — refund policy per club within platform limits: rule, engine, endpoints, pending refunds, what changed (card #76).
 - `docs/tournaments.md` — tournaments managed by the club: lifecycle, fixture algorithms for the four formats, results and corrections, standings tie-breakers, registration payment and refunds (card #77).
 - `docs/architecture.md`, `docs/conventions.md`, `docs/implementing.md`, `docs/api-patterns.md` — target architecture and how-tos. Anything not built yet is marked "target — not implemented yet".

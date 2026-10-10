@@ -5,3 +5,6 @@ dist
 *.log
 coverage
 .DS_Store
+
+# Mercado Pago sandbox spike (card #73): local OAuth tokens of the test sellers. Never commit.
+.mp-spike.local.json

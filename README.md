@@ -66,6 +66,7 @@ Everything under `docs/` is written for humans and agents alike, in English.
 
 - [`CLAUDE.md`](./CLAUDE.md) — working contract: stack, architecture rules, real state vs. target, workflow.
 - [`docs/endpoints.md`](./docs/endpoints.md) — every endpoint mounted today.
+- [`docs/mercadopago.md`](./docs/mercadopago.md) — each club's Mercado Pago account, charging with commission, refunds; [`docs/mp-sandbox-spike.md`](./docs/mp-sandbox-spike.md) — runbook and findings template to validate it in the Mercado Pago sandbox (card #73, helper `scripts/mp-sandbox-spike.ts`).
 - [`docs/architecture.md`](./docs/architecture.md), [`docs/conventions.md`](./docs/conventions.md), [`docs/implementing.md`](./docs/implementing.md), [`docs/api-patterns.md`](./docs/api-patterns.md) — target architecture and how-tos.
 - [`supabase/migrations/`](./supabase/migrations) — the versioned history of the database and the source of truth: the 35 migrations recorded in production (24/09 to 30/09/2026, exact versions, names and SQL) plus every change since. Applying them to an empty project reproduces production; the `Migrations` GitHub workflow checks that on every PR.
 - [`docs/schema.sql`](./docs/schema.sql) — a human-readable view of the schema, derived from the migrations (they win if they disagree).
