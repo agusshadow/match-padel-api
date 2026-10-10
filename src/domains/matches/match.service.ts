@@ -7,6 +7,8 @@ import {
   findApprovedPayment,
   findApprovedPaymentsForReservation,
   creditLateCancellationCurrency,
+  refundAllApprovedPayments,
+  type RefundSummary,
 } from '../payments/payment.service'
 import * as courtRepository from '../courts/court.repository'
 import { localDateOf, quoteRangeOrThrow } from '../courts/schedule.service'
@@ -63,6 +65,11 @@ export const matchService = {
     }
     if (!court.is_active) {
       throw new ValidationError('This court is not available for reservations')
+    }
+
+    // Card #71: a court blocked by the club cannot host a match.
+    if (await reservationRepository.hasBlockOverlap(data.court_id, data.start_time, data.end_time)) {
+      throw new AppError('This court is blocked for the requested time', 409, 'COURT_BLOCKED')
     }
 
     const overlap = await reservationRepository.hasOverlap(
@@ -250,6 +257,17 @@ export const matchService = {
     }
 
     return cancelledMatch
+  },
+
+  // Card #71: the club cancelled the reservation the match is played on. Unlike
+  // `cancelMatch` (creator, 24h window) every player who paid gets the full
+  // amount back and nobody is penalized. The caller already set the
+  // reservation to cancelled and notifies the players; this refunds and closes
+  // the match so no orphan stays `waiting`/`in_progress` on a dead reservation.
+  async cancelByClub(matchId: string, reservationId: string): Promise<RefundSummary> {
+    const refund = await refundAllApprovedPayments(reservationId)
+    await matchRepository.cancel(matchId)
+    return refund
   },
 
   // Card #57 (new): a player leaves their own spot instead of the creator

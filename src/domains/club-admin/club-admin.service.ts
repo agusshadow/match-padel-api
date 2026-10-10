@@ -8,8 +8,12 @@ import { notifyApplicationStatusChange } from '../mail/mail.service'
 import * as repository from './club-admin.repository'
 import type { ReservationStatus } from './club-admin.repository'
 import * as courtRepository from '../courts/court.repository'
+import * as reservationRepository from '../reservations/reservation.repository'
+import { cancelReservationByClub, notifyReservationMoved } from '../reservations/reservation.service'
 import {
   addDays,
+  openWindows,
+  quoteRangeOrThrow,
   findAmbiguousRules,
   localDateOf,
   normalizeTime,
@@ -19,6 +23,11 @@ import {
   localInstant,
 } from '../courts/schedule.service'
 import type {
+  CalendarQuery,
+  CancelReservationInput,
+  CreateBlocksInput,
+  ListBlocksQuery,
+  MoveReservationInput,
   CreateCourtInput,
   CreateExceptionInput,
   CreateMyClubInput,
@@ -163,6 +172,12 @@ export async function updateReservationStatus(
     throw new ConflictError(`A ${reservation.status} reservation cannot be changed to ${status}`)
   }
 
+  // Card #71: cancelling goes through the same logic as POST .../cancel
+  // (full refund, match cancelled with it, players notified).
+  if (status === 'cancelled') {
+    return cancelClubReservation(clubId, reservation, actorId, null, 'status_patch')
+  }
+
   await repository.updateReservationStatus(reservationId, status)
   await recordAudit({
     actorId,
@@ -174,6 +189,361 @@ export async function updateReservationStatus(
   })
 
   return { ...reservation, status }
+}
+
+async function cancelClubReservation(
+  clubId: string,
+  reservation: repository.ClubReservationRow,
+  actorId: string,
+  reason: string | null,
+  via: 'cancel_endpoint' | 'status_patch',
+) {
+  const result = await cancelReservationByClub(reservation.id, { reason })
+  await recordAudit({
+    actorId,
+    clubId,
+    action: 'reservation.cancelled_by_club',
+    entity: 'court_reservation',
+    entityId: reservation.id,
+    metadata: {
+      from: result.previous_status,
+      to: 'cancelled',
+      reason,
+      via,
+      match_id: result.match?.id ?? null,
+      refund: result.refund,
+    },
+  })
+  return { ...reservation, status: 'cancelled' as const, refund: result.refund, match: result.match }
+}
+
+/** POST /reservations/:id/cancel. Reception can cancel existing reservations. */
+export async function cancelReservation(
+  clubId: string,
+  reservationId: string,
+  actorId: string,
+  input: CancelReservationInput,
+) {
+  const reservation = await repository.findReservationInClub(clubId, reservationId)
+  if (!reservation) throw new NotFoundError('Reservation')
+  return cancelClubReservation(clubId, reservation, actorId, input.reason ?? null, 'cancel_endpoint')
+}
+
+/**
+ * PATCH /reservations/:id/move. Reception can move existing reservations (it
+ * can never create one). The price stays as it was charged and the status is
+ * unchanged; the duration must stay the same so the price still matches the
+ * time reserved (and the match's 4-way split stays valid).
+ */
+export async function moveReservation(
+  clubId: string,
+  reservationId: string,
+  actorId: string,
+  input: MoveReservationInput,
+) {
+  const reservation = await repository.findReservationInClub(clubId, reservationId)
+  if (!reservation) throw new NotFoundError('Reservation')
+
+  if (reservation.status !== 'pending' && reservation.status !== 'confirmed') {
+    throw new AppError(`A ${reservation.status} reservation cannot be moved`, 409, 'CANNOT_MOVE')
+  }
+
+  const now = new Date()
+  const start = new Date(input.start_time)
+  const end = new Date(input.end_time)
+  if (new Date(reservation.end_time) <= now) {
+    throw new AppError('A reservation that already ended cannot be moved', 409, 'CANNOT_MOVE')
+  }
+  if (start <= now) {
+    throw new AppError('start_time must be in the future', 400, 'VALIDATION_ERROR')
+  }
+  const originalMs = new Date(reservation.end_time).getTime() - new Date(reservation.start_time).getTime()
+  if (end.getTime() - start.getTime() !== originalMs) {
+    throw new AppError(
+      'The new time must have the same duration as the reservation',
+      400,
+      'VALIDATION_ERROR',
+      { duration_minutes: originalMs / 60_000 },
+    )
+  }
+
+  const targetCourtId = input.court_id ?? reservation.court_id
+  const sameCourt = targetCourtId === reservation.court_id
+  const unchanged =
+    sameCourt &&
+    start.getTime() === new Date(reservation.start_time).getTime() &&
+    end.getTime() === new Date(reservation.end_time).getTime()
+  if (unchanged) return reservation
+
+  const club = await requireClub(clubId)
+  const court = await requireCourt(clubId, targetCourtId)
+  if (!court.is_active) {
+    throw new AppError('The target court is not active', 409, 'COURT_INACTIVE')
+  }
+
+  // Whole slots of the target court's effective schedule (exceptions included).
+  const context = await courtRepository.loadScheduleContext({
+    courtId: court.id,
+    clubId,
+    basePricePerHour: court.price_per_hour,
+    clubSettings: { opening_hours: club.opening_hours },
+    fromDate: localDateOf(start),
+    toDate: localDateOf(new Date(end.getTime() - 1)),
+  })
+  quoteRangeOrThrow(context, input.start_time, input.end_time)
+
+  if (await reservationRepository.hasBlockOverlap(court.id, input.start_time, input.end_time)) {
+    throw new AppError('The target court is blocked for that time', 409, 'COURT_BLOCKED')
+  }
+  if (await reservationRepository.hasOverlap(court.id, input.start_time, input.end_time, reservationId)) {
+    throw new AppError('The target time overlaps another reservation', 409, 'SLOT_TAKEN')
+  }
+
+  const moved = await reservationRepository.moveReservation(reservationId, {
+    courtId: court.id,
+    startTime: input.start_time,
+    endTime: input.end_time,
+  })
+  if (!moved) throw new AppError('This reservation can no longer be moved', 409, 'CANNOT_MOVE')
+
+  const from = {
+    court_id: reservation.court_id,
+    start_time: new Date(reservation.start_time).toISOString(),
+    end_time: new Date(reservation.end_time).toISOString(),
+  }
+  const to = { court_id: court.id, start_time: start.toISOString(), end_time: end.toISOString() }
+
+  await recordAudit({
+    actorId,
+    clubId,
+    action: 'reservation.moved',
+    entity: 'court_reservation',
+    entityId: reservationId,
+    metadata: { from, to, status: reservation.status },
+  })
+  void notifyReservationMoved({
+    reservationId,
+    bookerId: reservation.user_id,
+    courtName: court.name,
+    from,
+    to,
+  })
+
+  const updated = await repository.findReservationInClub(clubId, reservationId)
+  if (!updated) throw new NotFoundError('Reservation')
+  return updated
+}
+
+// ---- Card #71: calendar ------------------------------------------------------
+
+export interface PaymentSummary {
+  /** `unpaid`: nothing approved; `partial`: less than the total (a match not fully paid); `paid`; `refunded`: only refunded payments. */
+  status: 'unpaid' | 'partial' | 'paid' | 'refunded'
+  paid_amount: number
+}
+
+/** Pure: how much of a reservation's price is paid, from its approved/refunded payment rows. */
+export function summarizePayment(
+  totalPrice: number,
+  payments: Array<{ status: string; amount: number }>,
+): PaymentSummary {
+  const paidCents = payments
+    .filter((p) => p.status === 'approved')
+    .reduce((acc, p) => acc + Math.round(p.amount * 100), 0)
+  if (paidCents === 0) {
+    return { status: payments.some((p) => p.status === 'refunded') ? 'refunded' : 'unpaid', paid_amount: 0 }
+  }
+  // 4 equal shares of a price that does not divide evenly can fall a cent short.
+  const status = paidCents >= Math.round(totalPrice * 100) - 3 ? 'paid' : 'partial'
+  return { status, paid_amount: paidCents / 100 }
+}
+
+function toBlockView(row: repository.BlockRow) {
+  return {
+    id: row.id,
+    club_id: row.club_id,
+    court_id: row.court_id,
+    start_time: new Date(row.start_time).toISOString(),
+    end_time: new Date(row.end_time).toISOString(),
+    reason: row.reason,
+    created_by: row.created_by,
+    created_at: row.created_at,
+  }
+}
+
+export async function getCalendar(clubId: string, query: CalendarQuery) {
+  const club = await requireClub(clubId)
+  const from = new Date(query.from)
+  const to = new Date(query.to)
+  const fromIso = from.toISOString()
+  const toIso = to.toISOString()
+
+  const allCourts = await repository.listCourts(clubId)
+  const wanted = query.courtId ?? query.court_id
+  const courts = wanted ? allCourts.filter((c) => c.id === wanted) : allCourts
+  if (wanted && courts.length === 0) throw new NotFoundError('Court')
+  const courtIds = courts.map((c) => c.id)
+
+  const dates: string[] = []
+  const lastDate = localDateOf(new Date(to.getTime() - 1))
+  for (let d = localDateOf(from); d <= lastDate; d = addDays(d, 1)) dates.push(d)
+
+  const [contexts, reservations, blocks] = await Promise.all([
+    courtRepository.loadScheduleContextsForCourts({
+      clubId,
+      clubSettings: { opening_hours: club.opening_hours },
+      courts: courts.map((c) => ({ id: c.id, price_per_hour: c.price_per_hour })),
+      fromDate: dates[0],
+      toDate: dates[dates.length - 1],
+    }),
+    repository.listCalendarReservations(clubId, courtIds, { from: fromIso, to: toIso }),
+    repository.listBlocks(clubId, { courtIds, from: fromIso, to: toIso, limit: 1000 }),
+  ])
+
+  const reservationIds = reservations.map((r) => r.id)
+  const [payments, matches] = await Promise.all([
+    repository.listPaymentsForReservations(reservationIds),
+    repository.listMatchesForReservations(reservationIds),
+  ])
+  const matchByReservation = new Map(matches.map((m) => [m.reservation_id, m]))
+
+  return {
+    from: fromIso,
+    to: toIso,
+    timezone: 'America/Argentina/Buenos_Aires',
+    courts: courts.map((court) => {
+      const context = contexts.get(court.id)
+      return {
+        court: {
+          id: court.id,
+          name: court.name,
+          surface: court.surface,
+          is_indoor: court.is_indoor,
+          is_active: court.is_active,
+        },
+        days: dates.map((date) => {
+          const day = resolveDay(context!, date)
+          return {
+            date: day.date,
+            day_of_week: day.day_of_week,
+            closed: day.closed,
+            closed_reason: day.closed_reason,
+            source: day.source,
+            open_hours: openWindows(day),
+          }
+        }),
+        reservations: reservations
+          .filter((r) => r.court_id === court.id)
+          .map((r) => {
+            const match = matchByReservation.get(r.id) ?? null
+            const total = Number(r.total_price)
+            return {
+              id: r.id,
+              status: r.status,
+              start_time: new Date(r.start_time).toISOString(),
+              end_time: new Date(r.end_time).toISOString(),
+              user: r.user
+                ? { id: r.user.id, first_name: r.user.first_name, last_name: r.user.last_name, username: r.user.username }
+                : null,
+              total_price: total,
+              payment: summarizePayment(total, payments.filter((p) => p.reservation_id === r.id)),
+              match: match
+                ? { id: match.id, type: match.type, is_ranked: match.is_ranked, status: match.status }
+                : null,
+              players_count: match ? match.players_count : null,
+            }
+          }),
+        blocks: blocks.filter((b) => b.court_id === court.id).map(toBlockView),
+      }
+    }),
+  }
+}
+
+// ---- Card #71: blocks ----------------------------------------------------------
+
+export async function listBlocks(clubId: string, query: ListBlocksQuery) {
+  await requireClub(clubId)
+  const rows = await repository.listBlocks(clubId, {
+    courtIds: query.court_id ? [query.court_id] : undefined,
+    from: query.from ?? new Date().toISOString(),
+    to: query.to,
+  })
+  return rows.map(toBlockView)
+}
+
+export async function createBlocks(clubId: string, actorId: string, input: CreateBlocksInput) {
+  await requireEditableClub(clubId)
+  if (new Date(input.end_time) <= new Date()) {
+    throw new AppError('A block must end in the future', 400, 'VALIDATION_ERROR')
+  }
+  const courts = await repository.listCourts(clubId)
+  const known = new Set(courts.map((c) => c.id))
+  if (input.court_ids.some((id) => !known.has(id))) throw new NotFoundError('Court')
+
+  let result: repository.CreateBlocksResult
+  try {
+    result = await repository.createBlocks({
+      clubId,
+      courtIds: input.court_ids,
+      startTime: input.start_time,
+      endTime: input.end_time,
+      reason: input.reason ?? null,
+      createdBy: actorId,
+    })
+  } catch (err) {
+    if (errorCode(err) === '23P01') {
+      throw new AppError('The block overlaps another block', 409, 'BLOCK_CONFLICTS', { conflicts: [] })
+    }
+    if (err instanceof Error && 'message' in err && String((err as Error).message).includes('COURT_NOT_IN_CLUB')) {
+      throw new NotFoundError('Court')
+    }
+    throw err
+  }
+
+  if (result.conflicts.length > 0) {
+    throw new AppError(
+      'The block overlaps existing reservations or blocks; move or cancel them first',
+      409,
+      'BLOCK_CONFLICTS',
+      { conflicts: result.conflicts },
+    )
+  }
+
+  await recordAudit({
+    actorId,
+    clubId,
+    action: 'court_block.created',
+    entity: 'court_block',
+    entityId: result.blocks[0]?.id ?? null,
+    metadata: {
+      block_ids: result.blocks.map((b) => b.id),
+      court_ids: input.court_ids,
+      start_time: input.start_time,
+      end_time: input.end_time,
+      reason: input.reason ?? null,
+    },
+  })
+  return { blocks: result.blocks.map(toBlockView) }
+}
+
+export async function deleteBlock(clubId: string, id: string, actorId: string) {
+  const block = await repository.findBlockInClub(clubId, id)
+  if (!block) throw new NotFoundError('Block')
+  await repository.deleteBlock(id)
+  await recordAudit({
+    actorId,
+    clubId,
+    action: 'court_block.deleted',
+    entity: 'court_block',
+    entityId: id,
+    metadata: {
+      court_id: block.court_id,
+      start_time: block.start_time,
+      end_time: block.end_time,
+      reason: block.reason,
+    },
+  })
+  return { id }
 }
 
 export async function listMatches(clubId: string, options: { page: number; limit: number }) {

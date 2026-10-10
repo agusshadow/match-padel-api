@@ -97,6 +97,59 @@ export const notifications = {
     })
   },
 
+  // Card #71: the club cancelled a reservation (or the match played on it).
+  // `refunded` tells the player whether money is being returned.
+  reservationCancelledByClub(
+    userIds: string[],
+    input: { reservationId: string; matchId: string | null; when: string; courtName: string; reason: string | null; refunded: boolean },
+  ) {
+    const reason = input.reason ? ` Motivo: ${input.reason}.` : ''
+    const refund = input.refunded ? ' Se te reembolsa el importe pagado.' : ''
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'reservation_cancelled' as NotificationType,
+        title: 'Reserva cancelada por el club',
+        body: `El club canceló la reserva del ${input.when} en ${input.courtName}.${reason}${refund}`,
+        data: {
+          reservation_id: input.reservationId,
+          match_id: input.matchId,
+          cancelled_by: 'club',
+          reason: input.reason,
+          refunded: input.refunded,
+        },
+      })),
+    )
+  },
+
+  // Card #71: the club moved a reservation to another court and/or time.
+  reservationMoved(
+    userIds: string[],
+    input: {
+      reservationId: string
+      matchId: string | null
+      courtName: string
+      from: { when: string; court_id: string; start_time: string; end_time: string }
+      to: { when: string; court_id: string; start_time: string; end_time: string }
+    },
+  ) {
+    return notificationRepository.createBulk(
+      userIds.map((userId) => ({
+        user_id: userId,
+        type: 'system' as NotificationType,
+        title: 'Tu reserva fue reprogramada',
+        body: `El club movió tu reserva del ${input.from.when} al ${input.to.when} en ${input.courtName}.`,
+        data: {
+          kind: 'reservation_moved',
+          reservation_id: input.reservationId,
+          match_id: input.matchId,
+          from: input.from,
+          to: input.to,
+        },
+      })),
+    )
+  },
+
   // Card #23 (R14): a partner used to be registered into a tournament team
   // without ever being told.
   tournamentTeamRegistered(partnerId: string, tournamentId: string, teamName: string | null) {

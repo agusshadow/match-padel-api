@@ -567,3 +567,35 @@ export async function findApprovedPaymentsForReservation(reservationId: string) 
   if (error) throw error
   return data ?? []
 }
+
+export interface RefundSummary {
+  /** Approved payments the reservation had. */
+  payments: number
+  refunded: number
+  /** Payment ids whose refund MercadoPago did not accept: still `approved`, to be handled by hand. */
+  failed: string[]
+  /** Sum of the refunded payments, ARS. */
+  amount_refunded: number
+}
+
+// Card #71: club-initiated cancellations return everything that was paid, to
+// every payer (a match has up to four), regardless of how close the start is.
+export async function refundAllApprovedPayments(reservationId: string): Promise<RefundSummary> {
+  const approved = await findApprovedPaymentsForReservation(reservationId)
+  const summary: RefundSummary = { payments: approved.length, refunded: 0, failed: [], amount_refunded: 0 }
+  let cents = 0
+  for (const payment of approved) {
+    const ok = await refundPayment(payment.id).catch((err) => {
+      logger.error(err, `Failed to refund payment ${payment.id} on club cancellation`)
+      return false
+    })
+    if (ok) {
+      summary.refunded += 1
+      cents += Math.round(Number(payment.amount) * 100)
+    } else {
+      summary.failed.push(payment.id)
+    }
+  }
+  summary.amount_refunded = cents / 100
+  return summary
+}

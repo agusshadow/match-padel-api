@@ -3,6 +3,12 @@ import type { AuthenticatedRequest } from '../../middleware/auth'
 import * as service from './club-admin.service'
 import { ValidationError } from '../../types/errors'
 import {
+  blockParamsSchema,
+  calendarQuerySchema,
+  cancelReservationSchema,
+  createBlocksSchema,
+  listBlocksQuerySchema,
+  moveReservationSchema,
   clubParamsSchema,
   courtScheduleParamsSchema,
   createExceptionSchema,
@@ -281,6 +287,71 @@ export async function previewCourtDay(req: Request, res: Response, next: NextFun
     const { clubId, courtId } = courtScheduleParamsSchema.parse(req.params)
     const { date } = previewQuerySchema.parse(req.query)
     res.json({ success: true, data: await service.previewCourtDay(clubId, courtId, date) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// ---- Card #71: calendar, move, cancel and blocks ----------------------------
+
+export async function getCalendar(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const query = calendarQuerySchema.parse(req.query)
+    res.json({ success: true, data: await service.getCalendar(clubId, query) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function moveReservation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, id } = reservationParamsSchema.parse(req.params)
+    const input = moveReservationSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.moveReservation(clubId, id, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function cancelReservation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, id } = reservationParamsSchema.parse(req.params)
+    const input = cancelReservationSchema.parse(req.body ?? {})
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.cancelReservation(clubId, id, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function listBlocks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const query = listBlocksQuerySchema.parse(req.query)
+    res.json({ success: true, data: await service.listBlocks(clubId, query) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function createBlocks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId } = clubParamsSchema.parse(req.params)
+    const input = createBlocksSchema.parse(req.body)
+    const { userId } = req as AuthenticatedRequest
+    res.status(201).json({ success: true, data: await service.createBlocks(clubId, userId, input) })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function deleteBlock(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, id } = blockParamsSchema.parse(req.params)
+    const { userId } = req as AuthenticatedRequest
+    res.json({ success: true, data: await service.deleteBlock(clubId, id, userId) })
   } catch (err) {
     next(err)
   }

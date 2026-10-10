@@ -1,6 +1,7 @@
 import { supabase } from '../../lib/supabase'
 import type { CreateReservationRequest } from './reservation.validator'
-import { loadPublicScheduleContext } from '../courts/court.repository'
+import { findBlocksOverlapping, loadPublicScheduleContext } from '../courts/court.repository'
+import { AppError } from '../../types/errors'
 import { resolveDay } from '../courts/schedule.service'
 
 export interface ReservationWithJoins {
@@ -39,6 +40,11 @@ export interface TimeSlot {
   price_per_hour: number
   /** Total for the slot, 2 decimals. */
   price: number
+  /**
+   * Card #71: why `available` is false. `blocked` = the club blocked the court
+   * for that time (the block's own reason is never exposed to players).
+   */
+  unavailable_reason: 'past' | 'booked' | 'blocked' | null
 }
 
 export interface FindByUserOptions {
@@ -129,6 +135,7 @@ export async function findAvailableSlots(courtId: string, date: string): Promise
     available: true,
     price_per_hour: s.price_per_hour,
     price: s.price,
+    unavailable_reason: null,
   }))
 
   // Reservations overlapping the offered window (slots can run up to midnight,
@@ -150,6 +157,11 @@ export async function findAvailableSlots(courtId: string, date: string): Promise
     start: new Date(r.start_time as string).getTime(),
     end: new Date(r.end_time as string).getTime(),
   }))
+  // Card #71: blocks created by the club make the slot unavailable too.
+  const blocks = (await findBlocksOverlapping(courtId, windowStart, windowEnd)).map((b) => ({
+    start: new Date(b.start_time).getTime(),
+    end: new Date(b.end_time).getTime(),
+  }))
   const now = Date.now()
 
   for (const slot of slots) {
@@ -159,12 +171,20 @@ export async function findAvailableSlots(courtId: string, date: string): Promise
     // Past slots are also unavailable
     if (start <= now) {
       slot.available = false
+      slot.unavailable_reason = 'past'
+      continue
+    }
+
+    if (blocks.some((b) => start < b.end && end > b.start)) {
+      slot.available = false
+      slot.unavailable_reason = 'blocked'
       continue
     }
 
     // Overlap check: slot starts before res ends AND slot ends after res starts
     if (reservations.some((res) => start < res.end && end > res.start)) {
       slot.available = false
+      slot.unavailable_reason = 'booked'
     }
   }
 
@@ -202,7 +222,13 @@ export async function create(data: CreateReservationData): Promise<ReservationWi
     )
     .single()
 
-  if (error) throw error
+  if (error) {
+    // Card #71: net for the race between a booking and a block (trigger raises COURT_BLOCKED).
+    if (error.message?.includes('COURT_BLOCKED')) {
+      throw new AppError('This court is blocked for the requested time', 409, 'COURT_BLOCKED')
+    }
+    throw error
+  }
 
   return reservation as unknown as ReservationWithJoins
 }
@@ -274,16 +300,82 @@ export async function hasOverlap(
   courtId: string,
   startTime: string,
   endTime: string,
+  excludeReservationId?: string,
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('court_reservations')
     .select('id')
     .eq('court_id', courtId)
     .in('status', ['pending', 'confirmed'])
     .lt('start_time', endTime)
     .gt('end_time', startTime)
+  // Card #71: moving a reservation must not collide with itself.
+  if (excludeReservationId) query = query.neq('id', excludeReservationId)
 
+  const { data, error } = await query
   if (error) throw error
+  return (data ?? []).length > 0
+}
+
+/** Card #71: true when the club blocked the court for any part of [startTime, endTime). */
+export async function hasBlockOverlap(courtId: string, startTime: string, endTime: string): Promise<boolean> {
+  return (await findBlocksOverlapping(courtId, startTime, endTime)).length > 0
+}
+
+/**
+ * Card #71: sets a pending/confirmed reservation to cancelled, compare-and-set
+ * on the status so two concurrent cancellations never both proceed (and never
+ * both refund). Returns the previous status, or null when it was no longer open.
+ */
+export async function cancelIfOpen(id: string): Promise<'pending' | 'confirmed' | null> {
+  const { data: current, error: readErr } = await supabase
+    .from('court_reservations')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle()
+  if (readErr) throw readErr
+  if (!current || !['pending', 'confirmed'].includes(current.status as string)) return null
+
+  const { data, error } = await supabase
+    .from('court_reservations')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('status', current.status)
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length > 0 ? (current.status as 'pending' | 'confirmed') : null
+}
+
+/**
+ * Card #71: moves a pending/confirmed reservation to another court and/or time.
+ * The price and the status are untouched. Returns false when the reservation
+ * is no longer open. Maps the database nets to 409s: another reservation
+ * (`no_overlap`) and a block (`COURT_BLOCKED`).
+ */
+export async function moveReservation(
+  id: string,
+  target: { courtId: string; startTime: string; endTime: string },
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('court_reservations')
+    .update({
+      court_id: target.courtId,
+      start_time: target.startTime,
+      end_time: target.endTime,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .in('status', ['pending', 'confirmed'])
+    .select('id')
+  if (error) {
+    if (error.code === '23P01') {
+      throw new AppError('This time slot is no longer available', 409, 'SLOT_TAKEN')
+    }
+    if (error.message?.includes('COURT_BLOCKED')) {
+      throw new AppError('This court is blocked for the requested time', 409, 'COURT_BLOCKED')
+    }
+    throw error
+  }
   return (data ?? []).length > 0
 }
 

@@ -104,6 +104,18 @@ export const matchRepository = {
     return data
   },
 
+  // Card #71: the match (if any) played on a reservation.
+  async findByReservationId(reservationId: string) {
+    const { data, error } = await supabase
+      .from('matches')
+      .select('id, type, is_ranked, status, club_id, created_by')
+      .eq('reservation_id', reservationId)
+      .maybeSingle()
+
+    if (error) throw error
+    return data
+  },
+
   async findByLobbyUrl(lobbyUrl: string) {
     const { data, error } = await supabase
       .from('matches')

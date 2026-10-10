@@ -234,3 +234,84 @@ export type ReplacePriceRulesInput = z.infer<typeof replacePriceRulesSchema>
 
 export const previewQuerySchema = z.object({ date: dateSchema })
 export type PreviewQuery = z.infer<typeof previewQuerySchema>
+
+// ---- Card #71: calendar, blocks, move and cancel ----------------------------
+
+const isoInstantSchema = z.string().datetime({ offset: true, message: 'must be an ISO 8601 instant, e.g. 2026-10-12T00:00:00-03:00' })
+
+export const MAX_CALENDAR_DAYS = 14
+const MS_PER_DAY = 86_400_000
+
+export const calendarQuerySchema = z
+  .object({
+    from: isoInstantSchema,
+    to: isoInstantSchema,
+    /** `courtId` as in the card; `court_id` is accepted like the other club-admin queries. */
+    courtId: z.string().uuid().optional(),
+    court_id: z.string().uuid().optional(),
+  })
+  .superRefine((v, ctx) => {
+    const from = new Date(v.from).getTime()
+    const to = new Date(v.to).getTime()
+    if (to <= from) {
+      ctx.addIssue({ code: 'custom', path: ['to'], message: 'to must be after from' })
+    } else if (to - from > MAX_CALENDAR_DAYS * MS_PER_DAY) {
+      ctx.addIssue({ code: 'custom', path: ['to'], message: `The range can be at most ${MAX_CALENDAR_DAYS} days` })
+    }
+  })
+export type CalendarQuery = z.infer<typeof calendarQuerySchema>
+
+export const moveReservationSchema = z
+  .object({
+    /** Omitted = same court. */
+    court_id: z.string().uuid().optional(),
+    start_time: isoInstantSchema,
+    end_time: isoInstantSchema,
+  })
+  .strict()
+  .refine((v) => new Date(v.end_time).getTime() > new Date(v.start_time).getTime(), {
+    message: 'end_time must be after start_time',
+    path: ['end_time'],
+  })
+export type MoveReservationInput = z.infer<typeof moveReservationSchema>
+
+export const cancelReservationSchema = z
+  .object({ reason: z.string().trim().max(300).nullable().optional() })
+  .strict()
+export type CancelReservationInput = z.infer<typeof cancelReservationSchema>
+
+export const MAX_BLOCK_DAYS = 365
+
+export const createBlocksSchema = z
+  .object({
+    court_ids: z.array(z.string().uuid()).min(1).max(50),
+    start_time: isoInstantSchema,
+    end_time: isoInstantSchema,
+    reason: z.string().trim().max(200).nullable().optional(),
+  })
+  .strict()
+  .superRefine((v, ctx) => {
+    const start = new Date(v.start_time).getTime()
+    const end = new Date(v.end_time).getTime()
+    if (end <= start) {
+      ctx.addIssue({ code: 'custom', path: ['end_time'], message: 'end_time must be after start_time' })
+    } else if (end - start > MAX_BLOCK_DAYS * MS_PER_DAY) {
+      ctx.addIssue({ code: 'custom', path: ['end_time'], message: `A block can last at most ${MAX_BLOCK_DAYS} days` })
+    }
+    if (new Set(v.court_ids).size !== v.court_ids.length) {
+      ctx.addIssue({ code: 'custom', path: ['court_ids'], message: 'court_ids must not repeat a court' })
+    }
+  })
+export type CreateBlocksInput = z.infer<typeof createBlocksSchema>
+
+export const listBlocksQuerySchema = z.object({
+  from: isoInstantSchema.optional(),
+  to: isoInstantSchema.optional(),
+  court_id: z.string().uuid().optional(),
+})
+export type ListBlocksQuery = z.infer<typeof listBlocksQuerySchema>
+
+export const blockParamsSchema = z.object({
+  clubId: z.string().uuid(),
+  id: z.string().uuid(),
+})

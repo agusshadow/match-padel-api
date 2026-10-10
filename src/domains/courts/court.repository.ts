@@ -131,3 +131,79 @@ export async function loadScheduleContextForCourt(input: {
     toDate: input.toDate,
   })
 }
+
+// ---- Card #71: calendar and blocks --------------------------------------------
+
+/**
+ * Same data as `loadScheduleContext` for several courts of one club with three
+ * queries in total (the calendar shows every court of a club at once).
+ */
+export async function loadScheduleContextsForCourts(input: {
+  clubId: string
+  clubSettings: unknown
+  courts: Array<{ id: string; price_per_hour: number }>
+  fromDate: string
+  toDate: string
+}): Promise<Map<string, ScheduleContext>> {
+  const result = new Map<string, ScheduleContext>()
+  if (input.courts.length === 0) return result
+  const ids = input.courts.map((c) => c.id)
+
+  const [weekly, exceptions, rules] = await Promise.all([
+    supabase
+      .from('court_schedules')
+      .select('court_id, day_of_week, open_time, close_time, slot_minutes')
+      .in('court_id', ids)
+      .eq('is_active', true),
+    supabase
+      .from('court_schedule_exceptions')
+      .select('court_id, date, closed, open_time, close_time, slot_minutes, reason')
+      .eq('club_id', input.clubId)
+      .gte('date', input.fromDate)
+      .lte('date', input.toDate),
+    supabase
+      .from('court_price_rules')
+      .select('court_id, id, name, days_of_week, start_time, end_time, price_per_hour, priority, is_active')
+      .in('court_id', ids)
+      .eq('is_active', true),
+  ])
+  if (weekly.error) throw weekly.error
+  if (exceptions.error) throw exceptions.error
+  if (rules.error) throw rules.error
+
+  const clubHours = openingHoursFrom(input.clubSettings)
+  for (const court of input.courts) {
+    result.set(court.id, {
+      court_id: court.id,
+      base_price_per_hour: Number(court.price_per_hour),
+      weekly: (weekly.data ?? []).filter((w) => w.court_id === court.id) as unknown as WeeklyInterval[],
+      exceptions: (exceptions.data ?? []).filter(
+        (e) => e.court_id === null || e.court_id === court.id,
+      ) as unknown as ScheduleException[],
+      price_rules: (rules.data ?? [])
+        .filter((r) => r.court_id === court.id)
+        .map((r) => ({ ...(r as unknown as PriceRule), price_per_hour: Number(r.price_per_hour) })),
+      club_hours: clubHours,
+    })
+  }
+  return result
+}
+
+export interface BlockWindow {
+  id: string
+  court_id: string
+  start_time: string
+  end_time: string
+}
+
+/** Blocks of a court that overlap [start, end). Used by availability and by booking/move checks. */
+export async function findBlocksOverlapping(courtId: string, start: string, end: string): Promise<BlockWindow[]> {
+  const { data, error } = await supabase
+    .from('court_blocks')
+    .select('id, court_id, start_time, end_time')
+    .eq('court_id', courtId)
+    .lt('start_time', end)
+    .gt('end_time', start)
+  if (error) throw error
+  return (data ?? []) as BlockWindow[]
+}
