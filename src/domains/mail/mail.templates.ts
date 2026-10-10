@@ -8,6 +8,7 @@ export const MAIL_TEMPLATES = [
   'rejected',
   'suspended',
   'reinstated',
+  'team_invitation',
 ] as const
 export type MailTemplate = (typeof MAIL_TEMPLATES)[number]
 
@@ -19,6 +20,12 @@ export interface TemplateData {
   panelUrl: string
   /** Reviewer notes (`changes_requested`), reason (`rejected`, `suspended`) or optional note (`reinstated`). */
   note?: string | null
+  /** `team_invitation`: UI label of the invited role (Administrador / Recepción). */
+  roleLabel?: string | null
+  /** `team_invitation`: name of the person who invited. */
+  inviterName?: string | null
+  /** `team_invitation`: days until the link expires. */
+  expiresInDays?: number | null
 }
 
 export interface RenderedMail {
@@ -126,6 +133,24 @@ function contentFor(template: MailTemplate, data: TemplateData): Content {
         ...(note ? { callout: { title: 'Nota', body: note } } : {}),
         cta: { label: 'Ir al panel del club' },
       }
+    case 'team_invitation': {
+      const role = singleLine(data.roleLabel ?? '') || 'Recepción'
+      const inviter = singleLine(data.inviterName ?? '')
+      const days = data.expiresInDays && data.expiresInDays > 0 ? Math.floor(data.expiresInDays) : 7
+      return {
+        subject: inviter ? `${inviter} te invitó a ${club} en ${BRAND}` : `Te invitaron a ${club} en ${BRAND}`,
+        heading: 'Te invitaron a sumarte a un club',
+        paragraphs: [
+          `${inviter || 'El dueño del club'} te invitó a formar parte del equipo de ${club} en ${BRAND}.`,
+          'Para aceptar, entrá con el mismo email al que llegó esta invitación: si todavía no tenés cuenta, creala desde el link y confirmá tu email.',
+        ],
+        callout: { title: 'Tu rol', body: role },
+        cta: { label: 'Aceptar la invitación' },
+        afterCta: [
+          `La invitación vence en ${days} días. Si no esperabas este mail, podés ignorarlo: no se crea ningún acceso hasta que la aceptes.`,
+        ],
+      }
+    }
   }
 }
 

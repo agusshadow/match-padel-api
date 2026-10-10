@@ -20,6 +20,7 @@ import marketplaceRouter from './domains/marketplace/marketplace.router'
 import accessRouter from './domains/access/access.router'
 import clubAdminRouter from './domains/club-admin/club-admin.router'
 import platformRouter from './domains/platform/platform.router'
+import { invitationsRouter } from './domains/team/team.router'
 import { expireReservationsJob } from './jobs/expire-reservations.job'
 import { autoCancelUnfilledMatchesJob } from './jobs/auto-cancel-unfilled-matches.job'
 import { assignAndExpireChallengesJob } from './jobs/assign-and-expire-challenges.job'
@@ -78,6 +79,7 @@ v1.use('/marketplace', marketplaceRouter)
 v1.use('/me', accessRouter)
 v1.use('/club-admin/:clubId', clubAdminRouter)
 v1.use('/platform', platformRouter)
+v1.use('/invitations', invitationsRouter)
 
 app.use('/api/v1', v1)
 

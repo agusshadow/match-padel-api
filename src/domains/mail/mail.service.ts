@@ -217,3 +217,55 @@ export async function notifyApplicationStatusChange(input: NotifyApplicationStat
     logger.error({ err, clubId: input.clubId, toStatus: input.toStatus }, '[mail] failed to notify status change')
   }
 }
+
+// ---- Card #72: club team invitations ----------------------------------------
+
+export type InvitationRole = 'admin' | 'staff'
+
+export function roleLabel(role: InvitationRole): string {
+  return role === 'admin' ? 'Administrador' : 'Recepción'
+}
+
+/** Accept link of the panel. The raw token appears here and nowhere else. */
+export function buildInvitationUrl(panelUrl: string, token: string, clubId: string): string {
+  const base = panelUrl.replace(/\/+$/, '')
+  return `${base}/invite?token=${encodeURIComponent(token)}&club=${encodeURIComponent(clubId)}`
+}
+
+export interface NotifyTeamInvitationInput {
+  clubId: string
+  to: string
+  role: InvitationRole
+  inviterName?: string | null
+  /** Raw invitation token (never logged, never stored by the mail module). */
+  token: string
+  expiresInDays?: number
+}
+
+/**
+ * Emails the invitation link. Never throws; resolves `true` only when the
+ * provider accepted the email (`sent`), so callers can report `email_sent`.
+ * `log` mode and a missing key resolve `false` (nothing left the server).
+ */
+export async function notifyTeamInvitation(input: NotifyTeamInvitationInput): Promise<boolean> {
+  try {
+    const clubName = await repository.findClubName(input.clubId)
+    const { clubPanelUrl } = getMailConfig()
+    const result = await sendMail({
+      to: input.to,
+      template: 'team_invitation',
+      clubId: input.clubId,
+      data: {
+        clubName: clubName ?? '',
+        panelUrl: buildInvitationUrl(clubPanelUrl, input.token, input.clubId),
+        roleLabel: roleLabel(input.role),
+        inviterName: input.inviterName ?? null,
+        expiresInDays: input.expiresInDays ?? null,
+      },
+    })
+    return result.status === 'sent'
+  } catch (err) {
+    logger.error({ clubId: input.clubId, err: describeError(err) }, '[mail] failed to send team invitation')
+    return false
+  }
+}
