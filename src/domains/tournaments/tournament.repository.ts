@@ -39,7 +39,7 @@ export const tournamentRepository = {
         `
         id, name, description, format, status, max_teams, entry_fee, prize_pool,
         start_date, end_date, created_at,
-        club:clubs(name, city),
+        club:clubs!inner(name, city),
         creator:users!tournaments_created_by_fkey(username, full_name),
         tournament_teams(id)
       `,
@@ -48,6 +48,8 @@ export const tournamentRepository = {
       .order('start_date', { ascending: true })
       .range(from, to)
 
+    // Card #67: tournaments of clubs that are not approved are not public.
+    q = q.eq('club.status', 'approved').eq('club.is_active', true)
     if (status) q = q.eq('status', status)
 
     const { data, error, count } = await q
@@ -69,7 +71,7 @@ export const tournamentRepository = {
         `
         id, name, description, format, status, max_teams, entry_fee, prize_pool, rules,
         start_date, end_date, created_at, updated_at, created_by,
-        club:clubs(id, name, city, address),
+        club:clubs!inner(id, name, city, address),
         creator:users!tournaments_created_by_fkey(id, username, full_name),
         tournament_teams(
           id, name, registered_at,
@@ -85,6 +87,8 @@ export const tournamentRepository = {
       `,
       )
       .eq('id', id)
+      .eq('club.status', 'approved') // card #67
+      .eq('club.is_active', true)
       .single()
 
     if (error) {

@@ -1,4 +1,4 @@
-import type { AccessContext, ClubRole, PlatformRole, StaffRole } from '../../types/access'
+import type { AccessContext, ClubRole, ClubStatus, PlatformRole, StaffRole } from '../../types/access'
 import * as accessRepository from './access.repository'
 
 // ---- Pure authorization decisions (no I/O, unit-testable) ------------------
@@ -39,7 +39,14 @@ export async function loadAccess(userId: string): Promise<AccessContext> {
 export interface MyAccess {
   user: { id: string; email: string | null; first_name: string | null; last_name: string | null }
   platformRole: PlatformRole | null
-  clubs: Array<{ clubId: string; name: string; slug: string; isActive: boolean; role: ClubRole }>
+  clubs: Array<{
+    clubId: string
+    name: string
+    slug: string
+    isActive: boolean
+    status: ClubStatus
+    role: ClubRole
+  }>
 }
 
 export async function getMyAccess(access: AccessContext): Promise<MyAccess> {
@@ -66,6 +73,7 @@ export async function getMyAccess(access: AccessContext): Promise<MyAccess> {
       name: club.name,
       slug: club.slug,
       isActive: club.is_active,
+      status: club.status as ClubStatus,
       role: resolveClubRole(access, club.id) as ClubRole,
     })),
   }

@@ -51,8 +51,10 @@ export async function validateAndCreateReservation(
   // 4. Verify court exists and is active
   const { data: court, error: courtErr } = await supabase
     .from('courts')
-    .select('id, club_id, price_per_hour, is_active')
+    .select('id, club_id, price_per_hour, is_active, club:clubs!inner(status, is_active)')
     .eq('id', data.court_id)
+    .eq('club.status', 'approved') // card #67: only courts of approved, active clubs are bookable
+    .eq('club.is_active', true)
     .single()
 
   if (courtErr || !court) {

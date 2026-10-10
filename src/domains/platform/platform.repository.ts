@@ -13,12 +13,15 @@ export interface PlatformClubRow {
   email: string | null
   logo_url: string | null
   is_active: boolean
+  status: string
+  legal_name: string | null
+  tax_id: string | null
   created_at: string
   updated_at: string
 }
 
 const CLUB_COLUMNS =
-  'id, name, slug, description, address, city, phone, email, logo_url, is_active, created_at, updated_at'
+  'id, name, slug, description, address, city, phone, email, logo_url, is_active, status, legal_name, tax_id, created_at, updated_at'
 
 type CountableTable = 'clubs' | 'courts' | 'court_reservations' | 'matches' | 'users'
 
@@ -46,6 +49,7 @@ export async function findRecentReservations(limit: number): Promise<unknown[]> 
 
 export async function listClubs(options: {
   search?: string
+  status?: string
   page: number
   limit: number
 }): Promise<{ data: PlatformClubRow[]; total: number }> {
@@ -55,6 +59,7 @@ export async function listClubs(options: {
     .select(CLUB_COLUMNS, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(from, to)
+  if (options.status) query = query.eq('status', options.status)
   if (options.search) {
     query = query.or(
       `name.ilike.%${options.search}%,city.ilike.%${options.search}%,slug.ilike.%${options.search}%`,
@@ -82,6 +87,8 @@ export async function insertClub(input: Omit<CreateClubInput, 'ownerUserId'>): P
       description: input.description ?? null,
       phone: input.phone ?? null,
       email: input.email ?? null,
+      // Superadmin-created clubs are born approved (card #67); the column default is 'draft'.
+      status: 'approved',
     })
     .select(CLUB_COLUMNS)
     .single()

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import type { AuthenticatedRequest } from '../../middleware/auth'
 import * as service from './platform.service'
 import {
+  clubDocumentParamsSchema,
   clubIdParamsSchema,
   createClubSchema,
   listAuditLogQuerySchema,
@@ -64,6 +65,15 @@ export async function getAuditLog(req: Request, res: Response, next: NextFunctio
     const query = listAuditLogQuerySchema.parse(req.query)
     const { data, meta } = await service.getAuditLog(query)
     res.json({ success: true, data, meta })
+  } catch (err) {
+    next(err)
+  }
+}
+
+export async function getClubDocumentUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { clubId, id } = clubDocumentParamsSchema.parse(req.params)
+    res.json({ success: true, data: await service.getClubDocumentUrl(clubId, id) })
   } catch (err) {
     next(err)
   }

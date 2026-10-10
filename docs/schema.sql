@@ -67,6 +67,8 @@ create table public.users (
 );
 
 -- clubs
+create type club_status as enum ('draft', 'pending', 'changes_requested', 'approved', 'rejected', 'suspended'); -- card #67
+
 create table public.clubs (
   id            uuid primary key default uuid_generate_v4(),
   name          text not null,
@@ -81,7 +83,10 @@ create table public.clubs (
   lat           double precision, -- WGS84, for the map view (Trello card #49)
   lng           double precision, -- WGS84, for the map view (Trello card #49)
   is_active     boolean not null default true,
-  settings      jsonb not null default '{}',
+  status        club_status not null default 'draft', -- card #67: only 'approved' (and is_active) clubs are public; existing rows were backfilled to 'approved'
+  legal_name    text,  -- card #67
+  tax_id        text,  -- card #67
+  settings      jsonb not null default '{}', -- card #67: settings.opening_hours = weekly draft { mon: [{open,close}], ... } (F2 replaces it)
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -117,6 +122,33 @@ create table public.audit_log (
 );
 create index audit_log_club_created_idx on public.audit_log (club_id, created_at desc);
 create index audit_log_actor_created_idx on public.audit_log (actor_id, created_at desc);
+
+-- club_status_history: every status change of a club (card #67). API only (service_role).
+create table public.club_status_history (
+  id           uuid primary key default gen_random_uuid(),
+  club_id      uuid not null references clubs(id) on delete cascade,
+  actor_id     uuid references users(id) on delete set null,
+  from_status  club_status,
+  to_status    club_status not null,
+  note         text,
+  created_at   timestamptz not null default now()
+);
+create index club_status_history_club_created_idx on public.club_status_history (club_id, created_at desc);
+
+-- club_documents: application documents; files live in the private `club-documents` bucket (card #67). API only.
+create table public.club_documents (
+  id           uuid primary key default gen_random_uuid(),
+  club_id      uuid not null references clubs(id) on delete cascade,
+  uploaded_by  uuid references users(id) on delete set null,
+  kind         text not null check (kind in ('tax_id', 'company_registration', 'id_document', 'other')),
+  file_path    text not null, -- <clubId>/<uuid>-<safe filename>
+  file_name    text not null,
+  mime_type    text not null,
+  size_bytes   integer not null,
+  created_at   timestamptz not null default now()
+);
+create index club_documents_club_idx on public.club_documents (club_id, created_at);
+create index clubs_status_idx on public.clubs (status);
 
 -- courts
 create table public.courts (
@@ -456,6 +488,8 @@ alter table clubs enable row level security;
 alter table club_staff enable row level security;
 alter table platform_staff enable row level security; -- card #66
 alter table audit_log enable row level security; -- card #66: no policies, API only
+alter table club_status_history enable row level security; -- card #67: no policies, API only
+alter table club_documents enable row level security; -- card #67: no policies, API only
 alter table courts enable row level security;
 alter table court_schedules enable row level security;
 alter table court_reservations enable row level security;
@@ -500,11 +534,20 @@ revoke update on table users from anon, authenticated;
 -- first_name/last_name are the real columns behind a user's display name.
 grant update (first_name, last_name, phone, avatar_url) on table users to authenticated;
 
--- clubs: public read
-create policy "clubs_public_read" on clubs for select using (is_active = true);
+-- clubs (card #67): only approved and active clubs are public; staff of the club and
+-- platform staff (any platform role) read every state. The staff policy is `to authenticated`
+-- because the helpers (defined below) are not executable by anon.
+create policy "clubs_public_read" on clubs for select to anon, authenticated
+  using (status = 'approved' and is_active = true);
+create policy "clubs_staff_read" on clubs for select to authenticated
+  using (public.is_club_member(id) or public.is_platform_staff());
 
--- courts: public read
-create policy "courts_public_read" on courts for select using (is_active = true);
+-- courts (card #67): public read only for courts of a public club; staff read their club's
+create policy "courts_public_read" on courts for select to anon, authenticated
+  using (is_active = true and exists (
+    select 1 from clubs c where c.id = courts.club_id and c.status = 'approved' and c.is_active = true));
+create policy "courts_staff_read" on courts for select to authenticated
+  using (public.is_club_member(club_id) or public.is_platform_staff());
 
 -- court_schedules: public read
 create policy "schedules_public_read" on court_schedules for select using (is_active = true);
@@ -1145,3 +1188,9 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('avatars', 'avatars', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
 
+-- Card #67: private bucket for club application documents. Files go to
+-- <clubId>/<uuid>-<safe filename>; reads only through signed URLs minted by the API.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('club-documents', 'club-documents', false, 10485760,
+        array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;

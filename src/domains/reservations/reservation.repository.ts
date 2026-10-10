@@ -115,10 +115,13 @@ export async function findAvailableSlots(courtId: string, date: string): Promise
   // Get schedule for this court on this day
   const { data: schedule, error: schedErr } = await supabase
     .from('court_schedules')
-    .select('open_time, close_time, slot_minutes')
+    .select('open_time, close_time, slot_minutes, court:courts!inner(club:clubs!inner(status, is_active))')
     .eq('court_id', courtId)
     .eq('day_of_week', dayOfWeek)
     .eq('is_active', true)
+    // Card #67: a court of a club that is not approved and active has no public slots.
+    .eq('court.club.status', 'approved')
+    .eq('court.club.is_active', true)
     .single()
 
   if (schedErr || !schedule) {
@@ -282,12 +285,15 @@ export interface BookableCourt {
 export async function getCourtForBooking(courtId: string): Promise<BookableCourt | null> {
   const { data, error } = await supabase
     .from('courts')
-    .select('id, club_id, price_per_hour, is_active')
+    .select('id, club_id, price_per_hour, is_active, club:clubs!inner(status, is_active)')
     .eq('id', courtId)
+    .eq('club.status', 'approved') // card #67: only courts of approved, active clubs are bookable
+    .eq('club.is_active', true)
     .single()
 
   if (error || !data) return null
-  return data as BookableCourt
+  const { club: _club, ...court } = data as unknown as BookableCourt & { club: unknown }
+  return court
 }
 
 export async function hasOverlap(

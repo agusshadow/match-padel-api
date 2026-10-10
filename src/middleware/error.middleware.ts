@@ -28,6 +28,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(err.statusCode).json({
       error: err.code ?? err.name,
       message: err.message,
+      ...(err.details !== undefined ? { details: err.details } : {}),
     })
     return
   }

@@ -4,8 +4,18 @@ import { paginationSchema } from '../../lib/pagination'
 export const listQuerySchema = paginationSchema
 export type ListQuery = z.infer<typeof listQuerySchema>
 
+export const CLUB_STATUSES = [
+  'draft',
+  'pending',
+  'changes_requested',
+  'approved',
+  'rejected',
+  'suspended',
+] as const
+
 export const listClubsQuerySchema = paginationSchema.extend({
   search: z.string().trim().max(100).optional(),
+  status: z.enum(CLUB_STATUSES).optional(),
 })
 export type ListClubsQuery = z.infer<typeof listClubsQuerySchema>
 
@@ -43,4 +53,9 @@ export const clubIdParamsSchema = z.object({
 
 export const setClubActiveSchema = z.object({
   isActive: z.boolean(),
+})
+
+export const clubDocumentParamsSchema = z.object({
+  clubId: z.string().uuid(),
+  id: z.string().uuid(),
 })

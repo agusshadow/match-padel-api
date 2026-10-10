@@ -6,6 +6,7 @@ export interface AccessClub {
   name: string
   slug: string
   is_active: boolean
+  status: string
 }
 
 export interface AccessUserProfile {
@@ -36,7 +37,7 @@ export async function findClubsByIds(ids: string[]): Promise<AccessClub[]> {
   if (ids.length === 0) return []
   const { data, error } = await supabase
     .from('clubs')
-    .select('id, name, slug, is_active')
+    .select('id, name, slug, is_active, status')
     .in('id', ids)
     .order('name')
   if (error) throw error
@@ -46,7 +47,7 @@ export async function findClubsByIds(ids: string[]): Promise<AccessClub[]> {
 export async function findAllClubs(): Promise<AccessClub[]> {
   const { data, error } = await supabase
     .from('clubs')
-    .select('id, name, slug, is_active')
+    .select('id, name, slug, is_active, status')
     .order('name')
   if (error) throw error
   return (data ?? []) as AccessClub[]

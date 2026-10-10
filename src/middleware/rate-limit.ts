@@ -10,3 +10,13 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
 })
+
+// Card #67: creating a club draft (POST /me/clubs) is cheap to abuse, so it
+// has its own per-IP limit on top of the 10-drafts-per-user cap in the service.
+export const createClubLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TooManyRequests', message: 'Too many attempts, try again later' },
+})
