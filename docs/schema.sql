@@ -16,7 +16,8 @@ create extension if not exists "btree_gist"; -- required by court_reservations.n
 -- ENUMS
 -- ============================================================
 create type user_role as enum ('player', 'club_staff', 'super_admin');
-create type staff_role as enum ('owner', 'admin', 'staff');
+create type staff_role as enum ('owner', 'admin', 'staff'); -- owner = Dueño, admin = Administrador, staff = Recepción (card #66; not renamed on purpose)
+create type platform_role as enum ('superadmin', 'reviewer'); -- card #66
 create type court_surface as enum ('indoor', 'outdoor', 'panoramic');
 create type reservation_status as enum ('pending', 'confirmed', 'cancelled', 'completed');
 create type match_type as enum ('friendly', 'ranked', 'tournament');
@@ -94,6 +95,28 @@ create table public.club_staff (
   created_at    timestamptz not null default now(),
   unique(club_id, user_id)
 );
+
+-- platform_staff: platform-level roles (card #66). Grant a superadmin with
+-- insert into platform_staff (user_id, role) values ('<uuid>', 'superadmin');
+create table public.platform_staff (
+  user_id     uuid primary key references users(id) on delete cascade,
+  role        platform_role not null,
+  created_at  timestamptz not null default now()
+);
+
+-- audit_log: who changed what (card #66). Written and read by the API only (service_role).
+create table public.audit_log (
+  id          uuid primary key default gen_random_uuid(),
+  actor_id    uuid references users(id) on delete set null,
+  club_id     uuid references clubs(id) on delete set null,
+  action      text not null,
+  entity      text not null,
+  entity_id   text,
+  metadata    jsonb not null default '{}',
+  created_at  timestamptz not null default now()
+);
+create index audit_log_club_created_idx on public.audit_log (club_id, created_at desc);
+create index audit_log_actor_created_idx on public.audit_log (actor_id, created_at desc);
 
 -- courts
 create table public.courts (
@@ -431,6 +454,8 @@ alter publication supabase_realtime add table court_reservations;
 alter table users enable row level security;
 alter table clubs enable row level security;
 alter table club_staff enable row level security;
+alter table platform_staff enable row level security; -- card #66
+alter table audit_log enable row level security; -- card #66: no policies, API only
 alter table courts enable row level security;
 alter table court_schedules enable row level security;
 alter table court_reservations enable row level security;
@@ -484,42 +509,66 @@ create policy "courts_public_read" on courts for select using (is_active = true)
 -- court_schedules: public read
 create policy "schedules_public_read" on court_schedules for select using (is_active = true);
 
--- court_reservations: the owner and staff read; writes only through the API
--- (card #65: no direct client inserts or updates)
-create policy "reservations_own_or_staff_read" on court_reservations for select using (
-  user_id = auth.uid()
-  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
-);
+-- Card #66: security definer helpers used by the policies below (executable by
+-- authenticated only). "Staff" means membership of the row's club via
+-- club_staff, or a platform superadmin; users.role is no longer consulted.
+create or replace function public.is_platform_staff() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.platform_staff where user_id = auth.uid()); $$;
+create or replace function public.is_platform_superadmin() returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.platform_staff where user_id = auth.uid() and role = 'superadmin'); $$;
+create or replace function public.is_club_member(p_club_id uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select p_club_id is not null and (
+    exists (select 1 from public.club_staff where club_id = p_club_id and user_id = auth.uid())
+    or public.is_platform_superadmin()); $$;
+create or replace function public.is_court_club_member(p_court_id uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.courts c where c.id = p_court_id and public.is_club_member(c.club_id)); $$;
+create or replace function public.is_match_club_member(p_match_id uuid) returns boolean
+  language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.matches m left join public.court_reservations r on r.id = m.reservation_id
+    where m.id = p_match_id
+      and (public.is_club_member(m.club_id) or public.is_court_club_member(r.court_id))); $$;
+-- revoke execute ... from public, anon; grant execute ... to authenticated (all five)
+
+-- platform_staff: a user reads their own row
+create policy "platform_staff_own_read" on platform_staff for select to authenticated
+  using (user_id = (select auth.uid()));
+
+-- court_reservations: the owner and staff of the court's club read; writes only through the API
+create policy "reservations_own_or_staff_read" on court_reservations for select to authenticated
+  using (user_id = (select auth.uid()) or public.is_court_club_member(court_id));
 
 -- Card #65: clients holding the anon key cannot write to the business tables;
 -- the API (service_role, bypasses RLS) is the only writer. The admin panel reads
 -- some tables directly as a signed-in staff user, so those reads are kept for
--- staff (users.role in club_staff / super_admin).
+-- staff of the row's club (card #66: per-club membership via club_staff, or a
+-- platform superadmin; before #66 it was users.role in club_staff / super_admin).
 
--- matches: the creator, the players of the match and staff read; no client writes
-create policy "matches_participants_or_staff_read" on matches for select using (
-  created_by = auth.uid()
-  or exists (select 1 from match_players mp where mp.match_id = matches.id and mp.user_id = auth.uid())
-  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
+-- matches: the creator, the players of the match and staff of the match's club read; no client writes
+create policy "matches_participants_or_staff_read" on matches for select to authenticated using (
+  created_by = (select auth.uid())
+  or exists (select 1 from match_players mp where mp.match_id = matches.id and mp.user_id = (select auth.uid()))
+  or public.is_match_club_member(id)
 );
 
--- match_players: a player sees their own rows, staff see all; no client writes
-create policy "match_players_own_or_staff_read" on match_players for select using (
-  user_id = auth.uid()
-  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
-);
+-- match_players: a player sees their own rows, staff of the match's club see its rows; no client writes
+create policy "match_players_own_or_staff_read" on match_players for select to authenticated
+  using (user_id = (select auth.uid()) or public.is_match_club_member(match_id));
 
 -- match_chats: same
 create policy "chats_participants_read" on match_chats for select using (
   exists (select 1 from match_players where match_id = match_chats.match_id and user_id = auth.uid())
 );
 
--- tournaments: drafts visible to their creator and staff, the rest to everyone; no client writes
-create policy "tournaments_read" on tournaments for select using (
-  status <> 'draft'
-  or created_by = auth.uid()
-  or exists (select 1 from users u where u.id = auth.uid() and u.role in ('club_staff', 'super_admin'))
-);
+-- tournaments: non-drafts are public; drafts for their creator and staff of the tournament's club; no client writes
+create policy "tournaments_public_read" on tournaments for select to anon, authenticated
+  using (status <> 'draft');
+create policy "tournaments_staff_read" on tournaments for select to authenticated
+  using (created_by = (select auth.uid()) or public.is_club_member(club_id));
 
 -- tournament_teams: public read; no client writes
 create policy "tournament_teams_public_read" on tournament_teams for select using (true);

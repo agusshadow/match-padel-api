@@ -4,7 +4,7 @@ Inventory of every HTTP endpoint that is mounted today. Derived from `src/index.
 
 All API routes live under `/api/v1` (`v1` router in `src/index.ts`). Unless noted, successful responses use `{ success: true, data }`. Errors are produced by `errorHandler` in `src/middleware/error.middleware.ts`, which currently returns `{ error, message }` instead of the error envelope (see `docs/api-patterns.md`).
 
-Auth column: `none` = public; `requireAuth` = Supabase JWT checked (no role or club-staff checks exist anywhere). Two versions of `requireAuth` are in use: `auth.ts` (throws `UnauthorizedError`, goes through the error handler) and `auth.middleware.ts` (canonical, answers 401 directly). Both set `req.userId` only.
+Auth column: `none` = public; `requireAuth` = Supabase JWT checked, no role check; `requireRole([...])` = platform role (superadmin passes any list); `requireClubRole([...])` = role in the club of `:clubId` (a platform superadmin always passes). See `docs/permissions.md` for the matrix. `requireAuth` lives in `src/middleware/auth.ts` and sets `req.userId`; the role middleware in `src/middleware/access.middleware.ts` (card #66) loads the platform role and club memberships once per request into `req.access` / `req.platformRole` / `req.clubRole`.
 
 ## Non-versioned
 
@@ -144,20 +144,52 @@ Card #63: cosmetics (palette skins, avatar frames, emblems) bought with an inter
 | POST | `/api/v1/marketplace/cosmetics/:id/equip` | requireAuth | Equip an owned item; 403 if not owned | `equipCosmetic` |
 | POST | `/api/v1/marketplace/currency/purchase` | requireAuth | MercadoPago checkout link for the currency pack; confirmed by the same `POST /payments/webhook`, resolved via a `currency:` prefix on `external_reference` since it isn't reservation-shaped | `purchaseCurrency` |
 
+## me — `/api/v1/me` (`access.router.ts`, card #66)
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/me/access` | requireAuth | What the caller can administer: `{ user: { id, email, first_name, last_name }, platformRole: 'superadmin' \| 'reviewer' \| null, clubs: [{ clubId, name, slug, isActive, role: 'owner' \| 'admin' \| 'staff' \| 'superadmin' }] }`. A platform superadmin gets every club with role `superadmin`; anyone else only their `club_staff` memberships. `email` comes from Supabase Auth | `getAccess` (`access.controller.ts`) |
+
+## club-admin — `/api/v1/club-admin/:clubId` (`club-admin.router.ts`, card #66)
+
+The club panel's API. `:clubId` must be a UUID (400 otherwise); the caller needs a role in that club (403 `FORBIDDEN` otherwise; a platform superadmin is always allowed). Roles: owner = Dueño, admin = Administrador, staff = Recepción. Lists answer `{ success, data, meta: { page, limit, total, totalPages } }` (`page` default 1, `limit` default 20, max 100). Writes are audited in `audit_log`.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/club-admin/:clubId/summary` | requireClubRole owner/admin/staff | Counts: `courts`, `reservations: { total, pending, today }` (today = UTC-3 calendar day), `matches`, plus `recentReservations` (last 5 created, with court and player). 404 if the club does not exist | `getSummary` (`club-admin.controller.ts`) |
+| GET | `/api/v1/club-admin/:clubId/reservations?status=&page=&limit=` | requireClubRole owner/admin/staff | Reservations of the club's courts, newest start first; `status` is `pending`/`confirmed`/`cancelled`/`completed` | `listReservations` |
+| PATCH | `/api/v1/club-admin/:clubId/reservations/:id` | requireClubRole owner/admin/staff | Body `{ status: 'confirmed' \| 'cancelled' \| 'completed' }`. 404 if the reservation's court is not in this club. Allowed transitions: `pending` to `confirmed`/`cancelled`, `confirmed` to `cancelled`/`completed`; anything else is 409 `CONFLICT`; the same status is a no-op. Audited (`reservation.status_changed`). It does not refund payments or notify the player (target — not implemented yet) | `updateReservation` |
+| GET | `/api/v1/club-admin/:clubId/matches?page=&limit=` | requireClubRole owner/admin | Matches whose `club_id` is this club, with reservation/court and players | `listMatches` |
+| GET | `/api/v1/club-admin/:clubId/tournaments?page=&limit=` | requireClubRole owner/admin | Tournaments of the club, with a `teams: [{ count }]` registration count | `listTournaments` |
+| GET | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin/staff | Club data (`name`, `slug`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng`, `is_active`, timestamps) | `getClub` |
+| PATCH | `/api/v1/club-admin/:clubId` | requireClubRole owner/admin | Partial update of `name`, `description`, `address`, `city`, `phone`, `email`, `logo_url`, `cover_url`, `lat`, `lng` (unknown fields are rejected, at least one required; nullable ones accept `null`). Audited (`club.updated`, with the changed fields) | `updateClub` |
+
+## platform — `/api/v1/platform` (`platform.router.ts`, card #66)
+
+`requireAuth` + `requireRole(['superadmin'])` on the whole router: a `reviewer` gets 403 for now (the review inbox arrives in F1). Lists answer with the `meta` envelope.
+
+| Method | Path | Auth | Purpose | Handler |
+|---|---|---|---|---|
+| GET | `/api/v1/platform/summary` | requireRole superadmin | Global counts: `clubs`, `courts`, `reservations`, `pendingReservations`, `matches`, `users`, plus `recentReservations` (5) | `getSummary` (`platform.controller.ts`) |
+| GET | `/api/v1/platform/clubs?search=&page=&limit=` | requireRole superadmin | Every club, active or not | `listClubs` |
+| POST | `/api/v1/platform/clubs` | requireRole superadmin | Body `{ name, slug (kebab-case), address, city, description?, phone?, email?, ownerUserId? }`. Creates the club (201); with `ownerUserId` it also creates an `owner` membership (400 if that user does not exist, the club insert is rolled back if the membership fails). 409 if the slug is taken. Audited (`club.created`) | `createClub` |
+| PATCH | `/api/v1/platform/clubs/:id/active` | requireRole superadmin | Body `{ isActive: boolean }`. 404 if the club does not exist. Audited (`club.activated`/`club.deactivated`) | `setClubActive` |
+| GET | `/api/v1/platform/users?search=&page=&limit=` | requireRole superadmin | Users (`id`, `username`, `first_name`, `last_name`, `role`, `is_active`, `created_at`, `email`); `search` matches username and names, not email | `listUsers` |
+| GET | `/api/v1/platform/audit-log?clubId=&actorId=&page=&limit=` | requireRole superadmin | `audit_log` entries, newest first, each with `actor` (`id, username, first_name, last_name`) and `club` (`id, name`) or `null` | `getAuditLog` |
+
 ## Unmounted routers
 
 Not imported by `src/index.ts`, so none of their routes exist:
 
-- Empty stubs with only a `TODO`: `clubs/clubs.router.ts`, `matches/matches.router.ts`, `reservations/reservations.router.ts`, `tournaments/tournaments.router.ts`, `users/users.router.ts`, `platform/platform.router.ts`.
-- The dead `src/app.ts` imports those stubs and would mount `/api/v1/platform`, but it is not the entry point (`npm run dev` and `npm start` run `src/index.ts` / `dist/index.js`).
+- Empty stubs with only a `TODO`: `clubs/clubs.router.ts`, `matches/matches.router.ts`, `reservations/reservations.router.ts`, `tournaments/tournaments.router.ts`, `users/users.router.ts`.
+- The dead `src/app.ts` imports those stubs, but it is not the entry point (`npm run dev` and `npm start` run `src/index.ts` / `dist/index.js`).
 
 ## Known gaps
 
 Verified by reading the code (`src/index.ts`, the routers and `match-padel-web`):
 
-- **No `/api/v1/platform/*` endpoints.** `docs/api-patterns.md` shows `super_admin` routes under `/platform/...`, but `platform.router.ts` is an empty stub and is not mounted. `requireRole` does not exist.
-- **No club management endpoints.** There is no route to create or update clubs or courts, and no club-staff routes (`requireClubStaff` does not exist). The admin app (`match-padel-web/apps/admin`) reads and writes `clubs`, `court_reservations` and other tables directly with the Supabase client instead of this API.
-- **No `GET /api/v1/clubs/:clubId/reservations`.** `src/app.ts` (dead) has the comment `/clubs/:clubId/reservations` next to a stub router; nothing serves it in `src/index.ts`.
+- **Club management is partial (card #66, F0).** Clubs can be created, activated and edited through `/platform` and `/club-admin`, and reservation status can be changed there. There are still no endpoints for courts, schedules, prices, blocks or club team management (F2); the admin app (`match-padel-web/apps/admin`) keeps reading some tables directly with the Supabase client until it is migrated to these endpoints.
+- **Superadmin has no UI to grant roles.** Platform roles are granted by inserting into `platform_staff` (see `docs/permissions.md`).
 - **No Socket.io server and no chat endpoints.** `src/lib/socket.ts` is a no-op and socket.io is not in `package.json`, although `docs/api-patterns.md` lists `match:*`, `staff:*` and `chat:message` events (`match_chats` exists in `docs/schema.sql`).
 - Every call the player app makes today through `match-padel-web/apps/app` (`/auth/*`, `/clubs*`, `/courts/:id/slots`, `/reservations*`, `/payments/preference`, `/matches*`, `/users*`, `/tournaments*`, `/notifications*`) has a matching mounted route.
 
@@ -177,6 +209,9 @@ Files present in `src/domains/<domain>/` (entity files use the singular name, e.
 | notifications | `/api/v1/notifications` | yes | yes | yes | yes | no |
 | payments | `/api/v1/payments` | yes | yes | yes (holds Supabase queries) | no | no (schema inline in the controller) |
 | achievements | `/api/v1/achievements` | yes | yes | yes | yes | no |
-| platform | not mounted | stub only | no | no | no | no |
+| access | `/api/v1/me` | yes | yes | yes | yes | no |
+| club-admin | `/api/v1/club-admin/:clubId` | yes | yes | yes | yes | yes |
+| platform | `/api/v1/platform` | yes | yes | yes | yes | yes |
+| audit | not mounted (used by the services) | no | no | yes (`recordAudit`) | yes | no |
 
 No domain has a `__tests__/` folder.
